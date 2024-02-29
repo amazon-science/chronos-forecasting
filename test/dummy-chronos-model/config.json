@@ -1,0 +1,48 @@
+{
+  "architectures": [
+    "T5ForConditionalGeneration"
+  ],
+  "d_ff": 32,
+  "d_kv": 16,
+  "d_model": 64,
+  "decoder_start_token_id": 0,
+  "dense_act_fn": "relu",
+  "dropout_rate": 0.1,
+  "eos_token_id": 1,
+  "feed_forward_proj": "relu",
+  "initializer_factor": 0.05,
+  "is_encoder_decoder": true,
+  "is_gated_act": false,
+  "layer_norm_epsilon": 1e-06,
+  "model_type": "t5",
+  "n_positions": 512,
+  "num_decoder_layers": 1,
+  "num_heads": 1,
+  "num_layers": 1,
+  "pad_token_id": 0,
+  "relative_attention_max_distance": 128,
+  "relative_attention_num_buckets": 32,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.31.0",
+  "use_cache": true,
+  "vocab_size": 32,
+  "chronos_config": {
+    "tokenizer_class": "MeanScaleUniformBins",
+    "tokenizer_kwargs": {
+      "low_limit": -15.0,
+      "high_limit": 15.0
+    },
+    "n_tokens": 32,
+    "n_special_tokens": 2,
+    "pad_token_id": 0,
+    "eos_token_id": 1,
+    "use_eos_token": true,
+    "model_type": "seq2seq",
+    "context_length": 512,
+    "prediction_length": 64,
+    "num_samples": 20,
+    "temperature": 1.0,
+    "top_k": 50,
+    "top_p": 1.0
+  }  
+}
