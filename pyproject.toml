@@ -1,0 +1,19 @@
+[project]
+name = "chronos"
+version = "1.0.0"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+dependencies = [
+  "torch~=2.1",  # package was tested on 2.2
+  "transformers~=4.31",
+  "accelerate"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest~=8.0",
+    "numpy~=1.21"
+]
+
+[tool.mypy]
+ignore_missing_imports = true
