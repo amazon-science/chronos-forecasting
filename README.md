@@ -35,7 +35,11 @@ import pandas as pd
 import torch
 from chronos import ChronosPipeline
 
-pipeline = ChronosPipeline.from_pretrained("amazon/chronos-t5-small")
+pipeline = ChronosPipeline.from_pretrained(
+  "amazon/chronos-t5-small"
+  device_map="cuda",
+  torch_dtype=torch.bfloat16,
+)
 
 df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
