@@ -4,6 +4,8 @@ Chronos is a family of pre-trained **time series forecasting models** based on l
 
 For details on Chronos models, training data and procedures, and experimental results, please refer to the paper [Chronos: Learning the Language of Time Series](https://www.example.com/).
 
+![](figures/main-figure.png)
+
 ## Architecture
 
 The models in this repository are based on the [T5 architecture](https://arxiv.org/abs/1910.10683). The only difference is in the vocabulary size: Chronos-T5 models use 4096 different tokens, compared to 32128 of the original T5 models, resulting in a smaller number of parameters.
@@ -33,7 +35,11 @@ import pandas as pd
 import torch
 from chronos import ChronosPipeline
 
-pipeline = ChronosPipeline.from_pretrained("amazon/chronos-t5-small")
+pipeline = ChronosPipeline.from_pretrained(
+  "amazon/chronos-t5-small"
+  device_map="cuda",
+  torch_dtype=torch.bfloat16,
+)
 
 df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
