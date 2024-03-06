@@ -20,7 +20,7 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 
 ## Usage
 
-To perform inference with Chronos models, you need to install the [companion inference package available on Github](https://www.example.com/).
+To perform inference with Chronos models, you need to install the [companion inference package available on Github](https://github.com/amazon-science/chronos-forecasting).
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
