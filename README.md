@@ -1,6 +1,6 @@
 # Chronos: Learning the Language of Time Series
 
-Chronos is a family of pre-trained **time series forecasting models** based on language model architectures. A time series is transformed into a sequence of tokens via scaling and quantization, and probabilistic forecasts are obtained by sampling multiple future trajectories given the historical context. Chronos models are trained on a large corpus of publicly available time series data, as well as synthetic data.
+Chronos is a family of pretrained **time series forecasting models** based on language model architectures. A time series is transformed into a sequence of tokens via scaling and quantization, and a language model is trained on these tokens using the cross-entropy loss. Once trained, probabilistic forecasts are obtained by sampling multiple future trajectories given the historical context. Chronos models have been trained on a large corpus of publicly available time series data, as well as synthetic data generated using Gaussian processes.
 
 For details on Chronos models, training data and procedures, and experimental results, please refer to the paper [Chronos: Learning the Language of Time Series](https://www.example.com/).
 
@@ -12,21 +12,21 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 
 |Model	|Parameters	|Based on	|
 |---	|---	|---	|
-|[chronos-t5-tiny](https://huggingface.co/amazon/chronos-t5-tiny)	|8M	|[t5-efficient-tiny](https://huggingface.co/google/t5-efficient-tiny)	|
-|[chronos-t5-mini](https://huggingface.co/amazon/chronos-t5-mini)	|20M	|[t5-efficient-mini](https://huggingface.co/google/t5-efficient-mini)	|
-|[chronos-t5-small](https://huggingface.co/amazon/chronos-t5-small)	|46M	|[t5-efficient-small](https://huggingface.co/google/t5-efficient-small)	|
-|[chronos-t5-base](https://huggingface.co/amazon/chronos-t5-base)	|200M	|[t5-efficient-base](https://huggingface.co/google/t5-efficient-base)	|
-|[chronos-t5-large](https://huggingface.co/amazon/chronos-t5-large)	|710M	|[t5-efficient-large](https://huggingface.co/google/t5-efficient-large)	|
+|[**chronos-t5-tiny**](https://huggingface.co/amazon/chronos-t5-tiny)	|8M	|[t5-efficient-tiny](https://huggingface.co/google/t5-efficient-tiny)	|
+|[**chronos-t5-mini**](https://huggingface.co/amazon/chronos-t5-mini)	|20M	|[t5-efficient-mini](https://huggingface.co/google/t5-efficient-mini)	|
+|[**chronos-t5-small**](https://huggingface.co/amazon/chronos-t5-small)	|46M	|[t5-efficient-small](https://huggingface.co/google/t5-efficient-small)	|
+|[**chronos-t5-base**](https://huggingface.co/amazon/chronos-t5-base)	|200M	|[t5-efficient-base](https://huggingface.co/google/t5-efficient-base)	|
+|[**chronos-t5-large**](https://huggingface.co/amazon/chronos-t5-large)	|710M	|[t5-efficient-large](https://huggingface.co/google/t5-efficient-large)	|
 
 ## Usage
 
-To perform inference with Chronos models, you need to install the [companion inference package available on Github](https://github.com/amazon-science/chronos-forecasting).
+To perform inference with Chronos models, install this package by running.
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
 
-A minimal example:
+A minimal example showing how to perform inference using Chronos models:
 
 ```python
 import matplotlib.pyplot as plt
