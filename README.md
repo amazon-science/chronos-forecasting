@@ -44,7 +44,7 @@ import torch
 from chronos import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
-  "amazon/chronos-t5-small"
+  "amazon/chronos-t5-small",
   device_map="cuda",
   torch_dtype=torch.bfloat16,
 )
