@@ -2,7 +2,7 @@
 
 Chronos is a family of **pretrained time series forecasting models** based on language model architectures. A time series is transformed into a sequence of tokens via scaling and quantization, and a language model is trained on these tokens using the cross-entropy loss. Once trained, probabilistic forecasts are obtained by sampling multiple future trajectories given the historical context. Chronos models have been trained on a large corpus of publicly available time series data, as well as synthetic data generated using Gaussian processes.
 
-For details on Chronos models, training data and procedures, and experimental results, please refer to the paper [Chronos: Learning the Language of Time Series](https://www.example.com/).
+For details on Chronos models, training data and procedures, and experimental results, please refer to the paper [Chronos: Learning the Language of Time Series](https://arxiv.org/abs/2403.07815).
 
 <p align="center">
   <img src="figures/main-figure.png" width="100%">
@@ -72,13 +72,13 @@ plt.show()
 
 ## Citation
 
-If you find Chronos models useful for your research, please consider citing the associated [paper](https://www.example.com/):
+If you find Chronos models useful for your research, please consider citing the associated [paper](https://arxiv.org/abs/2403.07815):
 
 ```
 @article{ansari2024chronos,
   author  = {Ansari, Abdul Fatir and Stella, Lorenzo and Turkmen, Caner and Zhang, Xiyuan, and Mercado, Pedro and Shen, Huibin and Shchur, Oleksandr and Rangapuram, Syama Syndar and Pineda Arango, Sebastian and Kapoor, Shubham and Zschiegner, Jasper and Maddix, Danielle C. and Mahoney, Michael W. and Torkkola, Kari and Gordon Wilson, Andrew and Bohlke-Schneider, Michael and Wang, Yuyang},
   title   = {Chronos: Learning the Language of Time Series},
-  journal = {arXiv preprint arXiv:ABCD.EFGH},
+  journal = {arXiv preprint arXiv:2403.07815},
   year    = {2024}
 }
 ```
