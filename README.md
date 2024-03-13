@@ -16,19 +16,19 @@ For details on Chronos models, training data and procedures, and experimental re
 
 ## Architecture
 
-The models in this repository are based on the [T5 architecture](https://arxiv.org/abs/1910.10683). The only difference is in the vocabulary size: Chronos-T5 models use 4096 different tokens, compared to 32128 of the original T5 models, resulting in a smaller number of parameters.
+The models in this repository are based on the [T5 architecture](https://arxiv.org/abs/1910.10683). The only difference is in the vocabulary size: Chronos-T5 models use 4096 different tokens, compared to 32128 of the original T5 models, resulting in fewer parameters.
 
-|Model	|Parameters	|Based on	|
-|---	|---	|---	|
-|[**chronos-t5-tiny**](https://huggingface.co/amazon/chronos-t5-tiny)	|8M	|[t5-efficient-tiny](https://huggingface.co/google/t5-efficient-tiny)	|
-|[**chronos-t5-mini**](https://huggingface.co/amazon/chronos-t5-mini)	|20M	|[t5-efficient-mini](https://huggingface.co/google/t5-efficient-mini)	|
-|[**chronos-t5-small**](https://huggingface.co/amazon/chronos-t5-small)	|46M	|[t5-efficient-small](https://huggingface.co/google/t5-efficient-small)	|
-|[**chronos-t5-base**](https://huggingface.co/amazon/chronos-t5-base)	|200M	|[t5-efficient-base](https://huggingface.co/google/t5-efficient-base)	|
-|[**chronos-t5-large**](https://huggingface.co/amazon/chronos-t5-large)	|710M	|[t5-efficient-large](https://huggingface.co/google/t5-efficient-large)	|
+| Model                                                                  | Parameters | Based on                                                               |
+| ---------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| [**chronos-t5-tiny**](https://huggingface.co/amazon/chronos-t5-tiny)   | 8M         | [t5-efficient-tiny](https://huggingface.co/google/t5-efficient-tiny)   |
+| [**chronos-t5-mini**](https://huggingface.co/amazon/chronos-t5-mini)   | 20M        | [t5-efficient-mini](https://huggingface.co/google/t5-efficient-mini)   |
+| [**chronos-t5-small**](https://huggingface.co/amazon/chronos-t5-small) | 46M        | [t5-efficient-small](https://huggingface.co/google/t5-efficient-small) |
+| [**chronos-t5-base**](https://huggingface.co/amazon/chronos-t5-base)   | 200M       | [t5-efficient-base](https://huggingface.co/google/t5-efficient-base)   |
+| [**chronos-t5-large**](https://huggingface.co/amazon/chronos-t5-large) | 710M       | [t5-efficient-large](https://huggingface.co/google/t5-efficient-large) |
 
 ## Usage
 
-To perform inference with Chronos models, install this package by running.
+To perform inference with Chronos models, install this package by running:
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
@@ -51,7 +51,7 @@ pipeline = ChronosPipeline.from_pretrained(
 
 df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
-# context must be either a 1D tensor, a list of 1D tensors, 
+# context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
 context = torch.tensor(df["#Passengers"])
 prediction_length = 12
