@@ -204,7 +204,10 @@ class ChronosModel(nn.Module):
         super().__init__()
         self.config = config
         self.model = model
-        self.device = model.device
+
+    @property
+    def device(self):
+        return self.model.device
 
     def forward(
         self,
