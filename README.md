@@ -37,6 +37,7 @@ pip install git+https://github.com/amazon-science/chronos-forecasting.git
 A minimal example showing how to perform inference using Chronos models:
 
 ```python
+# for plotting, run: pip install pandas matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -55,7 +56,14 @@ df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnal
 # or a left-padded 2D tensor with batch as the first dimension
 context = torch.tensor(df["#Passengers"])
 prediction_length = 12
-forecast = pipeline.predict(context, prediction_length)  # shape [num_series, num_samples, prediction_length]
+forecast = pipeline.predict(
+  context,
+  prediction_length,
+  num_samples=20,
+  temperature=1.0,
+  top_k=50,
+  top_p=1.0,
+) # forecast shape: [num_series, num_samples, prediction_length]
 
 # visualize the forecast
 forecast_index = range(len(df), len(df) + prediction_length)
