@@ -202,7 +202,6 @@ class ChronosModel(nn.Module):
     def device(self):
         return self.model.device
 
-    @torch.no_grad()
     def encode(
         self,
         input_ids: torch.Tensor,
@@ -342,10 +341,12 @@ class ChronosPipeline:
 
         return context
 
+    @torch.no_grad()
     def embed(
         self, context: Union[torch.Tensor, List[torch.Tensor]]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Get encoder embeddings for the given time series.
+        """
+        Get encoder embeddings for the given time series.
 
         Parameters
         ----------
