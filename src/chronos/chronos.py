@@ -139,13 +139,6 @@ class MeanScaleUniformBins(ChronosTokenizer):
 
         if length > self.config.context_length:
             context = context[..., -self.config.context_length :]
-        elif length < self.config.context_length:
-            padding_size = (
-                *context.shape[:-1],
-                self.config.context_length - length,
-            )
-            padding = torch.full(size=padding_size, fill_value=torch.nan)
-            context = torch.concat((padding, context), dim=-1)
 
         attention_mask = ~torch.isnan(context)
         scale = torch.nansum(
