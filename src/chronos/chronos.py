@@ -202,6 +202,37 @@ class ChronosModel(nn.Module):
     def device(self):
         return self.model.device
 
+    @torch.no_grad()
+    def encode(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ):
+        """
+        Extract the encoder embedding for the given token sequences.
+
+        Parameters
+        ----------
+        input_ids
+            Tensor of indices of input sequence tokens in the vocabulary
+            with shape (batch_size, sequence_length).
+        attention_mask
+            A mask tensor of the same shape as input_ids to avoid attending
+            on padding or missing tokens.
+
+        Returns
+        -------
+        embedding
+            A tensor of encoder embeddings with shape
+            (batch_size, sequence_length, d_model).
+        """
+        assert (
+            self.config.model_type == "seq2seq"
+        ), "Encoder embeddings are only supported for encoder-decoder models"
+        return self.model.encoder(
+            input_ids=input_ids, attention_mask=attention_mask
+        ).last_hidden_state
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -299,6 +330,49 @@ class ChronosPipeline:
         self.tokenizer = tokenizer
         self.model = model
 
+    def _prepare_and_validate_context(
+        self, context: Union[torch.Tensor, List[torch.Tensor]]
+    ):
+        if isinstance(context, list):
+            context = left_pad_and_stack_1D(context)
+        assert isinstance(context, torch.Tensor)
+        if context.ndim == 1:
+            context = context.unsqueeze(0)
+        assert context.ndim == 2
+
+        return context
+
+    def embed(
+        self, context: Union[torch.Tensor, List[torch.Tensor]]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get encoder embeddings for the given time series.
+
+        Parameters
+        ----------
+        context
+            Input series. This is either a 1D tensor, or a list
+            of 1D tensors, or a 2D tensor whose first dimension
+            is batch. In the latter case, use left-padding with
+            ``torch.nan`` to align series of different lengths.
+
+        Returns
+        -------
+        embeddings, scale
+            A tuple of two tensors: the encoder embeddings and the time series scale.
+            The encoder embeddings are shaped (batch_size, context_length, d_model)
+            or (batch_size, context_length + 1, d_model), where the extra 1 is for EOS.
+            If your original time series were shorter than the model's context_length,
+            please slice the returned embeddings along the time axis accordingly.
+            The scale is shaped (batch_size, ).
+        """
+        context = self._prepare_and_validate_context(context=context)
+        token_ids, attention_mask, scale = self.tokenizer.input_transform(context)
+        embeddings = self.model.encode(
+            input_ids=token_ids.to(self.model.device),
+            attention_mask=attention_mask.to(self.model.device),
+        ).cpu()
+        return embeddings, scale
+
     def predict(
         self,
         context: Union[torch.Tensor, List[torch.Tensor]],
@@ -346,12 +420,7 @@ class ChronosPipeline:
             Tensor of sample forecasts, of shape
             (batch_size, num_samples, prediction_length).
         """
-        if isinstance(context, list):
-            context = left_pad_and_stack_1D(context)
-        assert isinstance(context, torch.Tensor)
-        if context.ndim == 1:
-            context = context.unsqueeze(0)
-        assert context.ndim == 2
+        context = self._prepare_and_validate_context(context=context)
 
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
