@@ -186,12 +186,9 @@ def test_pipeline_embed(torch_dtype: str):
         device_map="cpu",
         torch_dtype=torch_dtype,
     )
-    model_context_length = pipeline.model.config.context_length
-    expected_embed_length = model_context_length + (
-        1 if pipeline.model.config.use_eos_token else 0
-    )
     d_model = pipeline.model.model.config.d_model
     context = 10 * torch.rand(size=(4, 16)) + 10
+    expected_embed_length = 16 + (1 if pipeline.model.config.use_eos_token else 0)
 
     # input: tensor of shape (batch_size, context_length)
 
