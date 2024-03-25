@@ -34,7 +34,9 @@ To perform inference with Chronos models, install this package by running:
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
 
-A minimal example showing how to perform inference using Chronos models:
+### Forecasting
+
+A minimal example showing how to perform forecasting using Chronos models:
 
 ```python
 # for plotting, run: pip install pandas matplotlib
@@ -77,6 +79,30 @@ plt.legend()
 plt.grid()
 plt.show()
 ```
+
+### Extracting Encoder Embeddings
+
+A minimal example showing how to extract encoder embeddings from Chronos models:
+
+```python
+import pandas as pd
+import torch
+from chronos import ChronosPipeline
+
+pipeline = ChronosPipeline.from_pretrained(
+  "amazon/chronos-t5-small",
+  device_map="cuda",
+  torch_dtype=torch.bfloat16,
+)
+
+df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
+
+# context must be either a 1D tensor, a list of 1D tensors,
+# or a left-padded 2D tensor with batch as the first dimension
+context = torch.tensor(df["#Passengers"])
+embeddings, decoding_context = pipeline.embed(context)
+```
+
 
 ## Citation
 
