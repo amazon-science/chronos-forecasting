@@ -82,7 +82,7 @@ class ChronosTokenizer:
             A boolean tensor, same shape as ``token_ids``, indicating
             which input observations are not ``torch.nan`` (i.e. not
             missing nor padding).
-        decoding_context
+        tokenizer_state
             An object that will be passed to ``output_transform``.
             Contains the relevant context to decode output samples into
             real values, such as location and scale parameters.
@@ -90,7 +90,7 @@ class ChronosTokenizer:
         raise NotImplementedError()
 
     def output_transform(
-        self, samples: torch.Tensor, decoding_context: Any
+        self, samples: torch.Tensor, tokenizer_state: Any
     ) -> torch.Tensor:
         """
         Turn a batch of sample token IDs into real values.
@@ -100,7 +100,7 @@ class ChronosTokenizer:
         samples
             A tensor of integers, shaped (batch_size, num_samples, time_length),
             containing token IDs of sample trajectories.
-        decoding_context
+        tokenizer_state
             An object returned by ``input_transform`` containing
             relevant context to decode samples, such as location and scale.
             The nature of this depends on the specific tokenizer.
@@ -358,8 +358,8 @@ class ChronosPipeline:
 
         Returns
         -------
-        embeddings, decoding_context
-            A tuple of two tensors: the encoder embeddings and the decoding_context,
+        embeddings, tokenizer_state
+            A tuple of two tensors: the encoder embeddings and the tokenizer_state,
             e.g., the scale of the time series in the case of mean scaling.
             The encoder embeddings are shaped (batch_size, context_length, d_model)
             or (batch_size, context_length + 1, d_model), where context_length
@@ -368,14 +368,14 @@ class ChronosPipeline:
             provided, and the extra 1 is for EOS.
         """
         context = self._prepare_and_validate_context(context=context)
-        token_ids, attention_mask, decoding_context = self.tokenizer.input_transform(
+        token_ids, attention_mask, tokenizer_state = self.tokenizer.input_transform(
             context
         )
         embeddings = self.model.encode(
             input_ids=token_ids.to(self.model.device),
             attention_mask=attention_mask.to(self.model.device),
         ).cpu()
-        return embeddings, decoding_context
+        return embeddings, tokenizer_state
 
     def predict(
         self,
