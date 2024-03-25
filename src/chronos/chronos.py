@@ -362,9 +362,10 @@ class ChronosPipeline:
             A tuple of two tensors: the encoder embeddings and the decoding_context,
             e.g., the scale of the time series in the case of mean scaling.
             The encoder embeddings are shaped (batch_size, context_length, d_model)
-            or (batch_size, context_length + 1, d_model), where the extra 1 is for EOS.
-            If your original time series were shorter than the model's context_length,
-            please slice the returned embeddings along the time axis accordingly.
+            or (batch_size, context_length + 1, d_model), where context_length
+            is the size of the context along the time axis if a 2D tensor was provided
+            or the length of the longest time series, if a list of 1D tensors was
+            provided, and the extra 1 is for EOS.
         """
         context = self._prepare_and_validate_context(context=context)
         token_ids, attention_mask, decoding_context = self.tokenizer.input_transform(
