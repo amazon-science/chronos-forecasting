@@ -193,10 +193,15 @@ class ChronosModel(nn.Module):
         The pre-trained model to use.
     """
 
-    def __init__(self, config: ChronosConfig, model: PreTrainedModel) -> None:
+    def __init__(
+        self, config: ChronosConfig, model: PreTrainedModel, torch_compile: bool = False
+    ) -> None:
         super().__init__()
         self.config = config
         self.model = model
+        self.generate_fn = self.model.generate
+        if torch_compile:
+            self.generate_fn = torch.compile(self.generate_fn)
 
     @property
     def device(self):
@@ -267,7 +272,7 @@ class ChronosModel(nn.Module):
         if top_p is None:
             top_p = self.config.top_p
 
-        preds = self.model.generate(
+        preds = self.generate_fn(
             input_ids=input_ids,
             attention_mask=attention_mask,
             generation_config=GenerationConfig(
@@ -468,26 +473,37 @@ class ChronosPipeline:
         return torch.cat(predictions, dim=-1)
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args,
+        torch_compile: bool = False,
+        **kwargs,
+    ):
         """
         Load the model, either from a local path or from the HuggingFace Hub.
         Supports the same arguments as ``AutoConfig`` and ``AutoModel``
         from ``transformers``.
         """
 
-        config = AutoConfig.from_pretrained(*args, **kwargs)
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
         chronos_config = ChronosConfig(**config.chronos_config)
 
         if chronos_config.model_type == "seq2seq":
-            inner_model = AutoModelForSeq2SeqLM.from_pretrained(*args, **kwargs)
+            inner_model = AutoModelForSeq2SeqLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
         else:
             assert config.model_type == "causal"
-            inner_model = AutoModelForCausalLM.from_pretrained(*args, **kwargs)
-
+            inner_model = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
         return cls(
             tokenizer=chronos_config.create_tokenizer(),
-            model=ChronosModel(config=chronos_config, model=inner_model),
+            model=ChronosModel(
+                config=chronos_config, model=inner_model, torch_compile=torch_compile
+            ),
         )
