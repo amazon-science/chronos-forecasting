@@ -432,7 +432,7 @@ class ChronosPipeline:
         if prediction_length > self.model.config.prediction_length:
             msg = (
                 f"We recommend keeping prediction length <= {self.model.config.prediction_length}. "
-                f"The quality of longer predictions may degrade since the model is not optimized for it. "
+                "The quality of longer predictions may degrade since the model is not optimized for it. "
             )
             if limit_prediction_length:
                 msg += "You can turn off this check by setting `limit_prediction_length=False`."
