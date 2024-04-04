@@ -270,7 +270,7 @@ def sample(logits, top_k=1, top_p=1.0, temperature=1.0):
     else:
         vocab_size = logits.shape[-1]
         if top_k >= vocab_size:
-            return mx.random.categorical(logits)
+            return mx.random.categorical(logits / temperature)
 
         top_k_indices = mx.argpartition(logits, top_k, axis=-1)[..., -top_k:]
         top_k_logits = mx.take_along_axis(logits, top_k_indices, axis=-1)
