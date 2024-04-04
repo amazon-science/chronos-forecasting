@@ -4,8 +4,8 @@
 # Adapted from ml-explore/mlx-examples:
 # https://github.com/ml-explore/mlx-examples/blob/b8a348c1b8df4433cfacb9adbeb89b8aa3979ab2/t5/t5.py
 # Modifications:
-# - Add support for attention mask.
-# - Add support for top_k and top_p sampling.
+# - Added support for attention mask.
+# - Added support for top_k and top_p sampling.
 
 
 from typing import List, Optional, Tuple
