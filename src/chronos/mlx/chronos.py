@@ -342,9 +342,9 @@ class ChronosPipeline:
             or the length of the longest time series, if a list of 1D tensors was
             provided, and the extra 1 is for EOS.
         """
-        context = self._prepare_and_validate_context(context=context)
+        context_array = self._prepare_and_validate_context(context=context)
         token_ids, attention_mask, tokenizer_state = self.tokenizer.input_transform(
-            context
+            context_array
         )
         embeddings = self.model.encode(
             input_ids=mx.array(token_ids),
@@ -399,7 +399,7 @@ class ChronosPipeline:
             Numpy array of sample forecasts, of shape
             (batch_size, num_samples, prediction_length).
         """
-        context = self._prepare_and_validate_context(context=context)
+        context_array = self._prepare_and_validate_context(context=context)
 
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
@@ -418,7 +418,9 @@ class ChronosPipeline:
         remaining = prediction_length
 
         while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.input_transform(context)
+            token_ids, attention_mask, scale = self.tokenizer.input_transform(
+                context_array
+            )
             token_ids, attention_mask = mx.array(token_ids), mx.array(attention_mask)
             samples = self.model(
                 token_ids,
@@ -437,7 +439,9 @@ class ChronosPipeline:
             if remaining <= 0:
                 break
 
-            context = np.concatenate([context, np.median(prediction, axis=1)], axis=-1)
+            context_array = np.concatenate(
+                [context_array, np.median(prediction, axis=1)], axis=-1
+            )
 
         return np.concatenate(predictions, axis=-1)
 
