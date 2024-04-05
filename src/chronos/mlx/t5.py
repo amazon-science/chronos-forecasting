@@ -352,9 +352,11 @@ class T5(nn.Module):
     def __call__(
         self,
         inputs: mx.array,
+        mask: mx.array,
         decoder_inputs: mx.array,
     ):
-        return self.decode(decoder_inputs, self.encode(inputs))[0]
+        memory = self.encode(inputs, mask=mask)
+        return self.decode(decoder_inputs, memory=memory, memory_mask=mask)[0]
 
     def generate(
         self,
