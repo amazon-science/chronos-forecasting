@@ -1,4 +1,4 @@
-name: CI
+name: MLX Tests
 
 on: [push, pull_request]
 
@@ -22,4 +22,4 @@ jobs:
     - name: Install dependencies
       run: pip install ".[mlx,test]"
     - name: Test with pytest
-      run: pytest test/test_chronos_mlx.py
+      run: pytest test/*_mlx.py
