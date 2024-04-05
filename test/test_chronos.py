@@ -59,7 +59,7 @@ def test_tokenizer_fixed_data(
 
     samples = tokenizer.output_transform(
         torch.arange(n_special_tokens, n_tokens).unsqueeze(0).repeat(batch_size, 1, 1),
-        decoding_context=scale,
+        tokenizer_state=scale,
     )
 
     assert (samples[:, 0, [0, -1]] == context).all()
@@ -119,7 +119,7 @@ def test_tokenizer_random_data(use_eos_token: bool):
     assert samples.shape == (2, 10, 4)
 
 
-def validate_tensor(samples: torch.Tensor, shape: Tuple[int, int, int]) -> None:
+def validate_tensor(samples: torch.Tensor, shape: Tuple[int, ...]) -> None:
     assert isinstance(samples, torch.Tensor)
     assert samples.shape == shape
 

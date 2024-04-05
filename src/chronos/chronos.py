@@ -367,9 +367,9 @@ class ChronosPipeline:
             or the length of the longest time series, if a list of 1D tensors was
             provided, and the extra 1 is for EOS.
         """
-        context = self._prepare_and_validate_context(context=context)
+        context_tensor = self._prepare_and_validate_context(context=context)
         token_ids, attention_mask, tokenizer_state = self.tokenizer.input_transform(
-            context
+            context_tensor
         )
         embeddings = self.model.encode(
             input_ids=token_ids.to(self.model.device),
@@ -424,7 +424,7 @@ class ChronosPipeline:
             Tensor of sample forecasts, of shape
             (batch_size, num_samples, prediction_length).
         """
-        context = self._prepare_and_validate_context(context=context)
+        context_tensor = self._prepare_and_validate_context(context=context)
 
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
@@ -443,7 +443,9 @@ class ChronosPipeline:
         remaining = prediction_length
 
         while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.input_transform(context)
+            token_ids, attention_mask, scale = self.tokenizer.input_transform(
+                context_tensor
+            )
             samples = self.model(
                 token_ids.to(self.model.device),
                 attention_mask.to(self.model.device),
@@ -463,7 +465,9 @@ class ChronosPipeline:
             if remaining <= 0:
                 break
 
-            context = torch.cat([context, prediction.median(dim=1).values], dim=-1)
+            context_tensor = torch.cat(
+                [context_tensor, prediction.median(dim=1).values], dim=-1
+            )
 
         return torch.cat(predictions, dim=-1)
 
