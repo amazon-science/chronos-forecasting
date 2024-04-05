@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install ".[typecheck]"
+        run: pip install ".[typecheck]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
       - name: Type checks with mypy
         run: mypy src test
 
@@ -41,6 +41,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install ".[test]"
+        run: pip install ".[test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
       - name: Test with pytest
         run: pytest
