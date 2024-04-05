@@ -4,6 +4,9 @@
 # Adapted from ml-explore/mlx-examples:
 # https://github.com/ml-explore/mlx-examples/blob/b8a348c1b8df4433cfacb9adbeb89b8aa3979ab2/t5/convert.py
 
+from pathlib import Path
+from typing import Union
+
 import mlx.core as mx
 import torch
 from transformers import T5ForConditionalGeneration
@@ -50,7 +53,7 @@ def replace_key(key: str) -> str:
     return key
 
 
-def translate_weights(model_name: str, dtype: mx.Dtype):
+def translate_weights(model_name_or_path: Union[str, Path], dtype: mx.Dtype):
     """Translate a HuggingFace transformers T5 model to MLX.
 
     Parameters
@@ -65,7 +68,7 @@ def translate_weights(model_name: str, dtype: mx.Dtype):
         A state dictionary with weights as mlx arrays.
     """
     model = T5ForConditionalGeneration.from_pretrained(
-        model_name, torch_dtype=torch.float32
+        model_name_or_path, torch_dtype=torch.float32
     )
     weights = {
         replace_key(k): mx.array(v.numpy(), dtype=dtype)

@@ -12,7 +12,7 @@ from chronos.mlx.t5 import apply_top_p
 from chronos.mlx import ChronosPipeline
 
 
-def validate_array(samples: np.ndarray, shape: Tuple[int, int, int]) -> None:
+def validate_array(samples: np.ndarray, shape: Tuple[int, ...]) -> None:
     assert isinstance(samples, np.ndarray)
     assert samples.shape == shape
 

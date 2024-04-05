@@ -468,7 +468,7 @@ class ChronosPipeline:
         dtype = getattr(mx, dtype)
         chronos_config = ChronosConfig(**config.chronos_config)
         inner_model = T5(config=config)
-        weights = translate_weights(model_name=model_name_or_path, dtype=dtype)
+        weights = translate_weights(model_name_or_path=model_name_or_path, dtype=dtype)
         weights = tree_unflatten(list(weights.items()))
         weights = tree_map(lambda p: p.astype(dtype), weights)
         inner_model.update(weights)
