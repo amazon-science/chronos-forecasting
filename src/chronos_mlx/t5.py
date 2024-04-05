@@ -8,7 +8,7 @@
 # - Added support for top_k and top_p sampling.
 
 
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import mlx.core as mx
 import mlx.nn as nn

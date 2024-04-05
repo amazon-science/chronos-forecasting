@@ -1,5 +1,5 @@
 [project]
-name = "chronos"
+name = "chronos_mlx"
 version = "1.1.0"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }

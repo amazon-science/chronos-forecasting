@@ -8,8 +8,8 @@ import mlx.core as mx
 import numpy as np
 import pytest
 
-from chronos.mlx.t5 import apply_top_p
-from chronos.mlx import ChronosPipeline
+from chronos_mlx.t5 import apply_top_p
+from chronos_mlx import ChronosPipeline
 
 
 def validate_array(samples: np.ndarray, shape: Tuple[int, ...]) -> None:

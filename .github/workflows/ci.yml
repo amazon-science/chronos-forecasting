@@ -24,27 +24,6 @@ jobs:
       - name: Type checks with mypy
         run: mypy src test
 
-  test:
-    strategy:
-      max-parallel: 4
-      fail-fast: false
-      matrix:
-        python-version: ["3.11"]
-        platform: [ubuntu-latest]
-
-    runs-on: ${{ matrix.platform }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: pip install ".[test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
-      - name: Test with pytest
-        run: pytest --ignore-glob="test/*_mlx.py" test/
-
   test-mlx:
     strategy:
       max-parallel: 4
@@ -64,4 +43,4 @@ jobs:
     - name: Install dependencies
       run: pip install ".[mlx,test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
     - name: Test with pytest
-      run: pytest test/*_mlx.py
+      run: pytest test/
