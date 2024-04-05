@@ -46,7 +46,6 @@ A minimal example showing how to perform forecasting using Chronos models:
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
 from chronos_mlx import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
@@ -88,7 +87,6 @@ A minimal example showing how to extract encoder embeddings from Chronos models:
 
 ```python
 import pandas as pd
-import torch
 from chronos_mlx import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
