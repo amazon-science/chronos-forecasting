@@ -443,7 +443,9 @@ class ChronosPipeline:
         remaining = prediction_length
 
         while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.input_transform(context_tensor)
+            token_ids, attention_mask, scale = self.tokenizer.input_transform(
+                context_tensor
+            )
             samples = self.model(
                 token_ids.to(self.model.device),
                 attention_mask.to(self.model.device),
@@ -463,7 +465,9 @@ class ChronosPipeline:
             if remaining <= 0:
                 break
 
-            context_tensor = torch.cat([context_tensor, prediction.median(dim=1).values], dim=-1)
+            context_tensor = torch.cat(
+                [context_tensor, prediction.median(dim=1).values], dim=-1
+            )
 
         return torch.cat(predictions, dim=-1)
 
