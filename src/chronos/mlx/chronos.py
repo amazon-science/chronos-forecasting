@@ -3,6 +3,7 @@
 
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import mlx.core as mx
@@ -306,7 +307,7 @@ class ChronosPipeline:
 
     def _prepare_and_validate_context(
         self, context: Union[np.ndarray, List[np.ndarray]]
-    ):
+    ) -> np.ndarray:
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
         assert isinstance(context, np.ndarray)
@@ -441,13 +442,15 @@ class ChronosPipeline:
         return np.concatenate(predictions, axis=-1)
 
     @classmethod
-    def from_pretrained(cls, model_name: str, dtype: str = "float32"):
+    def from_pretrained(
+        cls, model_name_or_path: Union[str, Path], dtype: str = "float32"
+    ):
         """
         Load the model, either from a local path or from the HuggingFace Hub.
 
         Parameters
         ----------
-        model_name
+        model_name_or_path
             Model ID on HuggingFace Hub or local path.
         dtype, optional
             String denoting the float dtype of the mlx model,
@@ -458,14 +461,14 @@ class ChronosPipeline:
             A ChronosPipeline
         """
 
-        config = T5Config.from_pretrained(model_name)
+        config = T5Config.from_pretrained(model_name_or_path)
 
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
         dtype = getattr(mx, dtype)
         chronos_config = ChronosConfig(**config.chronos_config)
         inner_model = T5(config=config)
-        weights = translate_weights(model_name=model_name, dtype=dtype)
+        weights = translate_weights(model_name=model_name_or_path, dtype=dtype)
         weights = tree_unflatten(list(weights.items()))
         weights = tree_map(lambda p: p.astype(dtype), weights)
         inner_model.update(weights)
