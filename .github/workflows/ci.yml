@@ -20,6 +20,6 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      run: pip install ".[mlx,test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
+      run: pip install ".[test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
     - name: Test with pytest
       run: pytest test/
