@@ -208,7 +208,7 @@ class TransformerDecoderLayer(nn.Module):
         memory: mx.array,
         mask: mx.array,
         memory_mask: mx.array,
-        cache: Optional[List[Tuple[mx.array, mx.array]]] = None,
+        cache: Optional[Tuple[mx.array, mx.array]] = None,
     ):
         y = self.ln1(x)
         y, cache = self.self_attention(y, y, y, mask, cache)
