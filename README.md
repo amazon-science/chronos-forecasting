@@ -1,4 +1,4 @@
-# [:test_tube: MLX Version] Chronos: Learning the Language of Time Series
+# [🧪 MLX Version] Chronos: Learning the Language of Time Series
 
 > [!IMPORTANT]  
 > This is the **experimental** MLX version of Chronos for Apple Silicon Macs. Please use the `main` branch for the stable PyTorch version.
