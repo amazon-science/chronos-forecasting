@@ -9,7 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11"]
-        platform: [ubuntu-latest]
+        platform: [macos-14]
 
     runs-on: ${{ matrix.platform }}
 
