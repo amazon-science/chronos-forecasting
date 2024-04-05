@@ -3,7 +3,7 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  lint:
+  type-check:
     strategy:
       max-parallel: 4
       fail-fast: false
