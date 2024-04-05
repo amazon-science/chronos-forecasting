@@ -12,6 +12,7 @@ import numpy as np
 from mlx.utils import tree_map, tree_unflatten
 from transformers import T5Config
 
+import chronos_mlx
 from chronos_mlx.t5 import T5
 from chronos_mlx.translate import translate_weights
 
@@ -45,7 +46,7 @@ class ChronosConfig:
         ), f"Special token id's must be smaller than {self.n_special_tokens=}"
 
     def create_tokenizer(self) -> "ChronosTokenizer":
-        class_ = getattr(chronos, self.tokenizer_class)
+        class_ = getattr(chronos_mlx, self.tokenizer_class)
         return class_(**self.tokenizer_kwargs, config=self)
 
 
