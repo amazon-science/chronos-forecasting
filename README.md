@@ -33,6 +33,8 @@ To perform inference with Chronos models, install this package by running:
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
+> [!NOTE]  
+> We have added 🧪experimental support for [MLX](https://github.com/ml-explore/mlx) inference. If you have an Apple Silicon Mac, check out the [`mlx`](https://github.com/amazon-science/chronos-forecasting/tree/mlx) branch of this repository for instructions on how to install and use the MLX version of Chronos. 
 
 ### Forecasting
 
@@ -48,7 +50,7 @@ from chronos import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
     "amazon/chronos-t5-small",
-    device_map="cuda",
+    device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
     torch_dtype=torch.bfloat16,
 )
 
