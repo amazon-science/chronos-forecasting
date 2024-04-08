@@ -3,44 +3,23 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  type-check:
+  test-mlx:
     strategy:
       max-parallel: 4
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
-        platform: [ubuntu-latest]
+        python-version: ['3.11']
+        platform: [macos-14]
 
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: pip install ".[typecheck]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
-      - name: Type checks with mypy
-        run: mypy src test
-
-  test:
-    strategy:
-      max-parallel: 4
-      fail-fast: false
-      matrix:
-        python-version: ["3.11"]
-        platform: [ubuntu-latest]
-
-    runs-on: ${{ matrix.platform }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: pip install ".[test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
-      - name: Test with pytest
-        run: pytest
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: pip install ".[test]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
+    - name: Test with pytest
+      run: pytest test/

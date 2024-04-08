@@ -3,18 +3,18 @@
 
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-import chronos
-import torch
-import torch.nn as nn
-from transformers import (
-    AutoConfig,
-    AutoModelForCausalLM,
-    AutoModelForSeq2SeqLM,
-    GenerationConfig,
-    PreTrainedModel,
-)
+import mlx.core as mx
+import mlx.nn as nn
+import numpy as np
+from mlx.utils import tree_map, tree_unflatten
+from transformers import T5Config
+
+import chronos_mlx
+from chronos_mlx.t5 import T5
+from chronos_mlx.translate import translate_weights
 
 
 @dataclass
@@ -46,13 +46,13 @@ class ChronosConfig:
         ), f"Special token id's must be smaller than {self.n_special_tokens=}"
 
     def create_tokenizer(self) -> "ChronosTokenizer":
-        class_ = getattr(chronos, self.tokenizer_class)
+        class_ = getattr(chronos_mlx, self.tokenizer_class)
         return class_(**self.tokenizer_kwargs, config=self)
 
 
 class ChronosTokenizer:
     """
-    A ``ChronosTokenizer`` definines how time series are mapped into token IDs
+    A ``ChronosTokenizer`` defines how time series are mapped into token IDs
     and back.
 
     For details, see the ``input_transform`` and ``output_transform`` methods,
@@ -60,27 +60,27 @@ class ChronosTokenizer:
     """
 
     def input_transform(
-        self, context: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, Any]:
+        self, context: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, Any]:
         """
         Turn a batch of time series into token IDs, attention map, and scale.
 
         Parameters
         ----------
         context
-            A tensor shaped (batch_size, time_length), containing the
-            timeseries to forecast. Use left-padding with ``torch.nan``
+            A numpy array shaped (batch_size, time_length), containing the
+            timeseries to forecast. Use left-padding with ``np.nan``
             to align time series of different lengths.
 
         Returns
         -------
         token_ids
-            A tensor of integers, shaped (batch_size, time_length + 1)
+            A numpy array of integers, shaped (batch_size, time_length + 1)
             if ``config.use_eos_token`` and (batch_size, time_length)
             otherwise, containing token IDs for the input series.
         attention_mask
-            A boolean tensor, same shape as ``token_ids``, indicating
-            which input observations are not ``torch.nan`` (i.e. not
+            A boolean numpy array, same shape as ``token_ids``, indicating
+            which input observations are not ``np.nan`` (i.e. not
             missing nor padding).
         tokenizer_state
             An object that will be passed to ``output_transform``.
@@ -89,16 +89,14 @@ class ChronosTokenizer:
         """
         raise NotImplementedError()
 
-    def output_transform(
-        self, samples: torch.Tensor, tokenizer_state: Any
-    ) -> torch.Tensor:
+    def output_transform(self, samples: np.ndarray, tokenizer_state: Any) -> np.ndarray:
         """
         Turn a batch of sample token IDs into real values.
 
         Parameters
         ----------
         samples
-            A tensor of integers, shaped (batch_size, num_samples, time_length),
+            A numpy array of integers, shaped (batch_size, num_samples, time_length),
             containing token IDs of sample trajectories.
         tokenizer_state
             An object returned by ``input_transform`` containing
@@ -108,7 +106,7 @@ class ChronosTokenizer:
         Returns
         -------
         forecasts
-            A real tensor, shaped (batch_size, num_samples, time_length),
+            A real numpy array, shaped (batch_size, num_samples, time_length),
             containing forecasted sample paths.
         """
         raise NotImplementedError()
@@ -119,70 +117,60 @@ class MeanScaleUniformBins(ChronosTokenizer):
         self, low_limit: float, high_limit: float, config: ChronosConfig
     ) -> None:
         self.config = config
-        self.centers = torch.linspace(
+        self.centers = np.linspace(
             low_limit,
             high_limit,
             config.n_tokens - config.n_special_tokens - 1,
         )
-        self.boundaries = torch.concat(
+        self.boundaries = np.concatenate(
             (
-                torch.tensor([-1e20], device=self.centers.device),
+                np.array([-1e20]),
                 (self.centers[1:] + self.centers[:-1]) / 2,
-                torch.tensor([1e20], device=self.centers.device),
+                np.array([1e20]),
             )
         )
 
     def input_transform(
-        self, context: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, context: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         batch_size, length = context.shape
 
         if length > self.config.context_length:
             context = context[..., -self.config.context_length :]
 
-        attention_mask = ~torch.isnan(context)
-        scale = torch.nansum(
-            torch.abs(context) * attention_mask, dim=-1
-        ) / torch.nansum(attention_mask, dim=-1)
+        attention_mask = ~np.isnan(context)
+        scale = np.nansum(np.abs(context) * attention_mask, axis=-1) / np.nansum(
+            attention_mask, axis=-1
+        )
         scale[~(scale > 0)] = 1.0
-        scaled_context = context / scale.unsqueeze(dim=-1)
+        scaled_context = context / scale[..., np.newaxis]
         token_ids = (
-            torch.bucketize(
-                input=scaled_context,
-                boundaries=self.boundaries,
-                # buckets are open to the right, see:
-                # https://pytorch.org/docs/2.1/generated/torch.bucketize.html#torch-bucketize
-                right=True,
-            )
+            np.digitize(scaled_context, bins=self.boundaries)
             + self.config.n_special_tokens
         )
         token_ids[~attention_mask] = self.config.pad_token_id
 
         if self.config.use_eos_token:
-            eos_tokens = torch.full(
-                (batch_size, 1), fill_value=self.config.eos_token_id
-            )
-            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-            eos_mask = torch.full((batch_size, 1), fill_value=True)
-            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
+            eos_tokens = np.full((batch_size, 1), fill_value=self.config.eos_token_id)
+            token_ids = np.concatenate((token_ids, eos_tokens), axis=1)
+            eos_mask = np.full((batch_size, 1), fill_value=True)
+            attention_mask = np.concatenate((attention_mask, eos_mask), axis=1)
 
         return token_ids, attention_mask, scale
 
-    def output_transform(
-        self, samples: torch.Tensor, scale: torch.Tensor
-    ) -> torch.Tensor:
-        scale_unsqueezed = scale.unsqueeze(-1).unsqueeze(-1)
-        indices = torch.clamp(
+    def output_transform(self, samples: np.ndarray, scale: np.ndarray) -> np.ndarray:
+        scale_unsqueezed = scale[..., np.newaxis, np.newaxis]
+        indices = np.clip(
             samples - self.config.n_special_tokens,
-            min=0,
-            max=len(self.centers) - 1,
+            a_min=0,
+            a_max=len(self.centers) - 1,
         )
         return self.centers[indices] * scale_unsqueezed
 
 
 class ChronosModel(nn.Module):
     """
-    A ``ChronosModel`` wraps a ``PreTrainedModel`` object from ``transformers``
+    A ``ChronosModel`` wraps a ``T5`` object from ``chronos.mlx.t5``
     and uses it to predict sample paths for time series tokens.
 
     Parameters
@@ -190,22 +178,21 @@ class ChronosModel(nn.Module):
     config
         The configuration to use.
     model
-        The pre-trained model to use.
+        The pretrained T5 model to use.
     """
 
-    def __init__(self, config: ChronosConfig, model: PreTrainedModel) -> None:
+    def __init__(self, config: ChronosConfig, model: T5) -> None:
         super().__init__()
+        assert config.model_type == "seq2seq" and isinstance(
+            model, T5
+        ), "Only the T5 model is currently supported in MLX"
         self.config = config
         self.model = model
 
-    @property
-    def device(self):
-        return self.model.device
-
     def encode(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: np.ndarray,
+        attention_mask: np.ndarray,
     ):
         """
         Extract the encoder embedding for the given token sequences.
@@ -213,35 +200,33 @@ class ChronosModel(nn.Module):
         Parameters
         ----------
         input_ids
-            Tensor of indices of input sequence tokens in the vocabulary
+            Array of indices of input sequence tokens in the vocabulary
             with shape (batch_size, sequence_length).
         attention_mask
-            A mask tensor of the same shape as input_ids to avoid attending
+            A mask array of the same shape as input_ids to avoid attending
             on padding or missing tokens.
 
         Returns
         -------
         embedding
-            A tensor of encoder embeddings with shape
+            An array of encoder embeddings with shape
             (batch_size, sequence_length, d_model).
         """
         assert (
             self.config.model_type == "seq2seq"
         ), "Encoder embeddings are only supported for encoder-decoder models"
-        return self.model.encoder(
-            input_ids=input_ids, attention_mask=attention_mask
-        ).last_hidden_state
+        return self.model.encode(inputs=input_ids, mask=attention_mask)
 
-    def forward(
+    def __call__(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: mx.array,
+        attention_mask: mx.array,
         prediction_length: Optional[int] = None,
         num_samples: Optional[int] = None,
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
-    ) -> torch.Tensor:
+    ) -> mx.array:
         """
         Predict future sample tokens for the given token sequences.
 
@@ -253,7 +238,7 @@ class ChronosModel(nn.Module):
         Returns
         -------
         samples
-            A tensor of integers, shaped (batch_size, num_samples, time_length),
+            A numpy array of integers, shaped (batch_size, num_samples, time_length),
             containing forecasted sample paths.
         """
         if prediction_length is None:
@@ -270,40 +255,31 @@ class ChronosModel(nn.Module):
         preds = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            generation_config=GenerationConfig(
-                min_new_tokens=prediction_length,
-                max_new_tokens=prediction_length,
-                do_sample=True,
-                num_return_sequences=num_samples,
-                eos_token_id=self.config.eos_token_id,
-                pad_token_id=self.config.pad_token_id,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-            ),
+            min_new_tokens=prediction_length,
+            max_new_tokens=prediction_length,
+            do_sample=True,
+            num_return_sequences=num_samples,
+            eos_token_id=self.config.eos_token_id,
+            pad_token_id=self.config.pad_token_id,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
         )
 
-        if self.config.model_type == "seq2seq":
-            preds = preds[..., 1:]  # remove the decoder start token
-        else:
-            assert self.config.model_type == "causal"
-            assert preds.size(-1) == input_ids.size(-1) + prediction_length
-            preds = preds[..., -prediction_length:]
+        preds = preds[..., 1:]  # remove the decoder start token
 
-        return preds.reshape(input_ids.size(0), num_samples, -1)
+        return preds.reshape(input_ids.shape[0], num_samples, -1)
 
 
-def left_pad_and_stack_1D(tensors: List[torch.Tensor]):
-    max_len = max(len(c) for c in tensors)
+def left_pad_and_stack_1D(arrays: List[np.ndarray]):
+    max_len = max(len(c) for c in arrays)
     padded = []
-    for c in tensors:
-        assert isinstance(c, torch.Tensor)
+    for c in arrays:
+        assert isinstance(c, np.ndarray)
         assert c.ndim == 1
-        padding = torch.full(
-            size=(max_len - len(c),), fill_value=torch.nan, device=c.device
-        )
-        padded.append(torch.concat((padding, c), dim=-1))
-    return torch.stack(padded)
+        padding = np.full(shape=(max_len - len(c),), fill_value=np.nan)
+        padded.append(np.concatenate((padding, c), axis=-1))
+    return np.stack(padded)
 
 
 class ChronosPipeline:
@@ -330,21 +306,20 @@ class ChronosPipeline:
         self.model = model
 
     def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ):
+        self, context: Union[np.ndarray, List[np.ndarray]]
+    ) -> np.ndarray:
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
-        assert isinstance(context, torch.Tensor)
+        assert isinstance(context, np.ndarray)
         if context.ndim == 1:
-            context = context.unsqueeze(0)
+            context = context[np.newaxis, ...]
         assert context.ndim == 2
 
         return context
 
-    @torch.no_grad()
     def embed(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ) -> Tuple[torch.Tensor, Any]:
+        self, context: Union[np.ndarray, List[np.ndarray]]
+    ) -> Tuple[np.ndarray, Any]:
         """
         Get encoder embeddings for the given time series.
 
@@ -367,36 +342,36 @@ class ChronosPipeline:
             or the length of the longest time series, if a list of 1D tensors was
             provided, and the extra 1 is for EOS.
         """
-        context_tensor = self._prepare_and_validate_context(context=context)
+        context_array = self._prepare_and_validate_context(context=context)
         token_ids, attention_mask, tokenizer_state = self.tokenizer.input_transform(
-            context_tensor
+            context_array
         )
         embeddings = self.model.encode(
-            input_ids=token_ids.to(self.model.device),
-            attention_mask=attention_mask.to(self.model.device),
-        ).cpu()
-        return embeddings, tokenizer_state
+            input_ids=mx.array(token_ids),
+            attention_mask=mx.array(attention_mask),
+        )
+        return np.array(embeddings.astype(mx.float32)), tokenizer_state
 
     def predict(
         self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
+        context: Union[np.ndarray, List[np.ndarray]],
         prediction_length: Optional[int] = None,
         num_samples: Optional[int] = None,
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         limit_prediction_length: bool = True,
-    ) -> torch.Tensor:
+    ) -> np.ndarray:
         """
         Get forecasts for the given time series.
 
         Parameters
         ----------
         context
-            Input series. This is either a 1D tensor, or a list
-            of 1D tensors, or a 2D tensor whose first dimension
+            Input series. This is either a 1D numpy array, or a list
+            of 1D numpy arrays, or a 2D numpy array whose first dimension
             is batch. In the latter case, use left-padding with
-            ``torch.nan`` to align series of different lengths.
+            ``np.nan`` to align series of different lengths.
         prediction_length
             Time steps to predict. Defaults to what specified
             in ``self.model.config``.
@@ -421,10 +396,10 @@ class ChronosPipeline:
         Returns
         -------
         samples
-            Tensor of sample forecasts, of shape
+            Numpy array of sample forecasts, of shape
             (batch_size, num_samples, prediction_length).
         """
-        context_tensor = self._prepare_and_validate_context(context=context)
+        context_array = self._prepare_and_validate_context(context=context)
 
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
@@ -432,7 +407,7 @@ class ChronosPipeline:
         if prediction_length > self.model.config.prediction_length:
             msg = (
                 f"We recommend keeping prediction length <= {self.model.config.prediction_length}. "
-                "The quality of longer predictions may degrade since the model is not optimized for it. "
+                f"The quality of longer predictions may degrade since the model is not optimized for it. "
             )
             if limit_prediction_length:
                 msg += "You can turn off this check by setting `limit_prediction_length=False`."
@@ -444,20 +419,19 @@ class ChronosPipeline:
 
         while remaining > 0:
             token_ids, attention_mask, scale = self.tokenizer.input_transform(
-                context_tensor
+                context_array
             )
+            token_ids, attention_mask = mx.array(token_ids), mx.array(attention_mask)
             samples = self.model(
-                token_ids.to(self.model.device),
-                attention_mask.to(self.model.device),
+                token_ids,
+                attention_mask,
                 min(remaining, self.model.config.prediction_length),
                 num_samples,
                 temperature,
                 top_k,
                 top_p,
             )
-            prediction = self.tokenizer.output_transform(
-                samples.to(scale.device), scale
-            )
+            prediction = self.tokenizer.output_transform(np.array(samples), scale)
 
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
@@ -465,31 +439,44 @@ class ChronosPipeline:
             if remaining <= 0:
                 break
 
-            context_tensor = torch.cat(
-                [context_tensor, prediction.median(dim=1).values], dim=-1
+            context_array = np.concatenate(
+                [context_array, np.median(prediction, axis=1)], axis=-1
             )
 
-        return torch.cat(predictions, dim=-1)
+        return np.concatenate(predictions, axis=-1)
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
+    def from_pretrained(
+        cls, model_name_or_path: Union[str, Path], dtype: str = "float32"
+    ):
         """
         Load the model, either from a local path or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel``
-        from ``transformers``.
+
+        Parameters
+        ----------
+        model_name_or_path
+            Model ID on HuggingFace Hub or local path.
+        dtype, optional
+            String denoting the float dtype of the mlx model,
+            by default "float32"
+
+        Returns
+        -------
+            A ChronosPipeline
         """
 
-        config = AutoConfig.from_pretrained(*args, **kwargs)
+        config = T5Config.from_pretrained(model_name_or_path)
 
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
+        dtype = getattr(mx, dtype)
         chronos_config = ChronosConfig(**config.chronos_config)
-
-        if chronos_config.model_type == "seq2seq":
-            inner_model = AutoModelForSeq2SeqLM.from_pretrained(*args, **kwargs)
-        else:
-            assert config.model_type == "causal"
-            inner_model = AutoModelForCausalLM.from_pretrained(*args, **kwargs)
+        inner_model = T5(config=config)
+        weights = translate_weights(model_name_or_path=model_name_or_path, dtype=dtype)
+        weights = tree_unflatten(list(weights.items()))
+        weights = tree_map(lambda p: p.astype(dtype), weights)
+        inner_model.update(weights)
+        mx.eval(inner_model.parameters())
 
         return cls(
             tokenizer=chronos_config.create_tokenizer(),

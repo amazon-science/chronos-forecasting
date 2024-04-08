@@ -1,4 +1,7 @@
-# Chronos: Learning the Language of Time Series
+# [🧪 MLX Version] Chronos: Learning the Language of Time Series
+
+> [!IMPORTANT]  
+> This is the **experimental** MLX version of Chronos for Apple Silicon Macs. Please use the `main` branch for the stable PyTorch version.
 
 Chronos is a family of **pretrained time series forecasting models** based on language model architectures. A time series is transformed into a sequence of tokens via scaling and quantization, and a language model is trained on these tokens using the cross-entropy loss. Once trained, probabilistic forecasts are obtained by sampling multiple future trajectories given the historical context. Chronos models have been trained on a large corpus of publicly available time series data, as well as synthetic data generated using Gaussian processes.
 
@@ -28,10 +31,10 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 
 ## Usage
 
-To perform inference with Chronos models, install this package by running:
+To perform inference with Chronos models on Apple Silcon devices, install this package by running:
 
 ```
-pip install git+https://github.com/amazon-science/chronos-forecasting.git
+pip install git+https://github.com/amazon-science/chronos-forecasting.git@mlx
 ```
 
 ### Forecasting
@@ -43,20 +46,18 @@ A minimal example showing how to perform forecasting using Chronos models:
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
-from chronos import ChronosPipeline
+from chronos_mlx import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
     "amazon/chronos-t5-small",
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    dtype="bfloat16",
 )
 
 df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
-context = torch.tensor(df["#Passengers"])
+context = df["#Passengers"].values
 prediction_length = 12
 forecast = pipeline.predict(
     context,
@@ -69,7 +70,7 @@ forecast = pipeline.predict(
 
 # visualize the forecast
 forecast_index = range(len(df), len(df) + prediction_length)
-low, median, high = np.quantile(forecast[0].numpy(), [0.1, 0.5, 0.9], axis=0)
+low, median, high = np.quantile(forecast[0], [0.1, 0.5, 0.9], axis=0)
 
 plt.figure(figsize=(8, 4))
 plt.plot(df["#Passengers"], color="royalblue", label="historical data")
@@ -86,20 +87,18 @@ A minimal example showing how to extract encoder embeddings from Chronos models:
 
 ```python
 import pandas as pd
-import torch
-from chronos import ChronosPipeline
+from chronos_mlx import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
     "amazon/chronos-t5-small",
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    dtype="bfloat16",
 )
 
 df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
-context = torch.tensor(df["#Passengers"])
+context = df["#Passengers"].values
 embeddings, tokenizer_state = pipeline.embed(context)
 ```
 
