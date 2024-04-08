@@ -50,7 +50,7 @@ from chronos import ChronosPipeline
 
 pipeline = ChronosPipeline.from_pretrained(
     "amazon/chronos-t5-small",
-    device_map="cuda",  # use cpu for CPU inference and mps for Apple Silicon
+    device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
     torch_dtype=torch.bfloat16,
 )
 
