@@ -1,0 +1,78 @@
+cff-version: 1.2.0
+title: "Chronos: Learning the Language of Time Series"
+message: "If you find Chronos models useful for your research, please consider citing the associated paper."
+authors:
+  - family-names: Ansari
+    given-names: Abdul Fatir
+  - family-names: Stella
+    given-names: Lorenzo
+  - family-names: Turkmen
+    given-names: Caner
+  - family-names: Zhang
+    given-names: Xiyuan
+  - family-names: Mercado
+    given-names: Pedro
+  - family-names: Shen
+    given-names: Huibin
+  - family-names: Shchur
+    given-names: Oleksandr
+  - family-names: Rangapuram
+    given-names: Syama Syndar
+  - family-names: Arango
+    given-names: Sebastian Pineda
+  - family-names: Kapoor
+    given-names: Shubham
+  - family-names: Zschiegner
+    given-names: Jasper
+  - family-names: Maddix
+    given-names: Danielle C.
+  - family-names: Mahoney
+    given-names: Michael W.
+  - family-names: Torkkola
+    given-names: Kari
+  - family-names: Wilson
+    given-names: Andrew Gordon
+  - family-names: Bohlke-Schneider
+    given-names: Michael
+  - family-names: Wang
+    given-names: Yuyang
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Ansari
+      given-names: Abdul Fatir
+    - family-names: Stella
+      given-names: Lorenzo
+    - family-names: Turkmen
+      given-names: Caner
+    - family-names: Zhang
+      given-names: Xiyuan
+    - family-names: Mercado
+      given-names: Pedro
+    - family-names: Shen
+      given-names: Huibin
+    - family-names: Shchur
+      given-names: Oleksandr
+    - family-names: Rangapuram
+      given-names: Syama Syndar
+    - family-names: Arango
+      given-names: Sebastian Pineda
+    - family-names: Kapoor
+      given-names: Shubham
+    - family-names: Zschiegner
+      given-names: Jasper
+    - family-names: Maddix
+      given-names: Danielle C.
+    - family-names: Mahoney
+      given-names: Michael W.
+    - family-names: Torkkola
+      given-names: Kari
+    - family-names: Wilson
+      given-names: Andrew Gordon
+    - family-names: Bohlke-Schneider
+      given-names: Michael
+    - family-names: Wang
+      given-names: Yuyang
+  title: "Chronos: Learning the Language of Time Series"
+  journal: "arXiv preprint arXiv:2403.07815"
+  year: 2024
