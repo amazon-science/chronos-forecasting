@@ -264,11 +264,6 @@ class OutputHead(nn.Module):
 
 def apply_top_p(logits: mx.array, top_p: float, min_tokens_to_keep=1):
     assert min_tokens_to_keep <= logits.shape[-1]
-    logits_dtype = logits.dtype
-    # FIXME: The following is needed because mlx doesn't have the cumsum
-    # kernel for bfloat16. Once that is supported natively, this casting
-    # should be removed. @abdulfatir
-    logits = logits.astype(mx.float32)
     sorted_indices = mx.argsort(logits, axis=-1)
     sorted_logits = mx.take_along_axis(logits, sorted_indices, axis=-1)
     cumulative_probs = mx.softmax(sorted_logits, axis=-1).cumsum(axis=-1, reverse=True)
@@ -276,9 +271,7 @@ def apply_top_p(logits: mx.array, top_p: float, min_tokens_to_keep=1):
     sorted_indices_to_remove[..., -min_tokens_to_keep:] = False
     masked_sorted_logits = mx.where(sorted_indices_to_remove, -mx.inf, sorted_logits)
     unsorted_indices = mx.argsort(sorted_indices, axis=-1)
-    return mx.take_along_axis(masked_sorted_logits, unsorted_indices, axis=-1).astype(
-        logits_dtype
-    )
+    return mx.take_along_axis(masked_sorted_logits, unsorted_indices, axis=-1)
 
 
 def sample(logits, top_k=1, top_p=1.0, temperature=1.0):

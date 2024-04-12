@@ -70,6 +70,17 @@ def test_pipeline_predict(dtype: str):
     )
     validate_array(samples, (1, 7, 65))
 
+    # test non-default inference params
+    samples = pipeline.predict(
+        context,
+        num_samples=12,
+        prediction_length=3,
+        top_p=0.7,
+        top_k=32,
+        temperature=0.9,
+    )
+    validate_array(samples, (4, 12, 3))
+
 
 @pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
 def test_pipeline_embed(dtype: str):
