@@ -1,4 +1,5 @@
 <div align="center">
+<img src="figures/chronos-logo.png" width="60%">
 
 # Chronos: Learning the Language of Time Series
 
