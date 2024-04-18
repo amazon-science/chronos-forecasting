@@ -56,8 +56,6 @@ The following figure showcases the remarkable **zero-shot** performance of Chron
   </span>
 </p>
 
----
-
 ## 📈 Usage
 
 To perform inference with Chronos models, install this package by running:
