@@ -64,7 +64,7 @@ To perform inference with Chronos models, install this package by running:
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
-> [!NOTE]  
+> [!TIP]  
 > The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features ensembling with other statistical and machine learning models for time series forecasting as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
 > [!NOTE]  
