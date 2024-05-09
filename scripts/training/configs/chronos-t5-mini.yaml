@@ -1,0 +1,35 @@
+training_data_paths:
+- "/home/ubuntu/tsmixup-data.arrow"
+- "/home/ubuntu/kernelsynth-data.arrow"
+probability:
+- 0.9
+- 0.1
+context_length: 512
+prediction_length: 64
+min_past: 60
+max_steps: 200_000
+save_steps: 100_000
+log_steps: 500
+per_device_train_batch_size: 32
+learning_rate: 0.001
+optim: adamw_torch_fused
+num_samples: 20
+shuffle_buffer_length: 100_000
+gradient_accumulation_steps: 1
+model_id: google/t5-efficient-mini
+model_type: seq2seq
+random_init: true
+tie_embeddings: true
+output_dir: ./output/
+tf32: true
+torch_compile: true
+tokenizer_class: "MeanScaleUniformBins"
+tokenizer_kwargs:
+  low_limit: -15.0
+  high_limit: 15.0
+n_tokens: 4096
+lr_scheduler_type: linear
+warmup_ratio: 0.0
+dataloader_num_workers: 1
+max_missing_prop: 0.9
+use_eos_token: true
