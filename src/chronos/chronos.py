@@ -60,7 +60,9 @@ class ChronosTokenizer:
     """
 
     def input_transform(
-        self, context: torch.Tensor
+        self,
+        context: torch.Tensor,
+        tokenizer_state: Any = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, Any]:
         """
         Turn a batch of time series into token IDs, attention map, and scale.
@@ -71,6 +73,10 @@ class ChronosTokenizer:
             A tensor shaped (batch_size, time_length), containing the
             timeseries to forecast. Use left-padding with ``torch.nan``
             to align time series of different lengths.
+        tokenizer_state
+            An object returned by ``input_transform`` containing
+            relevant context to preprocess data, such as location and scale.
+            The nature of this depends on the specific tokenizer.
 
         Returns
         -------
@@ -133,7 +139,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
         )
 
     def input_transform(
-        self, context: torch.Tensor
+        self, context: torch.Tensor, scale: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size, length = context.shape
 
@@ -141,10 +147,13 @@ class MeanScaleUniformBins(ChronosTokenizer):
             context = context[..., -self.config.context_length :]
 
         attention_mask = ~torch.isnan(context)
-        scale = torch.nansum(
-            torch.abs(context) * attention_mask, dim=-1
-        ) / torch.nansum(attention_mask, dim=-1)
-        scale[~(scale > 0)] = 1.0
+
+        if scale is None:
+            scale = torch.nansum(
+                torch.abs(context) * attention_mask, dim=-1
+            ) / torch.nansum(attention_mask, dim=-1)
+            scale[~(scale > 0)] = 1.0
+
         scaled_context = context / scale.unsqueeze(dim=-1)
         token_ids = (
             torch.bucketize(
@@ -293,7 +302,7 @@ class ChronosModel(nn.Module):
         return preds.reshape(input_ids.size(0), num_samples, -1)
 
 
-def left_pad_and_stack_1D(tensors: List[torch.Tensor]):
+def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
     max_len = max(len(c) for c in tensors)
     padded = []
     for c in tensors:
