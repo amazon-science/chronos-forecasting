@@ -202,7 +202,7 @@ class ChronosModel(nn.Module):
     config
         The configuration to use.
     model
-        The pre-trained model to use.
+        The pretrained model to use.
     """
 
     def __init__(self, config: ChronosConfig, model: PreTrainedModel) -> None:

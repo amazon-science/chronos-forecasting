@@ -142,7 +142,7 @@ embeddings, tokenizer_state = pipeline.embed(context)
 
 ### Pretraining and fine-tuning
 
-Scripts for pre-training and fine-tuning Chronos models can be found in [this folder](./scripts/training).
+Scripts for pretraining and fine-tuning Chronos models can be found in [this folder](./scripts/training).
 
 ## 🔥 Coverage
 
