@@ -15,7 +15,7 @@ learning_rate: 0.001
 optim: adamw_torch_fused
 num_samples: 20
 shuffle_buffer_length: 100_000
-gradient_accumulation_steps: 1
+gradient_accumulation_steps: 4
 model_id: google/t5-efficient-large
 model_type: seq2seq
 random_init: true
