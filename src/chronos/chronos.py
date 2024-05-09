@@ -75,8 +75,11 @@ class ChronosTokenizer:
             to align time series of different lengths.
         tokenizer_state
             An object returned by ``input_transform`` containing
-            relevant context to preprocess data, such as location and scale.
-            The nature of this depends on the specific tokenizer.
+            relevant information to preprocess data, such as location and
+            scale. The nature of this depends on the specific tokenizer.
+            This is useful when tokenizing the label (for training), in
+            order to use the same scaling used to tokenize the context;
+            when tokenizing the context, this argument should be ignored.
 
         Returns
         -------
@@ -90,7 +93,7 @@ class ChronosTokenizer:
             missing nor padding).
         tokenizer_state
             An object that will be passed to ``output_transform``.
-            Contains the relevant context to decode output samples into
+            Contains the relevant information to decode output samples into
             real values, such as location and scale parameters.
         """
         raise NotImplementedError()
