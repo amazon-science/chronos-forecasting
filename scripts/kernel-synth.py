@@ -88,8 +88,6 @@ def sample_from_gp_prior(
         The GP covaraince kernel.
     X
         The input "time" points.
-    n_samples, optional
-        The number of samples to draw, by default 1.
     random_seed, optional
         The random seed for sampling, by default None.
 
