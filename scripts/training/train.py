@@ -426,6 +426,7 @@ def main(
     top_k: int = 50,
     top_p: float = 1.0,
     seed: Optional[int] = None,
+    hf_hub_model_name: Optional[str] = None,
 ):
     training_data_paths = ast.literal_eval(training_data_paths)
     assert isinstance(training_data_paths, list)
@@ -554,6 +555,9 @@ def main(
 
     if is_main_process():
         model.save_pretrained(output_dir / "checkpoint-final")
+
+        if hf_hub_model_name is not None:
+            model.push_to_hub(hf_hub_model_name)
 
 
 if __name__ == "__main__":
