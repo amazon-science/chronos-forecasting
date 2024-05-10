@@ -83,10 +83,7 @@ pipeline = ChronosPipeline.from_pretrained(
 	torch_dtype=torch.bfloat16,
 )
 
-df = pd.read_csv(
-	"https://raw.githubusercontent.com/AileenNielsen/"
-	"TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
-)
+df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
@@ -138,10 +135,7 @@ pipeline = ChronosPipeline.from_pretrained(
 	torch_dtype=torch.bfloat16,
 )
 
-df = pd.read_csv(
-	"https://raw.githubusercontent.com/AileenNielsen/"
-	"TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
-)
+df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
