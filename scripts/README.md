@@ -88,7 +88,7 @@
     The output and checkpoints will be saved in `output/run_{id}/`.
 > [!TIP]  
 > If the initial training step is too slow, you might want to change the `shuffle_buffer_length` and/or set `torch_compile` to `false`.
-- (Optional) You can automatically push your fine-tuned model to HuggingFace🤗 Hub by setting `--hf-hub-model-name <fine-tuned-model-name>`. Before that, do not forget to [create an access token](https://huggingface.co/settings/tokens) with **write permissions** and put it in `~/.cache/huggingface/token`. Here's a sample command that will save a fine-tuned model at `<your_hf_username>/chronos-t5-small-fine-tuned`.
+- (Optional) You can automatically push your fine-tuned model to HuggingFace🤗 Hub by setting `--hf-hub-model-name <fine-tuned-model-name>`. Before that, do not forget to [create an access token](https://huggingface.co/settings/tokens) with **write permissions** and put it in `~/.cache/huggingface/token`. Here's a sample command that will save a fine-tuned model on HuggingFace🤗 Hub at `<your_hf_username>/chronos-t5-small-fine-tuned`.
     ```sh
     CUDA_VISIBLE_DEVICES=0 python training/train.py --config /path/to/modified/config.yaml \
         --model-id amazon/chronos-t5-small \
