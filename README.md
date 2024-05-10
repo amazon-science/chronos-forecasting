@@ -68,9 +68,6 @@ pip install git+https://github.com/amazon-science/chronos-forecasting.git
 > [!TIP]  
 > The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features ensembling with other statistical and machine learning models for time series forecasting as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
-> [!NOTE]  
-> We have added 🧪experimental support for [MLX](https://github.com/ml-explore/mlx) inference. If you have an Apple Silicon Mac, check out the [`mlx`](https://github.com/amazon-science/chronos-forecasting/tree/mlx) branch of this repository for instructions on how to install and use the MLX version of Chronos. 
-
 ### Forecasting
 
 A minimal example showing how to perform forecasting using Chronos models:
@@ -154,7 +151,7 @@ embeddings, tokenizer_state = pipeline.embed(context)
 
 ### Pretraining and fine-tuning
 
-Scripts for pretraining and fine-tuning Chronos models can be found in [this folder](./scripts/training).
+Scripts for pretraining and fine-tuning Chronos models can be found in [this folder](./scripts/).
 
 ## 🔥 Coverage
 
