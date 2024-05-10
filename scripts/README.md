@@ -61,7 +61,7 @@
         convert_to_arrow("./noise-data.arrow", time_series=time_series)
 
     ```
-- Modify the [training configs](scripts/training/configs) to use your data. Let's use the KernelSynth data as an example.
+- Modify the [training configs](training/configs) to use your data. Let's use the KernelSynth data as an example.
     ```yaml
     # List of training data files
     training_data_paths:
