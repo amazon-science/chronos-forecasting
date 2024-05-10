@@ -73,7 +73,7 @@ pip install git+https://github.com/amazon-science/chronos-forecasting.git
 A minimal example showing how to perform forecasting using Chronos models:
 
 ```python
-import pandas as pd
+import pandas as pd  # requires: pip install pandas
 import torch
 from chronos import ChronosPipeline
 
@@ -104,8 +104,7 @@ print(ChronosPipeline.predict.__doc__)
 We can now visualize the forecast:
 
 ```python
-# requires: pip install matplotlib
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # requires: pip install matplotlib
 import numpy as np
 
 forecast_index = range(len(df), len(df) + 12)
