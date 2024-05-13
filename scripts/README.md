@@ -79,12 +79,20 @@
     # On multiple GPUs (example with 8 GPUs)
     torchrun --nproc-per-node=8 training/train.py --config /path/to/modified/config.yaml
 
-    # Fine-tune `amazon/chronos-t5-small` for 1000 steps
+    # Fine-tune `amazon/chronos-t5-small` for 1000 steps with initial learning rate of 1e-3
     CUDA_VISIBLE_DEVICES=0 python training/train.py --config /path/to/modified/config.yaml \
         --model-id amazon/chronos-t5-small \
         --no-random-init \
-        --max-steps 1000
+        --max-steps 1000 \
+        --learning-rate 0.001
     ```
-    The output and checkpoints will be saved in `output/run_{id}/`.
+    The output and checkpoints will be saved in `output/run-{id}/`.
 > [!TIP]  
 > If the initial training step is too slow, you might want to change the `shuffle_buffer_length` and/or set `torch_compile` to `false`.
+- (Optional) Once trained, you can easily push your fine-tuned model to HuggingFace🤗 Hub. Before that, do not forget to [create an access token](https://huggingface.co/settings/tokens) with **write permissions** and put it in `~/.cache/huggingface/token`. Here's a snippet that will push a fine-tuned model to HuggingFace🤗 Hub at `<your_hf_username>/chronos-t5-small-fine-tuned`.
+    ```py
+    from chronos import ChronosPipeline
+
+    pipeline = ChronosPipeline.from_pretrained("/path/to/fine-tuned/model/ckpt/dir/")
+    pipeline.model.model.push_to_hub("chronos-t5-small-fine-tuned")
+    ```
