@@ -86,7 +86,7 @@
         --max-steps 1000 \
         --learning-rate 0.001
     ```
-    The output and checkpoints will be saved in `output/run_{id}/`.
+    The output and checkpoints will be saved in `output/run-{id}/`.
 > [!TIP]  
 > If the initial training step is too slow, you might want to change the `shuffle_buffer_length` and/or set `torch_compile` to `false`.
 - (Optional) Once trained, you can easily push your fine-tuned model to HuggingFace🤗 Hub. Before that, do not forget to [create an access token](https://huggingface.co/settings/tokens) with **write permissions** and put it in `~/.cache/huggingface/token`. Here's a snippet that will push a fine-tuned model to HuggingFace🤗 Hub at `<your_hf_username>/chronos-t5-small-fine-tuned`.
