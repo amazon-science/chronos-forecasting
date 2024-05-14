@@ -74,7 +74,7 @@
 - Start the training (or fine-tuning) job:
     ```sh
     # On single GPU
-    CUDA_VISIBLE_DEVICES=0 python training/train.py --config/path/to/modified/config.yaml
+    CUDA_VISIBLE_DEVICES=0 python training/train.py --config /path/to/modified/config.yaml
 
     # On multiple GPUs (example with 8 GPUs)
     torchrun --nproc-per-node=8 training/train.py --config /path/to/modified/config.yaml
