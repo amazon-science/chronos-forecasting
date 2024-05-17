@@ -35,7 +35,7 @@ def test_tokenizer_consistency(n_numerical_tokens: int, n_special_tokens: int):
     tokenizer = config.create_tokenizer()
     assert isinstance(tokenizer, MeanScaleUniformBins)
 
-    context = tokenizer.centers.unsqueeze(0) # add batch dimension
+    context = tokenizer.centers.unsqueeze(0)  # add batch dimension
     scale = torch.ones((1,))  # fix the scale to one to turn off scaling
 
     token_ids, _, _ = tokenizer.input_transform(context, scale=scale)
@@ -46,8 +46,6 @@ def test_tokenizer_consistency(n_numerical_tokens: int, n_special_tokens: int):
     )
 
     assert (samples[0, 0, :] == context).all()
-
-
 
 
 @pytest.mark.xfail
