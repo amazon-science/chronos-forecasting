@@ -185,7 +185,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
     ) -> torch.Tensor:
         scale_unsqueezed = scale.unsqueeze(-1).unsqueeze(-1)
         indices = torch.clamp(
-            samples - self.config.n_special_tokens,
+            samples - self.config.n_special_tokens - 1,
             min=0,
             max=len(self.centers) - 1,
         )
