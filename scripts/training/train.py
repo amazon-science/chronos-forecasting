@@ -98,11 +98,7 @@ def get_training_job_info() -> Dict:
         job_info["world_size"] = dist.get_world_size()
 
     # Versions
-    job_info["python_version"] = (
-        "{} ({}-bit runtime)".format(
-            sys.version.replace("\n", " "), sys.maxsize.bit_length() + 1
-        ),
-    )
+    job_info["python_version"] = sys.version.replace("\n", " ")
     job_info["torch_version"] = torch.__version__
     job_info["numpy_version"] = np.__version__
     job_info["gluonts_version"] = gluonts.__version__
