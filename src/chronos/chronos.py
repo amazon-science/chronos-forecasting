@@ -64,7 +64,7 @@ class ChronosTokenizer:
         context: torch.Tensor,
     ) -> Tuple:
         """
-        Turn a batch of time series into token IDs, attention map, and scale.
+        Turn a batch of time series into token IDs, attention map, and tokenizer_state.
 
         Parameters
         ----------
@@ -92,7 +92,7 @@ class ChronosTokenizer:
 
     def label_input_transform(self, label: torch.Tensor, tokenizer_state: Any) -> Tuple:
         """
-        Turn a batch of label slices of time series into token IDs, attention map
+        Turn a batch of label slices of time series into token IDs and attention map
         using the ``tokenizer_state`` provided by ``context_input_transform``.
 
         Parameters
