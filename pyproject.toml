@@ -4,8 +4,8 @@ version = "1.2.0"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 dependencies = [
-    "torch~=2.1",         # package was tested on 2.2
-    "transformers~=4.31,<4.41",
+    "torch~=2.0",         # package was tested on 2.2
+    "transformers~=4.30,<4.41",
     "accelerate",
 ]
 
