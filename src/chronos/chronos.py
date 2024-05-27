@@ -390,7 +390,6 @@ class ChronosPipeline:
 
     tokenizer: ChronosTokenizer
     model: ChronosModel
-    forecast_type: Literal["samples", "quantiles"] = "samples"
 
     def _prepare_and_validate_context(
         self, context: Union[torch.Tensor, List[torch.Tensor]]
