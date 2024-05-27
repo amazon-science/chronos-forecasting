@@ -63,11 +63,10 @@ class Tokenizer:
     which concrete classes must implement.
     """
 
-    def input_transform(
+    def context_input_transform(
         self,
         context: torch.Tensor,
-        tokenizer_state: Any = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Any]:
+    ) -> Tuple:
         """
         Turn a batch of time series into token IDs, attention map, and scale.
 
@@ -100,6 +99,13 @@ class Tokenizer:
             Contains the relevant information to decode output samples into
             real values, such as location and scale parameters.
         """
+        raise NotImplementedError()
+
+    def label_input_transform(
+        self,
+        context: torch.Tensor,
+        tokenizer_state: Any = None,
+    ) -> Tuple:
         raise NotImplementedError()
 
     def output_transform(
@@ -145,14 +151,9 @@ class MeanScaleUniformBins(Tokenizer):
             )
         )
 
-    def input_transform(
+    def _input_transform(
         self, context: torch.Tensor, scale: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, length = context.shape
-
-        if length > self.config.context_length:
-            context = context[..., -self.config.context_length :]
-
         attention_mask = ~torch.isnan(context)
 
         if scale is None:
@@ -174,7 +175,19 @@ class MeanScaleUniformBins(Tokenizer):
         )
         token_ids[~attention_mask] = self.config.pad_token_id
 
-        if self.config.use_eos_token:
+        return token_ids, attention_mask, scale
+
+    def context_input_transform(
+        self, context: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        batch_size, length = context.shape
+
+        if length > self.config.context_length:
+            context = context[..., -self.config.context_length :]
+
+        token_ids, attention_mask, scale = self._input_transform(context=context)
+
+        if self.config.use_eos_token and self.config.model_type == "seq2seq":
             eos_tokens = torch.full(
                 (batch_size, 1), fill_value=self.config.eos_token_id
             )
@@ -183,6 +196,26 @@ class MeanScaleUniformBins(Tokenizer):
             attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
 
         return token_ids, attention_mask, scale
+
+    def label_input_transform(
+        self, context: torch.Tensor, scale: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch_size, length = context.shape
+
+        assert length == self.config.prediction_length
+        token_ids, attention_mask, _ = self._input_transform(
+            context=context, scale=scale
+        )
+
+        if self.config.use_eos_token:
+            eos_tokens = torch.full(
+                (batch_size, 1), fill_value=self.config.eos_token_id
+            )
+            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
+            eos_mask = torch.full((batch_size, 1), fill_value=True)
+            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
+
+        return token_ids, attention_mask
 
     def output_transform(
         self, samples: torch.Tensor, scale: torch.Tensor
@@ -387,8 +420,8 @@ class ChronosPipeline(Pipeline):
             provided, and the extra 1 is for EOS.
         """
         context_tensor = self._prepare_and_validate_context(context=context)
-        token_ids, attention_mask, tokenizer_state = self.tokenizer.input_transform(
-            context_tensor
+        token_ids, attention_mask, tokenizer_state = (
+            self.tokenizer.context_input_transform(context_tensor)
         )
         embeddings = self.model.encode(
             input_ids=token_ids.to(self.model.device),
@@ -462,7 +495,7 @@ class ChronosPipeline(Pipeline):
         remaining = prediction_length
 
         while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.input_transform(
+            token_ids, attention_mask, scale = self.tokenizer.context_input_transform(
                 context_tensor
             )
             samples = self.model(
