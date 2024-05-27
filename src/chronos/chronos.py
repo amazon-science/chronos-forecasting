@@ -18,24 +18,16 @@ from transformers import (
 
 
 @dataclass
-class Config:
-    tokenizer_class: str
-    tokenizer_kwargs: Dict[str, Any]
-    context_length: int
-    prediction_length: int
-
-    def create_tokenizer(self) -> "Tokenizer":
-        class_ = getattr(chronos, self.tokenizer_class)
-        return class_(**self.tokenizer_kwargs, config=self)
-
-
-@dataclass
-class ChronosConfig(Config):
+class ChronosConfig:
     """
     This class holds all the configuration parameters to be used
     by ``ChronosTokenizer`` and ``ChronosModel``.
     """
 
+    tokenizer_class: str
+    tokenizer_kwargs: Dict[str, Any]
+    context_length: int
+    prediction_length: int
     n_tokens: int
     n_special_tokens: int
     pad_token_id: int
@@ -53,8 +45,12 @@ class ChronosConfig(Config):
             and self.eos_token_id < self.n_special_tokens
         ), f"Special token id's must be smaller than {self.n_special_tokens=}"
 
+    def create_tokenizer(self) -> "ChronosTokenizer":
+        class_ = getattr(chronos, self.tokenizer_class)
+        return class_(**self.tokenizer_kwargs, config=self)
 
-class Tokenizer:
+
+class ChronosTokenizer:
     """
     A ``ChronosTokenizer`` definines how time series are mapped into token IDs
     and back.
@@ -129,7 +125,7 @@ class Tokenizer:
         raise NotImplementedError()
 
 
-class MeanScaleUniformBins(Tokenizer):
+class MeanScaleUniformBins(ChronosTokenizer):
     def __init__(
         self, low_limit: float, high_limit: float, config: ChronosConfig
     ) -> None:
@@ -355,14 +351,7 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
 
 
 @dataclass
-class Pipeline:
-    tokenizer: Tokenizer
-    model: nn.Module
-    forecast_type: Literal["samples", "quantiles"]
-
-
-@dataclass
-class ChronosPipeline(Pipeline):
+class ChronosPipeline:
     """
     A ``ChronosPipeline`` uses the given tokenizer and model to forecast
     input time series.
@@ -378,6 +367,8 @@ class ChronosPipeline(Pipeline):
         The model to use.
     """
 
+    tokenizer: ChronosTokenizer
+    model: nn.Module
     forecast_type: Literal["samples", "quantiles"] = "samples"
 
     def _prepare_and_validate_context(

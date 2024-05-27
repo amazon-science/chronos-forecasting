@@ -5,7 +5,7 @@ from .chronos import (
     ChronosConfig,
     ChronosModel,
     ChronosPipeline,
-    Tokenizer,
+    ChronosTokenizer,
     MeanScaleUniformBins,
 )
 
@@ -13,6 +13,6 @@ __all__ = [
     "ChronosConfig",
     "ChronosModel",
     "ChronosPipeline",
-    "Tokenizer",
+    "ChronosTokenizer",
     "MeanScaleUniformBins",
 ]
