@@ -72,13 +72,6 @@ class ChronosTokenizer:
             A tensor shaped (batch_size, time_length), containing the
             timeseries to forecast. Use left-padding with ``torch.nan``
             to align time series of different lengths.
-        tokenizer_state
-            An object returned by ``input_transform`` containing
-            relevant information to preprocess data, such as location and
-            scale. The nature of this depends on the specific tokenizer.
-            This is useful when tokenizing the label (for training), in
-            order to use the same scaling used to tokenize the context;
-            when tokenizing the context, this argument should be ignored.
 
         Returns
         -------
@@ -98,6 +91,34 @@ class ChronosTokenizer:
         raise NotImplementedError()
 
     def label_input_transform(self, label: torch.Tensor, tokenizer_state: Any) -> Tuple:
+        """
+        Turn a batch of label slices of time series into token IDs, attention map
+        using the ``tokenizer_state`` provided by ``context_input_transform``.
+
+        Parameters
+        ----------
+        context
+            A tensor shaped (batch_size, time_length), containing the
+            timeseries to forecast. Use left-padding with ``torch.nan``
+            to align time series of different lengths.
+        tokenizer_state
+            An object returned by ``context_input_transform`` containing
+            relevant information to preprocess data, such as location and
+            scale. The nature of this depends on the specific tokenizer.
+            This is used for tokenizing the label, in order to use the same
+            scaling used to tokenize the context.
+
+        Returns
+        -------
+        token_ids
+            A tensor of integers, shaped (batch_size, time_length + 1)
+            if ``config.use_eos_token`` and (batch_size, time_length)
+            otherwise, containing token IDs for the input series.
+        attention_mask
+            A boolean tensor, same shape as ``token_ids``, indicating
+            which input observations are not ``torch.nan`` (i.e. not
+            missing nor padding).
+        """
         raise NotImplementedError()
 
     def output_transform(
