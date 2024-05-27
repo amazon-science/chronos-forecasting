@@ -177,6 +177,17 @@ class MeanScaleUniformBins(Tokenizer):
 
         return token_ids, attention_mask, scale
 
+    def _append_eos_token(
+        self, token_ids: torch.Tensor, attention_mask: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch_size = token_ids.shape[0]
+        eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id)
+        token_ids = torch.concat((token_ids, eos_tokens), dim=1)
+        eos_mask = torch.full((batch_size, 1), fill_value=True)
+        attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
+
+        return token_ids, attention_mask
+
     def context_input_transform(
         self, context: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -188,12 +199,9 @@ class MeanScaleUniformBins(Tokenizer):
         token_ids, attention_mask, scale = self._input_transform(context=context)
 
         if self.config.use_eos_token and self.config.model_type == "seq2seq":
-            eos_tokens = torch.full(
-                (batch_size, 1), fill_value=self.config.eos_token_id
+            token_ids, attention_mask = self._append_eos_token(
+                token_ids=token_ids, attention_mask=attention_mask
             )
-            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-            eos_mask = torch.full((batch_size, 1), fill_value=True)
-            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
 
         return token_ids, attention_mask, scale
 
@@ -208,12 +216,9 @@ class MeanScaleUniformBins(Tokenizer):
         )
 
         if self.config.use_eos_token:
-            eos_tokens = torch.full(
-                (batch_size, 1), fill_value=self.config.eos_token_id
+            token_ids, attention_mask = self._append_eos_token(
+                token_ids=token_ids, attention_mask=attention_mask
             )
-            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-            eos_mask = torch.full((batch_size, 1), fill_value=True)
-            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
 
         return token_ids, attention_mask
 

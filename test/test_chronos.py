@@ -41,7 +41,7 @@ def test_tokenizer_consistency(n_numerical_tokens: int, n_special_tokens: int):
     token_ids, _, _ = tokenizer._input_transform(context, scale=scale)
 
     samples = tokenizer.output_transform(
-        token_ids.unsqueeze(1),  # remove final EOS, add sample dimension
+        token_ids.unsqueeze(1),  # add sample dimension
         scale=scale,
     )
 
