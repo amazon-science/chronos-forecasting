@@ -368,7 +368,7 @@ class ChronosPipeline:
     """
 
     tokenizer: ChronosTokenizer
-    model: nn.Module
+    model: ChronosModel
     forecast_type: Literal["samples", "quantiles"] = "samples"
 
     def _prepare_and_validate_context(
