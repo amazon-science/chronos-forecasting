@@ -41,7 +41,7 @@ from gluonts.transform import (
     ExpectedNumInstanceSampler,
 )
 
-from chronos import ChronosConfig, ChronosTokenizer
+from chronos import ChronosConfig, Tokenizer
 
 
 app = typer.Typer(pretty_exceptions_enable=False)
@@ -303,7 +303,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         self,
         datasets: list,
         probabilities: List[float],
-        tokenizer: ChronosTokenizer,
+        tokenizer: Tokenizer,
         context_length: int = 512,
         prediction_length: int = 64,
         drop_prob: float = 0.2,

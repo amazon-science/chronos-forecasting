@@ -18,22 +18,30 @@ from transformers import (
 
 
 @dataclass
-class ChronosConfig:
+class Config:
+    tokenizer_class: str
+    tokenizer_kwargs: Dict[str, Any]
+    context_length: int
+    prediction_length: int
+
+    def create_tokenizer(self) -> "Tokenizer":
+        class_ = getattr(chronos, self.tokenizer_class)
+        return class_(**self.tokenizer_kwargs, config=self)
+
+
+@dataclass
+class ChronosConfig(Config):
     """
     This class holds all the configuration parameters to be used
     by ``ChronosTokenizer`` and ``ChronosModel``.
     """
 
-    tokenizer_class: str
-    tokenizer_kwargs: Dict[str, Any]
     n_tokens: int
     n_special_tokens: int
     pad_token_id: int
     eos_token_id: int
     use_eos_token: bool
     model_type: Literal["causal", "seq2seq"]
-    context_length: int
-    prediction_length: int
     num_samples: int
     temperature: float
     top_k: int
@@ -45,12 +53,8 @@ class ChronosConfig:
             and self.eos_token_id < self.n_special_tokens
         ), f"Special token id's must be smaller than {self.n_special_tokens=}"
 
-    def create_tokenizer(self) -> "ChronosTokenizer":
-        class_ = getattr(chronos, self.tokenizer_class)
-        return class_(**self.tokenizer_kwargs, config=self)
 
-
-class ChronosTokenizer:
+class Tokenizer:
     """
     A ``ChronosTokenizer`` definines how time series are mapped into token IDs
     and back.
@@ -123,7 +127,7 @@ class ChronosTokenizer:
         raise NotImplementedError()
 
 
-class MeanScaleUniformBins(ChronosTokenizer):
+class MeanScaleUniformBins(Tokenizer):
     def __init__(
         self, low_limit: float, high_limit: float, config: ChronosConfig
     ) -> None:
@@ -318,7 +322,15 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
     return torch.stack(padded)
 
 
-class ChronosPipeline:
+@dataclass
+class Pipeline:
+    tokenizer: Tokenizer
+    model: nn.Module
+    forecast_type: Literal["samples", "quantiles"]
+
+
+@dataclass
+class ChronosPipeline(Pipeline):
     """
     A ``ChronosPipeline`` uses the given tokenizer and model to forecast
     input time series.
@@ -334,12 +346,7 @@ class ChronosPipeline:
         The model to use.
     """
 
-    tokenizer: ChronosTokenizer
-    model: ChronosModel
-
-    def __init__(self, tokenizer, model):
-        self.tokenizer = tokenizer
-        self.model = model
+    forecast_type: Literal["samples", "quantiles"] = "samples"
 
     def _prepare_and_validate_context(
         self, context: Union[torch.Tensor, List[torch.Tensor]]
