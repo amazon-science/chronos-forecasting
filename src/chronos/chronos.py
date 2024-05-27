@@ -101,11 +101,7 @@ class Tokenizer:
         """
         raise NotImplementedError()
 
-    def label_input_transform(
-        self,
-        context: torch.Tensor,
-        tokenizer_state: Any = None,
-    ) -> Tuple:
+    def label_input_transform(self, label: torch.Tensor, tokenizer_state: Any) -> Tuple:
         raise NotImplementedError()
 
     def output_transform(
@@ -191,7 +187,7 @@ class MeanScaleUniformBins(Tokenizer):
     def context_input_transform(
         self, context: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, length = context.shape
+        length = context.shape[-1]
 
         if length > self.config.context_length:
             context = context[..., -self.config.context_length :]
@@ -206,14 +202,12 @@ class MeanScaleUniformBins(Tokenizer):
         return token_ids, attention_mask, scale
 
     def label_input_transform(
-        self, context: torch.Tensor, scale: torch.Tensor
+        self, label: torch.Tensor, scale: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        batch_size, length = context.shape
+        length = label.shape[-1]
 
         assert length == self.config.prediction_length
-        token_ids, attention_mask, _ = self._input_transform(
-            context=context, scale=scale
-        )
+        token_ids, attention_mask, _ = self._input_transform(context=label, scale=scale)
 
         if self.config.use_eos_token:
             token_ids, attention_mask = self._append_eos_token(
