@@ -38,10 +38,10 @@ def test_tokenizer_consistency(n_numerical_tokens: int, n_special_tokens: int):
     context = tokenizer.centers.unsqueeze(0)  # add batch dimension
     scale = torch.ones((1,))  # fix the scale to one to turn off scaling
 
-    token_ids, _, _ = tokenizer.input_transform(context, scale=scale)
+    token_ids, _, _ = tokenizer._input_transform(context, scale=scale)
 
     samples = tokenizer.output_transform(
-        token_ids[:, :-1].unsqueeze(1),  # remove final EOS, add sample dimension
+        token_ids.unsqueeze(1),  # add sample dimension
         scale=scale,
     )
 
@@ -85,7 +85,7 @@ def test_tokenizer_fixed_data(
     )
     batch_size, _ = context.shape
 
-    token_ids, attention_mask, scale = tokenizer.input_transform(context)
+    token_ids, attention_mask, scale = tokenizer.context_input_transform(context)
 
     assert token_ids.shape == (batch_size, context_length + 1 * use_eos_token)
     assert all(token_ids[:, 0] == torch.tensor([0]).repeat(batch_size))
@@ -136,7 +136,7 @@ def test_tokenizer_random_data(use_eos_token: bool):
         ]
     )
 
-    token_ids, attention_mask, scale = tokenizer.input_transform(context)
+    token_ids, attention_mask, scale = tokenizer.context_input_transform(context)
 
     assert token_ids.shape == (
         *context.shape[:-1],

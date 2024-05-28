@@ -387,9 +387,11 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 
     def to_hf_format(self, entry: dict) -> dict:
         past_target = torch.tensor(entry["past_target"]).unsqueeze(0)
-        input_ids, attention_mask, scale = self.tokenizer.input_transform(past_target)
+        input_ids, attention_mask, scale = self.tokenizer.context_input_transform(
+            past_target
+        )
         future_target = torch.tensor(entry["future_target"]).unsqueeze(0)
-        labels, labels_mask, _ = self.tokenizer.input_transform(future_target, scale)
+        labels, labels_mask = self.tokenizer.label_input_transform(future_target, scale)
         labels[labels_mask == 0] = -100
         return {
             "input_ids": input_ids.squeeze(0),
