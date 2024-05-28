@@ -84,9 +84,10 @@ class ChronosTokenizer:
             which input observations are not ``torch.nan`` (i.e. not
             missing nor padding).
         tokenizer_state
-            An object that will be passed to ``output_transform``.
-            Contains the relevant information to decode output samples into
-            real values, such as location and scale parameters.
+            An object that can be passed to ``label_input_transform``
+            and ``output_transform``. Contains the relevant information
+            to decode output samples into real values,
+            such as location and scale parameters.
         """
         raise NotImplementedError()
 
