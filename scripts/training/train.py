@@ -496,7 +496,7 @@ def main(
     ):
         log_on_main(
             "TF32 format is only available on devices with compute capability >= 8. "
-            "Setting tf32 to false.",
+            "Setting tf32 to False.",
             logger,
         )
         tf32 = False
