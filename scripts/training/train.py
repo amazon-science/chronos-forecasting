@@ -491,6 +491,22 @@ def main(
     top_p: float = 1.0,
     seed: Optional[int] = None,
 ):
+    if tf32 and not (
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
+    ):
+        log_on_main(
+            "TF32 format is only available on devices with compute capability >= 8. "
+            "Setting tf32 to false.",
+            logger,
+        )
+        tf32 = False
+
+    if seed is None:
+        seed = random.randint(0, 2**32)
+
+    log_on_main(f"Using SEED: {seed}", logger)
+    transformers.set_seed(seed=seed)
+
     raw_training_config = deepcopy(locals())
     output_dir = Path(output_dir)
     training_data_paths = ast.literal_eval(training_data_paths)
@@ -510,12 +526,6 @@ def main(
 
     if not model_type == "seq2seq":
         raise NotImplementedError("Only seq2seq models are currently supported")
-
-    if seed is None:
-        seed = random.randint(0, 2**32)
-
-    log_on_main(f"Using SEED: {seed}", logger)
-    transformers.set_seed(seed=seed)
 
     output_dir = get_next_path("run", base_dir=output_dir, file_type="")
 
