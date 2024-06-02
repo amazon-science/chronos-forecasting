@@ -1,6 +1,12 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: ["**"] # Run on any branch
+  pull_request:
+    branches: ["**"] # Run on any branch
+  schedule:
+    - cron: "0 8 * * *" # Run at 8 AM UTC
 
 jobs:
   type-check:
