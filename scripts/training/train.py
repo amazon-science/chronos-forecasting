@@ -72,24 +72,17 @@ def get_training_job_info() -> Dict:
 
     # CUDA info
     job_info["cuda_available"] = torch.cuda.is_available()
-    print(job_info)
     if torch.cuda.is_available():
         job_info["device_count"] = torch.cuda.device_count()
-        print(job_info)
 
         job_info["device_names"] = {
             idx: torch.cuda.get_device_name(idx)
             for idx in range(torch.cuda.device_count())
         }
-        print(job_info)
-
-        print(torch.cuda.mem_get_info(device=0))
-        print(torch.cuda.mem_get_info(device=1))
         job_info["mem_info"] = {
             idx: torch.cuda.mem_get_info(device=idx)
             for idx in range(torch.cuda.device_count())
         }
-        print(job_info)
 
     # DDP info
     job_info["torchelastic_launched"] = dist.is_torchelastic_launched()
