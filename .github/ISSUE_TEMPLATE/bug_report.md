@@ -10,8 +10,7 @@ assignees: ''
 **Bug report checklist**
 <!-- Please ensure at least one of the following to help the developers troubleshoot the problem:  -->
 - [ ] I provided code that demonstrates a minimal reproducible example. <!-- Ideal, especially via source install --> 
-- [ ] I confirmed bug exists on the latest mainline of AutoGluon via source install. <!-- Preferred --> 
-- [ ] I confirmed bug exists on the latest stable version of AutoGluon. <!-- Unnecessary if prior items are checked --> 
+- [ ] I confirmed bug exists on the latest mainline of Chronos via source install. <!-- Preferred --> 
 
 **Describe the bug**
 <!-- A clear and concise description of what the bug is. -->
