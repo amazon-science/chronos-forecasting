@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Frequently asked questions
+    url: https://github.com/amazon-science/chronos-forecasting/issues?q=is%3Aissue+label%3AFAQ
+    about: Check the frequently asked questions before opening a new one
+  - name: Discussions
+    url: https://github.com/amazon-science/chronos-forecasting/discussions/new
+    about: Ask questions and discuss with other Chronos users
+  - name: Blank issue
+    url: https://github.com/amazon-science/chronos-forecasting/issues/new
+    about: Open a blank issue if none of the other templates apply
+
