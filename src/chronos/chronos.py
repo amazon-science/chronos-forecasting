@@ -551,7 +551,7 @@ class ChronosPipeline:
         if chronos_config.model_type == "seq2seq":
             inner_model = AutoModelForSeq2SeqLM.from_pretrained(*args, **kwargs)
         else:
-            assert config.model_type == "causal"
+            assert chronos_config.model_type == "causal"
             inner_model = AutoModelForCausalLM.from_pretrained(*args, **kwargs)
 
         return cls(
