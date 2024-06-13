@@ -39,6 +39,9 @@ from gluonts.transform import (
     ValidationSplitSampler,
     InstanceSplitter,
     ExpectedNumInstanceSampler,
+    MissingValueImputation,
+    LeavesMissingValues,
+    LastValueImputation,
 )
 
 from chronos import ChronosConfig, ChronosTokenizer
@@ -301,6 +304,8 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         prediction_length: int = 64,
         drop_prob: float = 0.2,
         min_past: Optional[int] = None,
+        model_type: str = "seq2seq",
+        imputation_method: Optional[MissingValueImputation] = None,
         mode: str = "training",
         np_dtype=np.float32,
     ) -> None:
@@ -308,6 +313,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 
         assert len(probabilities) == len(datasets)
         assert mode in ("training", "validation", "test")
+        assert model_type in ("seq2seq", "causal")
 
         self.datasets = datasets
         self.probabilities = probabilities
@@ -316,6 +322,8 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         self.prediction_length = prediction_length
         self.drop_prob = drop_prob
         self.min_past = min_past or prediction_length
+        self.model_type = model_type
+        self.imputation_method = imputation_method or LeavesMissingValues()
         self.mode = mode
         self.np_dtype = np_dtype
 
@@ -323,6 +331,11 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         entry = {f: entry[f] for f in ["start", "target"]}
         entry["target"] = np.asarray(entry["target"], dtype=self.np_dtype)
         assert entry["target"].ndim == 1, f"got {entry['target'].ndim=}, expected 1"
+
+        if self.model_type == "causal":
+            # Causal models do not play nice with missing values, so it is
+            # recommended to use an imputation method, e.g., LastValueImputation
+            entry["target"] = self.imputation_method(entry["target"])
 
         if mode == "training" and self.drop_prob > 0:
             target = entry["target"].copy()
@@ -386,6 +399,48 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         future_target = torch.tensor(entry["future_target"]).unsqueeze(0)
         labels, labels_mask = self.tokenizer.label_input_transform(future_target, scale)
         labels[labels_mask == 0] = -100
+
+        if self.model_type == "causal":
+            # The InstanceSplitter pads time series on the left to be equal to the
+            # context_length. However, certain models (e.g., GPT2) with absolute
+            # position embeddings should not be trained with left padding.
+            # The following piece of code moves padding from left to right.
+
+            assert input_ids.shape[-1] == entry["past_is_pad"].shape[0]
+
+            # Find the index where padding starts
+            pad_start_idx = np.searchsorted(1 - entry["past_is_pad"], 1)
+            padded_input_ids, obs_input_ids = torch.tensor_split(
+                input_ids, [pad_start_idx], dim=-1
+            )
+            padded_attention_mask, obs_attention_mask = torch.tensor_split(
+                attention_mask, [pad_start_idx], dim=-1
+            )
+
+            # Move padding to the right
+            input_ids = torch.cat(
+                [
+                    obs_input_ids,
+                    labels,
+                    padded_input_ids,
+                ],
+                axis=-1,
+            )
+            attention_mask = torch.cat(
+                [
+                    obs_attention_mask,
+                    labels_mask,
+                    padded_attention_mask,
+                ],
+                axis=-1,
+            )
+
+            # labels for causal models are same as the input_ids.
+            # Internally transformers shifts the labels by one during training.
+            labels = input_ids.clone()
+            input_ids[~attention_mask] = self.tokenizer.config.pad_token_id
+            labels[~attention_mask] = -100
+
         return {
             "input_ids": input_ids.squeeze(0),
             "attention_mask": attention_mask.squeeze(0),
@@ -520,9 +575,6 @@ def main(
 
     assert model_type in ["seq2seq", "causal"]
 
-    if not model_type == "seq2seq":
-        raise NotImplementedError("Only seq2seq models are currently supported")
-
     output_dir = get_next_path("run", base_dir=output_dir, file_type="")
 
     log_on_main(f"Logging dir: {output_dir}", logger)
@@ -588,6 +640,8 @@ def main(
         context_length=context_length,
         prediction_length=prediction_length,
         min_past=min_past,
+        model_type=model_type,
+        imputation_method=LastValueImputation() if model_type == "causal" else None,
         mode="training",
     ).shuffle(shuffle_buffer_length=shuffle_buffer_length)
 
