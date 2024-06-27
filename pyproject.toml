@@ -13,6 +13,7 @@ dependencies = [
 test = ["pytest~=8.0", "numpy~=1.21"]
 typecheck = ["mypy~=1.9"]
 training = ["gluonts[pro]", "numpy", "tensorboard", "typer", "typer-config", "joblib", "scikit-learn"]
+evaluation = ["gluonts[pro]", "datasets", "numpy", "typer"]
 
 [tool.mypy]
 ignore_missing_imports = true

@@ -99,3 +99,48 @@
     pipeline = ChronosPipeline.from_pretrained("/path/to/fine-tuned/model/ckpt/dir/")
     pipeline.model.model.push_to_hub("chronos-t5-small-fine-tuned")
     ```
+
+## Evaluating Chronos models
+
+Follow these steps to compute the WQL and MASE values for the in-domain and zero-shot benchmarks in our paper.
+
+- Install this package with with the `evaluation` extra:
+    ```
+    pip install "chronos[evaluation] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    ```
+- Run the evaluation script:
+    ```sh
+    # In-domain evaluation
+    # Results will be saved in: evaluation/results/chronos-t5-small-in-domain.csv
+    python evaluation/evaluate.py evaluation/configs/in-domain.yaml evaluation/results/chronos-t5-small-in-domain.csv \
+        --chronos-model-id "amazon/chronos-t5-small" \
+        --batch-size=32 \
+        --device=cuda:0 \
+        --num-samples 20
+
+    # Zero-shot evaluation
+    # Results will be saved in: evaluation/results/chronos-t5-small-zero-shot.csv
+    python evaluation/evaluate.py evaluation/configs/zero-shot.yaml evaluation/results/chronos-t5-small-zero-shot.csv \
+        --chronos-model-id "amazon/chronos-t5-small" \
+        --batch-size=32 \
+        --device=cuda:0 \
+        --num-samples 20
+    ```
+- Use the following snippet to compute the aggregated relative WQL and MASE scores:
+    ```py
+    import pandas as pd
+    from scipy.stats import gmean  # requires: pip install scipy
+
+
+    def agg_relative_score(model_df: pd.DataFrame, baseline_df: pd.DataFrame):
+        relative_score = model_df.drop("model", axis="columns") / baseline_df.drop(
+            "model", axis="columns"
+        )
+        return relative_score.agg(gmean)
+
+
+    result_df = pd.read_csv("evaluation/results/chronos-t5-small-in-domain.csv").set_index("dataset")
+    baseline_df = pd.read_csv("evaluation/results/seasonal-naive-in-domain.csv").set_index("dataset")
+
+    agg_score_df = agg_relative_score(result_df, baseline_df)
+    ```
