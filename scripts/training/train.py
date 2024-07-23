@@ -13,6 +13,7 @@ from copy import deepcopy
 from pathlib import Path
 from functools import partial
 from typing import List, Iterator, Optional, Dict
+from multiprocessing import freeze_support
 
 import typer
 from typer_config import use_yaml_config
@@ -666,6 +667,7 @@ def main(
         torch_compile=torch_compile,
         ddp_find_unused_parameters=False,
         remove_unused_columns=False,
+        use_cpu=True,
     )
 
     # Create Trainer instance
@@ -686,6 +688,7 @@ def main(
 
 
 if __name__ == "__main__":
+    freeze_support()
     logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     logger = logging.getLogger(__file__)
     logger.setLevel(logging.INFO)
