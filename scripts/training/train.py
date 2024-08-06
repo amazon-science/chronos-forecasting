@@ -678,6 +678,14 @@ def main(
         remove_unused_columns=False,
     )
 
+    # make sure all model parameters are contiguous on memory. This is necessary to save model state dict as safetensor
+    for name, param in model.named_parameters():
+        if not param.is_contiguous():
+            print(f"Parameter {name} is not contiguous. Making it contiguous.")
+            param.data = param.data.contiguous()
+        else:
+            print(f"Parameter {name} is already contiguous.")
+
     # Create Trainer instance
     trainer = Trainer(
         model=model,
