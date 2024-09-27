@@ -5,7 +5,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-import chronos
 import torch
 import torch.nn as nn
 from transformers import (
@@ -15,6 +14,8 @@ from transformers import (
     GenerationConfig,
     PreTrainedModel,
 )
+
+import chronos
 
 
 @dataclass
@@ -155,7 +156,11 @@ class MeanScaleUniformBins(ChronosTokenizer):
         self.centers = torch.linspace(
             low_limit,
             high_limit,
-            config.n_tokens - config.n_special_tokens - 1,
+            config.n_tokens
+            - config.n_special_tokens
+            - 2,  # `n` centers result in `n+2` buckets, so we want to leave out the
+            # number of special tokens and subtract 2. This way, the total number of
+            # buckets coincides with `n_tokens`, as required.
         )
         self.boundaries = torch.concat(
             (

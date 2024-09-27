@@ -4,8 +4,8 @@
 from pathlib import Path
 from typing import Tuple
 
-import torch
 import pytest
+import torch
 
 from chronos import ChronosConfig, ChronosPipeline, MeanScaleUniformBins
 
@@ -244,3 +244,33 @@ def test_pipeline_embed(torch_dtype: str):
     embedding, scale = pipeline.embed(context[0, ...])
     validate_tensor(embedding, (1, expected_embed_length, d_model))
     validate_tensor(scale, (1,))
+
+
+@pytest.mark.parametrize("n_tokens", [10, 1000, 10000])
+def test_tokenizer_number_of_buckets(n_tokens):
+    config = ChronosConfig(
+        tokenizer_class="MeanScaleUniformBins",
+        tokenizer_kwargs=dict(low_limit=-1.0, high_limit=1.0),
+        n_tokens=n_tokens,
+        n_special_tokens=2,
+        pad_token_id=0,
+        eos_token_id=1,
+        use_eos_token=True,
+        model_type="seq2seq",
+        context_length=512,
+        prediction_length=64,
+        num_samples=20,
+        temperature=1.0,
+        top_k=50,
+        top_p=1.0,
+    )
+    tokenizer = config.create_tokenizer()
+
+    n_numerical_tokens = config.n_tokens - config.n_special_tokens
+
+    # We want a total of `n_numerical_tokens` numerical tokens, that is,
+    # `n_numerical_tokens` buckets for the values of the time series.
+    # This means that we need `n_numerical_tokens - 1` boundaries, and
+    # `n_numerical_tokens - 2` centers.
+    assert len(tokenizer.centers) == (n_numerical_tokens - 2)
+    assert len(tokenizer.boundaries) == (n_numerical_tokens - 1)
