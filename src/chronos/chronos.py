@@ -160,7 +160,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
             - config.n_special_tokens
             - 2,  # `n` centers result in `n+2` buckets, so we want to leave out the
             # number of special tokens and subtract 2. This way, the total number of
-            # buckets coincides with `n_tokens`, as required.
+            # tokens coincides with `n_tokens`, as required.
         )
         self.boundaries = torch.concat(
             (
