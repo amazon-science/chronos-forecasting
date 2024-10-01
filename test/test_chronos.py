@@ -268,9 +268,35 @@ def test_tokenizer_number_of_buckets(n_tokens):
 
     n_numerical_tokens = config.n_tokens - config.n_special_tokens
 
-    # We want a total of `n_numerical_tokens` numerical tokens, that is,
-    # `n_numerical_tokens` buckets for the values of the time series.
-    # This means that we need `n_numerical_tokens - 1` boundaries, and
-    # `n_numerical_tokens - 2` centers.
-    assert len(tokenizer.centers) == (n_numerical_tokens - 2)
-    assert len(tokenizer.boundaries) == (n_numerical_tokens - 1)
+    # The tokenizer has one bucket too many as a result of an early bug. In order to
+    # keep consistent with the original trained models, this is kept as it is. However,
+    # token ids are clipped to a maximum of `n_tokens - 1` to avoid out-of-bounds errors.
+    assert len(tokenizer.centers) == (n_numerical_tokens - 1)
+    assert len(tokenizer.boundaries) == n_numerical_tokens
+
+
+@pytest.mark.parametrize("n_tokens", [10, 1000, 10000])
+def test_token_clipping(n_tokens):
+    config = ChronosConfig(
+        tokenizer_class="MeanScaleUniformBins",
+        tokenizer_kwargs={"low_limit": -15, "high_limit": 15},
+        n_tokens=n_tokens,
+        n_special_tokens=2,
+        pad_token_id=0,
+        eos_token_id=1,
+        use_eos_token=True,
+        model_type="seq2seq",
+        context_length=512,
+        prediction_length=64,
+        num_samples=20,
+        temperature=1.0,
+        top_k=50,
+        top_p=1.0,
+    )
+    tokenizer = config.create_tokenizer()
+
+    huge_value = 1e22  # this large value is assigned to the largest bucket
+    token_ids, _, _ = tokenizer._input_transform(
+        context=torch.tensor([[huge_value]]), scale=torch.tensor(([1]))
+    )
+    assert token_ids[0, 0] == config.n_tokens - 1  # and it's clipped to n_tokens - 1

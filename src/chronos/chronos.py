@@ -158,9 +158,10 @@ class MeanScaleUniformBins(ChronosTokenizer):
             high_limit,
             config.n_tokens
             - config.n_special_tokens
-            - 2,  # `n` centers result in `n+2` buckets, so we want to leave out the
-            # number of special tokens and subtract 2. This way, the total number of
-            # tokens coincides with `n_tokens`, as required.
+            - 1,  # this results in one bucket too many, so the total number of tokens is
+            # `n_tokens + 1` (including the special tokens). This is addressed below by
+            # clipping, and was kept this way to avoid divergence with the original
+            # trained models.
         )
         self.boundaries = torch.concat(
             (
@@ -192,6 +193,10 @@ class MeanScaleUniformBins(ChronosTokenizer):
             )
             + self.config.n_special_tokens
         )
+
+        token_ids.clamp_(0, self.config.n_tokens - 1)  # clip the largest token to avoid
+        # out of bounds tokens (must be 0<=token_id<n_tokens). See comment in __init__().
+
         token_ids[~attention_mask] = self.config.pad_token_id
 
         return token_ids, attention_mask, scale
