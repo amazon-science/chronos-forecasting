@@ -191,8 +191,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
             + self.config.n_special_tokens
         )
 
-        token_ids.clamp_(0, self.config.n_tokens - 1)  # clip the largest token to avoid
-        # out of bounds tokens (must be 0<=token_id<n_tokens). See comment in __init__().
+        token_ids.clamp_(0, self.config.n_tokens - 1)
 
         token_ids[~attention_mask] = self.config.pad_token_id
 
