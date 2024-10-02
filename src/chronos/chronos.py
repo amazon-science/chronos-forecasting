@@ -158,10 +158,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
             high_limit,
             config.n_tokens
             - config.n_special_tokens
-            - 1,  # this results in one bucket too many, so the total number of tokens is
-            # `n_tokens + 1` (including the special tokens). This is addressed below by
-            # clipping, and was kept this way to avoid divergence with the original
-            # trained models.
+            - 1,
         )
         self.boundaries = torch.concat(
             (
