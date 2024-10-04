@@ -156,9 +156,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
         self.centers = torch.linspace(
             low_limit,
             high_limit,
-            config.n_tokens
-            - config.n_special_tokens
-            - 1,
+            config.n_tokens - config.n_special_tokens - 1,
         )
         self.boundaries = torch.concat(
             (
