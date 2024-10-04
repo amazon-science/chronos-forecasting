@@ -5,7 +5,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-import chronos
 import torch
 import torch.nn as nn
 from transformers import (
@@ -15,6 +14,8 @@ from transformers import (
     GenerationConfig,
     PreTrainedModel,
 )
+
+import chronos
 
 
 @dataclass
@@ -187,6 +188,9 @@ class MeanScaleUniformBins(ChronosTokenizer):
             )
             + self.config.n_special_tokens
         )
+
+        token_ids.clamp_(0, self.config.n_tokens - 1)
+
         token_ids[~attention_mask] = self.config.pad_token_id
 
         return token_ids, attention_mask, scale
