@@ -676,6 +676,7 @@ def main(
         torch_compile=torch_compile,
         ddp_find_unused_parameters=False,
         remove_unused_columns=False,
+        save_safetensors=False,  # Added this line
     )
 
     # Create Trainer instance
@@ -689,7 +690,7 @@ def main(
     trainer.train()
 
     if is_main_process():
-        model.save_pretrained(output_dir / "checkpoint-final")
+        model.save_pretrained(output_dir / "checkpoint-final",safe_serialization=False)
         save_training_info(
             output_dir / "checkpoint-final", training_config=raw_training_config
         )
