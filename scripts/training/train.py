@@ -481,22 +481,41 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
                 itertools.islice(self.probabilities, worker_id, None, num_workers)
             )
 
-        probs = [prob / sum(probs) for prob in probs]
+        # Convert probs to NumPy array for advanced indexing
+        probs = np.array(probs)
+        probs = probs / probs.sum()  # Ensure probabilities sum to 1
 
         iterators = list(map(iter, iterables))
+
         if self.mode == "training":
             while True:
-                idx = np.random.choice(range(len(iterators)), p=probs)
+                # Filter indices to include only multiples of 8 with non-zero probabilities
+                multiples_of_8_indices = [i for i in range(len(iterators)) if (i % 8 == 0 and probs[i] > 0)]
+                if not multiples_of_8_indices:
+                    return  # No valid indices left
+
+                # Get the corresponding probabilities
+                multiples_of_8_probs = probs[multiples_of_8_indices]
+
+                # Normalize probabilities to sum to 1
+                prob_sum = multiples_of_8_probs.sum()
+                if prob_sum == 0:
+                    return  # No valid probabilities left
+                multiples_of_8_probs = multiples_of_8_probs / prob_sum
+
+                # Randomly choose one of the multiples of 8
+                idx = np.random.choice(multiples_of_8_indices, p=multiples_of_8_probs)
+
                 try:
                     yield self.to_hf_format(next(iterators[idx]))
                 except StopIteration:
-                    probs[idx] = 0
-                    if sum(probs) == 0:
-                        return
-                    probs = [prob / sum(probs) for prob in probs]
+                    probs[idx] = 0  # Set the probability to zero
+                    if probs.sum() == 0:
+                        return  # All iterators are exhausted
         else:
             for entry in itertools.chain(*iterators):
                 yield self.to_hf_format(entry)
+
 
 
 @app.command()
@@ -676,7 +695,6 @@ def main(
         torch_compile=torch_compile,
         ddp_find_unused_parameters=False,
         remove_unused_columns=False,
-        save_safetensors=False,  # Added this line
     )
 
     # Create Trainer instance
@@ -690,7 +708,7 @@ def main(
     trainer.train()
 
     if is_main_process():
-        model.save_pretrained(output_dir / "checkpoint-final",safe_serialization=False)
+        model.save_pretrained(output_dir / "checkpoint-final")
         save_training_info(
             output_dir / "checkpoint-final", training_config=raw_training_config
         )
