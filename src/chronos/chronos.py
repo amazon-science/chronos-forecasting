@@ -444,6 +444,7 @@ class ChronosPipeline:
         ).cpu()
         return embeddings, tokenizer_state
 
+    @torch.no_grad()
     def predict(
         self,
         context: Union[torch.Tensor, List[torch.Tensor]],
