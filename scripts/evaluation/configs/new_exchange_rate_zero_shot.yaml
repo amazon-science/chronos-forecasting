@@ -1,0 +1,9 @@
+- name: 'default'
+  hf_repo: 'juantollo/newExchangeRate'
+  offset: -4128
+  prediction_length: 640
+  num_rolls: 1
+  chronos_model_id: "/home/juantollo/foundational_models/chronos-forecasting/scripts/google_t5-efficient-base/run-0/checkpoint-final"
+  batch_size: 32
+  device: "cuda:0"
+  num_samples: 20

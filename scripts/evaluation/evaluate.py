@@ -9,7 +9,7 @@ import torch
 import typer
 import yaml
 from gluonts.dataset.split import split
-from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss
+from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MAE
 from gluonts.itertools import batcher
 from gluonts.model.evaluation import evaluate_forecasts
 from gluonts.model.forecast import SampleForecast
@@ -312,6 +312,8 @@ def main(
             top_p=top_p,
         )
 
+        from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MAE  # Add the necessary imports
+
         logger.info(f"Evaluating forecasts for {dataset_name}")
         metrics = (
             evaluate_forecasts(
@@ -319,6 +321,7 @@ def main(
                 test_data=test_data,
                 metrics=[
                     MASE(),
+                    MAE(),
                     MeanWeightedSumQuantileLoss(np.arange(0.1, 1.0, 0.1)),
                 ],
                 batch_size=5000,

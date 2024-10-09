@@ -161,3 +161,9 @@ cython_debug/
 
 # macOS stuff
 .DS_store
+
+scripts/google_t5-efficient-base/
+scripts/google_t5-efficient-large/
+scripts/google_t5-efficient-small/
+
+*.yaml

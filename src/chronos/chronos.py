@@ -494,17 +494,19 @@ class ChronosPipeline:
         context_tensor = self._prepare_and_validate_context(context=context)
 
         if prediction_length is None:
-            prediction_length = self.model.config.prediction_length
+            ### FIX ###
+            #prediction_length = self.model.config.prediction_length
+            prediction_length = 240
 
-        if prediction_length > self.model.config.prediction_length:
-            msg = (
-                f"We recommend keeping prediction length <= {self.model.config.prediction_length}. "
-                "The quality of longer predictions may degrade since the model is not optimized for it. "
-            )
-            if limit_prediction_length:
-                msg += "You can turn off this check by setting `limit_prediction_length=False`."
-                raise ValueError(msg)
-            warnings.warn(msg)
+        # if prediction_length > self.model.config.prediction_length:
+        #     msg = (
+        #         f"We recommend keeping prediction length <= {self.model.config.prediction_length}. "
+        #         "The quality of longer predictions may degrade since the model is not optimized for it. "
+        #     )
+        #     if limit_prediction_length:
+        #         msg += "You can turn off this check by setting `limit_prediction_length=False`."
+        #         raise ValueError(msg)
+        #     warnings.warn(msg)
 
         predictions = []
         remaining = prediction_length
