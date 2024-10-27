@@ -1,0 +1,2 @@
+dataset,model,MASE,MAE[0.5],WQL
+default,google_t5-efficient-large/run-0/checkpoint-8000,0.011717196508047754,0.0073813796043396,0.0077518506394092445

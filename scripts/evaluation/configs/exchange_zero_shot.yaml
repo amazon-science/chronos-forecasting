@@ -1,6 +1,6 @@
 
 - name: exchange_rate
   hf_repo: autogluon/chronos_datasets
-  offset: -30
-  prediction_length: 30
+  offset: -512
+  prediction_length: 96
   num_rolls: 1

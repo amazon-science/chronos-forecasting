@@ -167,3 +167,43 @@ scripts/google_t5-efficient-large/
 scripts/google_t5-efficient-small/
 
 *.yaml
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/optimizer.pt
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/pytorch_model.bin
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/rng_state.pth
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/scheduler.pt
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/trainer_state.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/training_args.bin
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/config.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-2000/generation_config.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/generation_config.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/optimizer.pt
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/pytorch_model.bin
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/rng_state.pth
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/scheduler.pt
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/trainer_state.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000/training_args.bin
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-6000/config.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-6000/generation_config.json
+scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-6000/pytorch_model.bin
+scripts/output/google_t5-efficient-large-original-dataset/run-0/logs/events.out.tfevents.1728513006.instance-20241008-163832.111401.0
+scripts/output/google_t5-efficient-large-original-dataset/run-1/logs/events.out.tfevents.1728515696.instance-20241008-163832.137676.0
+scripts/output/google_t5-efficient-large-original-dataset/run-2/logs/events.out.tfevents.1728522168.instance-20241008-163832.157956.0
+scripts/output/Large 95 checkpoint-8000/config.json
+scripts/output/Large 95 checkpoint-8000/generation_config.json
+scripts/output/Large 95 checkpoint-8000/model.safetensors
+scripts/output/Large 95 checkpoint-8000/optimizer.pt
+scripts/output/Large 95 checkpoint-8000/rng_state.pth
+scripts/output/Large 95 checkpoint-8000/scheduler.pt
+scripts/output/Large 95 checkpoint-8000/trainer_state.json
+scripts/output/Large 95 checkpoint-8000/training_args.bin
+scripts/training/output/google_t5-efficient-base/run-0/checkpoint-final/config.json
+scripts/training/output/google_t5-efficient-base/run-0/checkpoint-final/generation_config.json
+scripts/training/output/google_t5-efficient-base/run-0/checkpoint-final/pytorch_model.bin
+scripts/training/output/google_t5-efficient-base/run-0/checkpoint-final/training_info.json
+scripts/training/output/google_t5-efficient-base/run-0/logs/events.out.tfevents.1728419991.instance-20241008-163832.51869.0
+scripts/training/output/google_t5-efficient-large/run-0/checkpoint-8000/config.json
+scripts/training/output/google_t5-efficient-large/run-0/checkpoint-8000/generation_config.json
+scripts/training/output/google_t5-efficient-large/run-0/checkpoint-8000/optimizer.pt
+scripts/training/output/google_t5-efficient-large/run-0/checkpoint-8000/pytorch_model.bin
+scripts/training/output/google_t5-efficient-large/run-0/checkpoint-8000/training_args.bin
+scripts/training/output/google_t5-efficient-large/run-0/logs/events.out.tfevents.1728426402.instance-20241008-163832.98221.0

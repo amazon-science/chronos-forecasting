@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 from typing import Iterable, Optional
-
+import pdb
 import datasets
 import numpy as np
 import pandas as pd
@@ -223,8 +223,8 @@ def load_and_split_dataset(backtest_config: dict):
 
     # Split dataset for evaluation
     _, test_template = split(gts_dataset, offset=offset)
+    import pdb
     test_data = test_template.generate_instances(prediction_length, windows=num_rolls)
-
     return test_data
 
 
@@ -240,6 +240,8 @@ def generate_sample_forecasts(
     forecast_samples = []
     for batch in tqdm(batcher(test_data_input, batch_size=batch_size)):
         context = [torch.tensor(entry["target"]) for entry in batch]
+        #pdb.set_trace()
+
         forecast_samples.append(
             pipeline.predict(
                 context,
@@ -311,8 +313,8 @@ def main(
             top_k=top_k,
             top_p=top_p,
         )
-
-        from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MAE  # Add the necessary imports
+        
+        from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MAE, MSE # Add the necessary imports
 
         logger.info(f"Evaluating forecasts for {dataset_name}")
         metrics = (
@@ -322,6 +324,7 @@ def main(
                 metrics=[
                     MASE(),
                     MAE(),
+                    MSE(),
                     MeanWeightedSumQuantileLoss(np.arange(0.1, 1.0, 0.1)),
                 ],
                 batch_size=5000,

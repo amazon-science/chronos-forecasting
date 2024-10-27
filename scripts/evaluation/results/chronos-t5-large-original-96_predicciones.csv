@@ -1,0 +1,2 @@
+dataset,model,MASE,MAE[0.5],WQL
+exchange_rate,amazon/chronos-t5-large,3.9541637717174396,0.011973374833663305,0.01327382132544617

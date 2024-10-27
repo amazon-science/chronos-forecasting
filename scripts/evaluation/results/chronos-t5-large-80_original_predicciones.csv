@@ -1,0 +1,2 @@
+dataset,model,MASE,MAE[0.5],MSE[mean],WQL
+exchange_rate,/home/juantollo/foundational_models/chronos-forecasting/scripts/output/google_t5-efficient-large-original-dataset/run-0/checkpoint-4000,3.319783369054719,0.011316897968451181,0.0047556329518556595,0.014863201616908038
