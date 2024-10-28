@@ -33,3 +33,5 @@ warmup_ratio: 0.0
 dataloader_num_workers: 1
 max_missing_prop: 0.9
 use_eos_token: true
+use_wasserstein_loss: true
+wasserstein_p: 1 # 1 or 2

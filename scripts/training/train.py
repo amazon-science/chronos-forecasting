@@ -50,6 +50,76 @@ from sklearn.metrics import mean_absolute_error
 app = typer.Typer(pretty_exceptions_enable=False)
 
 
+class TrainerWasserstein(Trainer):
+
+    def __init__(self, n_tokens, power, low_limit, high_limit, *args, **kwargs):
+        self.n_tokens = n_tokens
+        self.ignore_index = -100
+        self.power = power
+        self.precomputed_kernel_dist = self.regression_kernel(torch.arange(1, n_tokens + 1),
+                                                              torch.arange(1, n_tokens + 1), power=self.power)
+        self.low_limit = low_limit
+        self.high_limit = high_limit
+        super().__init__(*args, **kwargs)
+
+    def regression_kernel(self, x1, x2, power):
+        distance = torch.abs(
+            (self.high_limit - self.low_limit) * (x1.unsqueeze(1) - x2.unsqueeze(0)) / self.n_tokens).pow(
+            power)
+
+        return distance.float()
+
+    def preprocess_labels(self, labels):
+        self.precomputed_kernel_dist = self.precomputed_kernel_dist.to(labels.device)
+
+        # Create a tensor to hold the label probabilities, initialized with -100.0
+        # This tensor should have the shape (batch_size, sequence_length, num_probs)
+        label_dist = torch.full(
+            (labels.size(0), labels.size(1), self.precomputed_kernel_dist.size(1)),  # batch_size * seq_len * n_tokens
+            # self.ignore_index,
+            0.,
+            device=labels.device,
+            dtype=torch.float
+        )
+
+        # Mask out the padding labels (-100) for selection from precomputed_probs
+        padding_mask = labels.eq(self.ignore_index)  ## batch_size * seq_len
+
+        label_dist[~padding_mask] = self.precomputed_kernel_dist[labels[~padding_mask]]
+        return label_dist
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        outputs = model(**inputs)
+
+        # taken from the label smoothing transformers implementation
+        # Save past state if it exists
+        # TODO: this needs to be fixed and made cleaner later.
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+
+        logits = outputs["logits"] if isinstance(outputs, dict) else outputs[0]
+
+        labels = inputs.get("labels")
+        assert labels is not None, "you must provide labels"
+
+        # TODO: should be changed for the causal models
+        # if shift_labels:
+        #     logits = logits[..., :-1, :].contiguous()
+        #     labels = labels[..., 1:].contiguous()
+
+        # Create a mask for the padding positions (where labels are equal to ignore_index)
+        padding_mask = labels.eq(self.ignore_index)
+        labels_weights = self.preprocess_labels(labels)  # batch_size * seq_len * n_tokens
+        model_probs = torch.nn.functional.softmax(logits, dim=-1)  # batch_size * seq_len * n_tokens
+        loss = (labels_weights * model_probs).sum(dim=-1).pow(1.0 / self.power)  # batch_size*seq_len
+
+        loss.masked_fill_(padding_mask, 0.0)
+        num_active_elements = padding_mask.numel() - padding_mask.long().sum()
+        loss = loss.sum() / num_active_elements
+
+        return (loss, outputs) if return_outputs else loss
+
+
 def compute_metrics(pred):
     labels = pred.label_ids.astype(np.float32)
     mae = mean_absolute_error(labels, pred.predictions[0].argmax(-1).astype(np.float32))
@@ -550,7 +620,8 @@ def main(
         top_k: int = 50,
         top_p: float = 1.0,
         seed: Optional[int] = None,
-        use_kernel_softmax: bool = False,
+        use_wasserstein_loss: Optional[bool] = False,
+        wasserstein_p: Optional[int] = 1,
         validation_data_paths=typer.Option(None, "--validation-data-paths", "-t")
 ):
     if tf32 and not (
@@ -734,13 +805,29 @@ def main(
         training_args = TrainingArguments(**base_training_args)
 
     # Create Trainer instance
-    trainer = Trainer(  # Trainer in original code
-        model=model,
-        args=training_args,
-        train_dataset=shuffled_train_dataset,
-        eval_dataset=validation_dataset,
-        compute_metrics=compute_metrics
-    )
+    if use_wasserstein_loss:
+        log_on_main('Wasserstein loss is applied', logger)
+        trainer = TrainerWasserstein(
+            model=model,
+            args=training_args,
+            train_dataset=shuffled_train_dataset,
+            n_tokens=n_tokens,
+            power=wasserstein_p,
+            low_limit=tokenizer_kwargs['low_limit'],
+            high_limit=tokenizer_kwargs['high_limit'],
+            eval_dataset=validation_dataset,
+            compute_metrics=compute_metrics
+        )
+    else:
+        log_on_main('CE loss is applied', logger)
+        trainer = Trainer(  # Trainer in original code
+            model=model,
+            args=training_args,
+            train_dataset=shuffled_train_dataset,
+            eval_dataset=validation_dataset,
+            compute_metrics=compute_metrics
+        )
+
     log_on_main("Training", logger)
 
     trainer.train()
