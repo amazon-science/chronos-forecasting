@@ -1,9 +1,8 @@
 training_data_paths:
 - "/home/ubuntu/tsmixup-data.arrow"
-- "/home/ubuntu/kernelsynth-data.arrow"
 probability:
 - 0.9
-- 0.1
+
 context_length: 512
 prediction_length: 64
 min_past: 60
