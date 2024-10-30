@@ -780,7 +780,6 @@ def main(
         "torch_compile": torch_compile,
         "ddp_find_unused_parameters": False,
         "remove_unused_columns": False,
-        "num_train_epochs": None
     }
 
     if validation_data_paths:
