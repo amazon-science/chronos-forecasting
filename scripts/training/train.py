@@ -780,6 +780,7 @@ def main(
         "torch_compile": torch_compile,
         "ddp_find_unused_parameters": False,
         "remove_unused_columns": False,
+        "num_train_epochs": None
     }
 
     if validation_data_paths:
@@ -809,6 +810,7 @@ def main(
     # Create Trainer instance
     if use_wasserstein_loss:
         log_on_main('Wasserstein loss is applied', logger)
+        print('Wasserstein loss is applied', logger)
         trainer = TrainerWasserstein(
             model=model,
             args=training_args,
