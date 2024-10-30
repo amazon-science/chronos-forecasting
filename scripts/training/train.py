@@ -831,7 +831,7 @@ def main(
         )
 
     log_on_main("Training", logger)
-
+    print(training_args)
     trainer.train()
 
     if is_main_process():
