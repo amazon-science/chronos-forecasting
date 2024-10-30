@@ -56,12 +56,12 @@ class TrainerWasserstein(Trainer):
         self.n_tokens = n_tokens
         self.ignore_index = -100
         self.power = power
-        self.precomputed_kernel_dist = self.regression_kernel(torch.arange(1, n_tokens + 1),
-                                                              torch.arange(1, n_tokens + 1), power=self.power)
-        print(f'check:{high_limit}')
         self.low_limit = low_limit
         self.high_limit = high_limit
-        print(self.high_limit)
+
+        self.precomputed_kernel_dist = self.regression_kernel(torch.arange(1, n_tokens + 1),
+                                                              torch.arange(1, n_tokens + 1), power=self.power)
+
         super().__init__(*args, **kwargs)
 
     def regression_kernel(self, x1, x2, power):
@@ -806,7 +806,6 @@ def main(
         validation_dataset = None
         training_args = TrainingArguments(**base_training_args)
 
-    print(f"check:{tokenizer_kwargs['high_limit']}")
     # Create Trainer instance
     if use_wasserstein_loss:
         log_on_main('Wasserstein loss is applied', logger)
