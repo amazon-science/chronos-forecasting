@@ -584,7 +584,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 @app.command()
 @use_yaml_config(param_name="config")
 def main(
-        training_data_paths: str,
+        training_data_paths: str = typer.Option(None, "--training-data-paths", "-t"),
         probability: Optional[str] = None,
         context_length: int = 512,
         prediction_length: int = 64,
