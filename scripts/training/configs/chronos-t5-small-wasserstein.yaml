@@ -1,7 +1,7 @@
 training_data_paths:
 - "/home/ubuntu/tsmixup-data.arrow"
 probability:
-- 0.9
+- 1.0
 
 context_length: 512
 prediction_length: 64
