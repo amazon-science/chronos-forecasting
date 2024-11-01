@@ -809,7 +809,6 @@ def main(
     # Create Trainer instance
     if use_wasserstein_loss:
         log_on_main('Wasserstein loss is applied', logger)
-        print('Wasserstein loss is applied', logger)
         trainer = TrainerWasserstein(
             model=model,
             args=training_args,
