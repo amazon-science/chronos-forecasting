@@ -273,6 +273,7 @@ def main(
     temperature: Optional[float] = None,
     top_k: Optional[int] = None,
     top_p: Optional[float] = None,
+    return_forecast: Optional[bool] = False,
 ):
     if isinstance(torch_dtype, str):
         torch_dtype = getattr(torch, torch_dtype)
@@ -290,6 +291,7 @@ def main(
         backtest_configs = yaml.safe_load(fp)
 
     result_rows = []
+    total_forecast = []
     for config in backtest_configs:
         dataset_name = config["name"]
         prediction_length = config["prediction_length"]
@@ -329,6 +331,8 @@ def main(
         result_rows.append(
             {"dataset": dataset_name, "model": chronos_model_id, **metrics[0]}
         )
+        if return_forecast:
+            total_forecast.append(sample_forecasts)
 
     # Save results to a CSV file
     results_df = (
@@ -340,6 +344,8 @@ def main(
         .sort_values(by="dataset")
     )
     results_df.to_csv(metrics_path, index=False)
+    if return_forecast:
+        return total_forecast
 
 
 if __name__ == "__main__":
