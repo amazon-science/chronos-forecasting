@@ -16,7 +16,8 @@ from gluonts.model.forecast import SampleForecast
 from tqdm.auto import tqdm
 
 from chronos import ChronosPipeline
-
+import pickle
+from os.path import join
 app = typer.Typer(pretty_exceptions_enable=False)
 
 # Taken from pandas._libs.tslibs.dtypes.OFFSET_TO_PERIOD_FREQSTR
@@ -229,12 +230,12 @@ def load_and_split_dataset(backtest_config: dict):
 
 
 def generate_sample_forecasts(
-    test_data_input: Iterable,
-    pipeline: ChronosPipeline,
-    prediction_length: int,
-    batch_size: int,
-    num_samples: int,
-    **predict_kwargs,
+        test_data_input: Iterable,
+        pipeline: ChronosPipeline,
+        prediction_length: int,
+        batch_size: int,
+        num_samples: int,
+        **predict_kwargs,
 ):
     # Generate forecast samples
     forecast_samples = []
@@ -263,17 +264,19 @@ def generate_sample_forecasts(
 
 @app.command()
 def main(
-    config_path: Path,
-    metrics_path: Path,
-    chronos_model_id: str = "amazon/chronos-t5-small",
-    device: str = "cuda",
-    torch_dtype: str = "bfloat16",
-    batch_size: int = 32,
-    num_samples: int = 20,
-    temperature: Optional[float] = None,
-    top_k: Optional[int] = None,
-    top_p: Optional[float] = None,
-    return_forecast: Optional[bool] = False,
+        config_path: Path,
+        metrics_path: Path,
+        chronos_model_id: str = "amazon/chronos-t5-small",
+        device: str = "cuda",
+        torch_dtype: str = "bfloat16",
+        batch_size: int = 32,
+        num_samples: int = 20,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        return_forecast: Optional[bool] = False,
+        path_save_forecast=typer.Option(None, "--path_save_forecast", "-t"),
+        file_name_forecast=typer.Option(None, "--forecast_file_name", "-t")
 ):
     if isinstance(torch_dtype, str):
         torch_dtype = getattr(torch, torch_dtype)
@@ -344,6 +347,12 @@ def main(
         .sort_values(by="dataset")
     )
     results_df.to_csv(metrics_path, index=False)
+
+    if path_save_forecast:
+        save_file = join(path_save_forecast, file_name_forecast) + '.pkl'
+        with open(save_file, 'wb') as file:
+            pickle.dump(total_forecast, file)
+
     if return_forecast:
         return total_forecast
 
