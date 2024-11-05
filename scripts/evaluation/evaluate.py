@@ -276,7 +276,7 @@ def main(
         top_p: Optional[float] = None,
         return_forecast: Optional[bool] = False,
         path_save_forecast=typer.Option(None, "--path_save_forecast", "-t"),
-        file_name_forecast=typer.Option(None, "--forecast_file_name", "-t")
+        file_name_forecast=typer.Option(None, "--file_name_forecast", "-t")
 ):
     if isinstance(torch_dtype, str):
         torch_dtype = getattr(torch, torch_dtype)
