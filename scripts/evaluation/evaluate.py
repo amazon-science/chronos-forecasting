@@ -295,6 +295,10 @@ def main(
 
     result_rows = []
     total_forecast = []
+    print('debug')
+    print(path_save_forecast)
+    print(return_forecast)
+    print(file_name_forecast)
     for config in backtest_configs:
         dataset_name = config["name"]
         prediction_length = config["prediction_length"]
