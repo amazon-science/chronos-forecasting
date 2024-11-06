@@ -511,7 +511,7 @@ class ChronosPipeline:
 
         while remaining > 0:
             token_ids, attention_mask, scale = self.tokenizer.context_input_transform(
-                context_tensor
+                context_tensor.to(torch.float32)
             )
             samples = self.model(
                 token_ids.to(self.model.device),
@@ -524,7 +524,7 @@ class ChronosPipeline:
             )
             prediction = self.tokenizer.output_transform(
                 samples.to(scale.device), scale
-            )
+            ).to(context_tensor)
 
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
