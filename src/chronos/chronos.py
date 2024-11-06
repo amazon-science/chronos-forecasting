@@ -524,7 +524,7 @@ class ChronosPipeline:
             )
             prediction = self.tokenizer.output_transform(
                 samples.to(scale.device), scale
-            )
+            ).to(context_tensor)
 
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
@@ -536,7 +536,7 @@ class ChronosPipeline:
                 [context_tensor, prediction.median(dim=1).values], dim=-1
             )
 
-        return torch.cat(predictions, dim=-1).to(context_tensor)
+        return torch.cat(predictions, dim=-1)
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
