@@ -339,7 +339,7 @@ def main(
             {"dataset": dataset_name, "model": chronos_model_id, **metrics[0]}
         )
         if return_forecast:
-            total_forecast.append(sample_forecasts)
+            total_forecast.append([lambda x: x.sample in sample_forecasts])
 
     # Save results to a CSV file
     results_df = (
