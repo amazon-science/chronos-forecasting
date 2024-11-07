@@ -397,7 +397,7 @@ class ChronosPipeline:
     model: ChronosModel
 
     def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
+        self, context: Union[torch.Tensor, List[torch.Tensor]], dtype=torch.float32
     ):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
@@ -406,7 +406,7 @@ class ChronosPipeline:
             context = context.unsqueeze(0)
         assert context.ndim == 2
 
-        return context
+        return context.to(dtype=dtype)
 
     @torch.no_grad()
     def embed(
@@ -506,15 +506,12 @@ class ChronosPipeline:
                 raise ValueError(msg)
             warnings.warn(msg)
 
-        device = context_tensor.device
-        dtype = context_tensor.dtype
-
         predictions = []
         remaining = prediction_length
 
         while remaining > 0:
             token_ids, attention_mask, scale = self.tokenizer.context_input_transform(
-                context_tensor.to(torch.float32)
+                context_tensor
             )
             samples = self.model(
                 token_ids.to(self.model.device),
@@ -539,7 +536,7 @@ class ChronosPipeline:
                 [context_tensor, prediction.median(dim=1).values], dim=-1
             )
 
-        return torch.cat(predictions, dim=-1).to(device, dtype)
+        return torch.cat(predictions, dim=-1)
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
