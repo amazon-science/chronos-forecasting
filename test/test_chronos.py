@@ -157,9 +157,10 @@ def test_tokenizer_random_data(use_eos_token: bool):
     assert samples.shape == (2, 10, 4)
 
 
-def validate_tensor(samples: torch.Tensor, shape: Tuple[int, ...]) -> None:
-    assert isinstance(samples, torch.Tensor)
-    assert samples.shape == shape
+def validate_tensor(a: torch.Tensor, shape: Tuple[int, ...], dtype) -> None:
+    assert isinstance(a, torch.Tensor)
+    assert a.shape == shape
+    assert a.dtype == dtype
 
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
@@ -174,7 +175,7 @@ def test_pipeline_predict(torch_dtype: str):
     # input: tensor of shape (batch_size, context_length)
 
     samples = pipeline.predict(context, num_samples=12, prediction_length=3)
-    validate_tensor(samples, (4, 12, 3))
+    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(context, num_samples=7, prediction_length=65)
@@ -182,12 +183,12 @@ def test_pipeline_predict(torch_dtype: str):
     samples = pipeline.predict(
         context, num_samples=7, prediction_length=65, limit_prediction_length=False
     )
-    validate_tensor(samples, (4, 7, 65))
+    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
     samples = pipeline.predict(list(context), num_samples=12, prediction_length=3)
-    validate_tensor(samples, (4, 12, 3))
+    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(list(context), num_samples=7, prediction_length=65)
@@ -198,12 +199,12 @@ def test_pipeline_predict(torch_dtype: str):
         prediction_length=65,
         limit_prediction_length=False,
     )
-    validate_tensor(samples, (4, 7, 65))
+    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
 
     samples = pipeline.predict(context[0, ...], num_samples=12, prediction_length=3)
-    validate_tensor(samples, (1, 12, 3))
+    validate_tensor(samples, shape=(1, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(context[0, ...], num_samples=7, prediction_length=65)
@@ -214,7 +215,7 @@ def test_pipeline_predict(torch_dtype: str):
         prediction_length=65,
         limit_prediction_length=False,
     )
-    validate_tensor(samples, (1, 7, 65))
+    validate_tensor(samples, shape=(1, 7, 65), dtype=torch.float32)
 
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
@@ -231,19 +232,25 @@ def test_pipeline_embed(torch_dtype: str):
     # input: tensor of shape (batch_size, context_length)
 
     embedding, scale = pipeline.embed(context)
-    validate_tensor(embedding, (4, expected_embed_length, d_model))
-    validate_tensor(scale, (4,))
+    validate_tensor(
+        embedding, shape=(4, expected_embed_length, d_model), dtype=torch_dtype
+    )
+    validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
     embedding, scale = pipeline.embed(list(context))
-    validate_tensor(embedding, (4, expected_embed_length, d_model))
-    validate_tensor(scale, (4,))
+    validate_tensor(
+        embedding, shape=(4, expected_embed_length, d_model), dtype=torch_dtype
+    )
+    validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
     embedding, scale = pipeline.embed(context[0, ...])
-    validate_tensor(embedding, (1, expected_embed_length, d_model))
-    validate_tensor(scale, (1,))
+    validate_tensor(
+        embedding, shape=(1, expected_embed_length, d_model), dtype=torch_dtype
+    )
+    validate_tensor(scale, shape=(1,), dtype=torch.float32)
 
 
 @pytest.mark.parametrize("n_tokens", [10, 1000, 10000])
