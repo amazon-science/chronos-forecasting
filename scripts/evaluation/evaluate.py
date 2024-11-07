@@ -276,7 +276,8 @@ def main(
         top_p: Optional[float] = None,
         return_forecast: Optional[bool] = False,
         path_save_forecast=typer.Option(None, "--path_save_forecast", "-t"),
-        file_name_forecast=typer.Option(None, "--file_name_forecast", "-t")
+        file_name_forecast=typer.Option(None, "--file_name_forecast", "-t"),
+        file_name_test=typer.Option(None, "--file_name_test", "-t"),
 ):
     if isinstance(torch_dtype, str):
         torch_dtype = getattr(torch, torch_dtype)
@@ -295,10 +296,7 @@ def main(
 
     result_rows = []
     total_forecast = []
-    print('debug')
-    print(path_save_forecast)
-    print(return_forecast)
-    print(file_name_forecast)
+    total_test_data = []
     for config in backtest_configs:
         dataset_name = config["name"]
         prediction_length = config["prediction_length"]
@@ -340,6 +338,7 @@ def main(
         )
         if return_forecast:
             total_forecast.append(list(map(lambda x: x.samples, sample_forecasts)))
+            total_test_data.append(test_data.input)
 
     # Save results to a CSV file
     results_df = (
@@ -353,8 +352,12 @@ def main(
     results_df.to_csv(metrics_path, index=False)
 
     if path_save_forecast:
-        save_file = join(path_save_forecast, file_name_forecast) + '.pkl'
-        with open(save_file, 'wb') as file:
+        save_file_forecast = join(path_save_forecast, file_name_forecast) + '.pkl'
+        with open(save_file_forecast, 'wb') as file:
+            pickle.dump(total_forecast, file)
+
+        save_file_forecast = join(path_save_forecast, file_name_test) + '.pkl'
+        with open(save_file_forecast, 'wb') as file:
             pickle.dump(total_forecast, file)
 
     if return_forecast:
