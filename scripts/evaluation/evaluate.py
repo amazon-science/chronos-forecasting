@@ -358,7 +358,7 @@ def main(
 
         save_file_forecast = join(path_save_forecast, file_name_test) + '.pkl'
         with open(save_file_forecast, 'wb') as file:
-            pickle.dump(total_forecast, file)
+            pickle.dump(total_test_data, file)
 
     if return_forecast:
         return total_forecast
