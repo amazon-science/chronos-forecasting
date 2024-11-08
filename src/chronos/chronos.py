@@ -371,13 +371,10 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
         assert isinstance(c, torch.Tensor)
         assert c.ndim == 1
         padding = torch.full(
-            size=(max_len - len(c),),
-            fill_value=torch.nan,
-            device=c.device,
-            dtype=c.dtype,
+            size=(max_len - len(c),), fill_value=torch.nan, device=c.device
         )
         padded.append(torch.concat((padding, c), dim=-1))
-    return torch.stack(padded)
+    return torch.stack(padded).to(tensors[0])
 
 
 @dataclass
