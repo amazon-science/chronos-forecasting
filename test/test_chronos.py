@@ -163,19 +163,20 @@ def validate_tensor(a: torch.Tensor, shape: Tuple[int, ...], dtype) -> None:
     assert a.dtype == dtype
 
 
-@pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
-def test_pipeline_predict(torch_dtype: str):
+@pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16])
+def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = ChronosPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-model",
         device_map="cpu",
-        torch_dtype=torch_dtype,
+        torch_dtype=model_dtype,
     )
-    context = 10 * torch.rand(size=(4, 16)) + 10
+    context = 10 * torch.rand(size=(4, 16), dtype=input_dtype) + 10
 
     # input: tensor of shape (batch_size, context_length)
 
     samples = pipeline.predict(context, num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
+    validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(context, num_samples=7, prediction_length=65)
@@ -183,12 +184,12 @@ def test_pipeline_predict(torch_dtype: str):
     samples = pipeline.predict(
         context, num_samples=7, prediction_length=65, limit_prediction_length=False
     )
-    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
+    validate_tensor(samples, shape=(4, 7, 65), dtype=input_dtype)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
     samples = pipeline.predict(list(context), num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
+    validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(list(context), num_samples=7, prediction_length=65)
@@ -199,12 +200,12 @@ def test_pipeline_predict(torch_dtype: str):
         prediction_length=65,
         limit_prediction_length=False,
     )
-    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
+    validate_tensor(samples, shape=(4, 7, 65), dtype=input_dtype)
 
     # input: tensor of shape (context_length,)
 
     samples = pipeline.predict(context[0, ...], num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(1, 12, 3), dtype=torch.float32)
+    validate_tensor(samples, shape=(1, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(context[0, ...], num_samples=7, prediction_length=65)
@@ -215,25 +216,26 @@ def test_pipeline_predict(torch_dtype: str):
         prediction_length=65,
         limit_prediction_length=False,
     )
-    validate_tensor(samples, shape=(1, 7, 65), dtype=torch.float32)
+    validate_tensor(samples, shape=(1, 7, 65), dtype=input_dtype)
 
 
-@pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
-def test_pipeline_embed(torch_dtype: str):
+@pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16])
+def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = ChronosPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-model",
         device_map="cpu",
-        torch_dtype=torch_dtype,
+        torch_dtype=model_dtype,
     )
     d_model = pipeline.model.model.config.d_model
-    context = 10 * torch.rand(size=(4, 16)) + 10
+    context = 10 * torch.rand(size=(4, 16), dtype=input_dtype) + 10
     expected_embed_length = 16 + (1 if pipeline.model.config.use_eos_token else 0)
 
     # input: tensor of shape (batch_size, context_length)
 
     embedding, scale = pipeline.embed(context)
     validate_tensor(
-        embedding, shape=(4, expected_embed_length, d_model), dtype=torch_dtype
+        embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype
     )
     validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
@@ -241,14 +243,14 @@ def test_pipeline_embed(torch_dtype: str):
 
     embedding, scale = pipeline.embed(list(context))
     validate_tensor(
-        embedding, shape=(4, expected_embed_length, d_model), dtype=torch_dtype
+        embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype
     )
     validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
     embedding, scale = pipeline.embed(context[0, ...])
     validate_tensor(
-        embedding, shape=(1, expected_embed_length, d_model), dtype=torch_dtype
+        embedding, shape=(1, expected_embed_length, d_model), dtype=model_dtype
     )
     validate_tensor(scale, shape=(1,), dtype=torch.float32)
 

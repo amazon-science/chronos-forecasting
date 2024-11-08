@@ -169,6 +169,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
     def _input_transform(
         self, context: torch.Tensor, scale: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        context = context.to(dtype=torch.float32)
         attention_mask = ~torch.isnan(context)
 
         if scale is None:
@@ -370,7 +371,10 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
         assert isinstance(c, torch.Tensor)
         assert c.ndim == 1
         padding = torch.full(
-            size=(max_len - len(c),), fill_value=torch.nan, device=c.device
+            size=(max_len - len(c),),
+            fill_value=torch.nan,
+            device=c.device,
+            dtype=c.dtype,
         )
         padded.append(torch.concat((padding, c), dim=-1))
     return torch.stack(padded)
@@ -397,7 +401,7 @@ class ChronosPipeline:
     model: ChronosModel
 
     def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]], dtype=torch.float32
+        self, context: Union[torch.Tensor, List[torch.Tensor]]
     ):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
@@ -406,7 +410,7 @@ class ChronosPipeline:
             context = context.unsqueeze(0)
         assert context.ndim == 2
 
-        return context.to(dtype=dtype)
+        return context
 
     @torch.no_grad()
     def embed(
@@ -506,6 +510,9 @@ class ChronosPipeline:
                 raise ValueError(msg)
             warnings.warn(msg)
 
+        input_dtype = context_tensor.dtype
+        input_device = context_tensor.device
+
         predictions = []
         remaining = prediction_length
 
@@ -536,7 +543,7 @@ class ChronosPipeline:
                 [context_tensor, prediction.median(dim=1).values], dim=-1
             )
 
-        return torch.cat(predictions, dim=-1)
+        return torch.cat(predictions, dim=-1).to(dtype=input_dtype, device=input_device)
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
