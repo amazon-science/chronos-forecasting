@@ -338,7 +338,7 @@ def main(
         )
         if return_forecast:
             total_forecast.append(list(map(lambda x: x.samples, sample_forecasts)))
-            total_test_data.append(test_data.input)
+            total_test_data.append(test_data)
 
     # Save results to a CSV file
     results_df = (
