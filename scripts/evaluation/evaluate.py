@@ -239,7 +239,7 @@ def generate_sample_forecasts(
     # Generate forecast samples
     forecast_samples = []
     for batch in tqdm(batcher(test_data_input, batch_size=batch_size)):
-        context = [torch.tensor(entry["target"]) for entry in batch]
+        context = [torch.tensor(entry["target"], dtype=torch.float32) for entry in batch]
         forecast_samples.append(
             pipeline.predict(
                 context,
