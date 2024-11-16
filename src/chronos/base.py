@@ -157,6 +157,6 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
                 f"Trying to load unknown pipeline class: {pipeline_class_name}"
             )
 
-        return class_.from_pretrained(
+        return class_.from_pretrained(  # type: ignore[attr-defined]
             pretrained_model_name_or_path, *model_args, **kwargs
         )

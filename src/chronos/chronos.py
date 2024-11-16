@@ -441,7 +441,7 @@ class ChronosPipeline(BaseChronosPipeline):
         ).cpu()
         return embeddings, tokenizer_state
 
-    def predict(
+    def predict(  # type: ignore[override]
         self,
         context: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
@@ -551,7 +551,7 @@ class ChronosPipeline(BaseChronosPipeline):
             .cpu()
             .swapaxes(1, 2)
         )
-        mean = prediction_samples.mean(axis=-1, keepdims=True)
+        mean = prediction_samples.mean(dim=-1, keepdim=True)
         quantiles = torch.quantile(
             prediction_samples,
             q=torch.tensor(quantile_levels, dtype=prediction_samples.dtype),
