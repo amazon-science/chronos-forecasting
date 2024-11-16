@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import warnings
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
@@ -16,6 +16,10 @@ from transformers import (
 )
 
 import chronos
+from chronos.base import BaseChronosPipeline, ForecastType
+from chronos.utils import left_pad_and_stack_1D
+
+logger = logging.getLogger(__file__)
 
 
 @dataclass
@@ -364,21 +368,7 @@ class ChronosModel(nn.Module):
         return preds.reshape(input_ids.size(0), num_samples, -1)
 
 
-def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
-    max_len = max(len(c) for c in tensors)
-    padded = []
-    for c in tensors:
-        assert isinstance(c, torch.Tensor)
-        assert c.ndim == 1
-        padding = torch.full(
-            size=(max_len - len(c),), fill_value=torch.nan, device=c.device
-        )
-        padded.append(torch.concat((padding, c), dim=-1))
-    return torch.stack(padded).to(tensors[0])
-
-
-@dataclass
-class ChronosPipeline:
+class ChronosPipeline(BaseChronosPipeline):
     """
     A ``ChronosPipeline`` uses the given tokenizer and model to forecast
     input time series.
@@ -396,6 +386,12 @@ class ChronosPipeline:
 
     tokenizer: ChronosTokenizer
     model: ChronosModel
+    forecast_type: ForecastType = ForecastType.SAMPLES
+
+    def __init__(self, tokenizer, model):
+        super().__init__(inner_model=model.model)
+        self.tokenizer = tokenizer
+        self.model = model
 
     def _prepare_and_validate_context(
         self, context: Union[torch.Tensor, List[torch.Tensor]]
@@ -453,7 +449,7 @@ class ChronosPipeline:
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
-        limit_prediction_length: bool = True,
+        limit_prediction_length: bool = False,
     ) -> torch.Tensor:
         """
         Get forecasts for the given time series.
@@ -482,7 +478,7 @@ class ChronosPipeline:
             Defaults to what specified in ``self.model.config``.
         limit_prediction_length
             Force prediction length smaller or equal than the
-            built-in prediction length from the model. True by
+            built-in prediction length from the model. False by
             default. When true, fail loudly if longer predictions
             are requested, otherwise longer predictions are allowed.
 
@@ -505,7 +501,7 @@ class ChronosPipeline:
             if limit_prediction_length:
                 msg += "You can turn off this check by setting `limit_prediction_length=False`."
                 raise ValueError(msg)
-            warnings.warn(msg)
+            logger.warning(msg)
 
         input_dtype = context_tensor.dtype
         input_device = context_tensor.device
@@ -541,6 +537,28 @@ class ChronosPipeline:
             )
 
         return torch.cat(predictions, dim=-1).to(dtype=input_dtype, device=input_device)
+
+    def predict_quantiles(
+        self,
+        context: Union[torch.Tensor, List[torch.Tensor]],
+        prediction_length: Optional[int] = None,
+        quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        **predict_kwargs,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        prediction_samples = (
+            self.predict(context, prediction_length=prediction_length, **predict_kwargs)
+            .detach()
+            .cpu()
+            .swapaxes(1, 2)
+        )
+        mean = prediction_samples.mean(axis=-1, keepdims=True)
+        quantiles = torch.quantile(
+            prediction_samples,
+            q=torch.tensor(quantile_levels, dtype=prediction_samples.dtype),
+            dim=-1,
+        ).permute(1, 2, 0)
+
+        return quantiles, mean
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
