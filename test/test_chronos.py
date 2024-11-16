@@ -179,7 +179,9 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
-        samples = pipeline.predict(context, num_samples=7, prediction_length=65)
+        samples = pipeline.predict(
+            context, num_samples=7, prediction_length=65, limit_prediction_length=True
+        )
 
     samples = pipeline.predict(
         context, num_samples=7, prediction_length=65, limit_prediction_length=False
@@ -192,7 +194,12 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
-        samples = pipeline.predict(list(context), num_samples=7, prediction_length=65)
+        samples = pipeline.predict(
+            list(context),
+            num_samples=7,
+            prediction_length=65,
+            limit_prediction_length=True,
+        )
 
     samples = pipeline.predict(
         list(context),
@@ -208,13 +215,17 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     validate_tensor(samples, shape=(1, 12, 3), dtype=input_dtype)
 
     with pytest.raises(ValueError):
-        samples = pipeline.predict(context[0, ...], num_samples=7, prediction_length=65)
+        samples = pipeline.predict(
+            context[0, ...],
+            num_samples=7,
+            prediction_length=65,
+            limit_prediction_length=True,
+        )
 
     samples = pipeline.predict(
         context[0, ...],
         num_samples=7,
         prediction_length=65,
-        limit_prediction_length=False,
     )
     validate_tensor(samples, shape=(1, 7, 65), dtype=input_dtype)
 
