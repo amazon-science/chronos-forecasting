@@ -7,7 +7,12 @@ from typing import Tuple
 import pytest
 import torch
 
-from chronos import ChronosConfig, ChronosPipeline, MeanScaleUniformBins
+from chronos import (
+    ChronosConfig,
+    ChronosPipeline,
+    MeanScaleUniformBins,
+    BaseChronosPipeline,
+)
 
 
 @pytest.mark.parametrize("n_numerical_tokens", [5, 10, 27])
@@ -320,3 +325,7 @@ def test_token_clipping(n_tokens):
         context=torch.tensor([[huge_value]]), scale=torch.tensor(([1]))
     )
     assert token_ids[0, 0] == config.n_tokens - 1  # and it's clipped to n_tokens - 1
+
+
+def test_model_loads_from_huggingface():
+    BaseChronosPipeline.from_pretrained("amazon/chronos-t5-tiny", device_map="cpu")
