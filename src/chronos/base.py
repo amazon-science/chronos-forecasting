@@ -93,8 +93,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Get quantile and mean forecasts for given time series. All
-        predictions are returned on the CPU.
+        Get quantile and mean forecasts for given time series.
 
         Parameters
         ----------

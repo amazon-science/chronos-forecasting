@@ -424,7 +424,40 @@ class ChronosBoltPipeline(BaseChronosPipeline):
         context: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
         limit_prediction_length: bool = False,
-    ):
+    ) -> torch.Tensor:
+        """
+        Get forecasts for the given time series.
+
+        Parameters
+        ----------
+        context : Union[torch.Tensor, List[torch.Tensor]]
+            Input series. This is either a 1D tensor, or a list
+            of 1D tensors, or a 2D tensor whose first dimension
+            is batch. In the latter case, use left-padding with
+            ``torch.nan`` to align series of different lengths.
+        prediction_length : Optional[int], optional
+            Time steps to predict. Defaults to a model-dependent
+            value if not given.
+        limit_prediction_length
+            Force prediction length smaller or equal than the
+            built-in prediction length from the model. False by
+            default. When true, fail loudly if longer predictions
+            are requested, otherwise longer predictions are allowed.
+
+        Returns
+        -------
+        torch.Tensor
+            Forecasts of shape (batch_size, num_quantiles, prediction_length)
+            where num_quantiles is the number of quantiles the model has been
+            trained to output. For official Chronos-Bolt models, the value of
+            num_quantiles is 9 for [0.1, 0.2, ..., 0.9]-quantiles.
+
+        Raises
+        ------
+        ValueError
+            When limit_prediction_length is True and the prediction_length is
+            greater than model's trainig prediction_length.
+        """
         context_tensor = self._prepare_and_validate_context(context=context)
 
         model_context_length = self.model.config.chronos_config["context_length"]
@@ -482,11 +515,37 @@ class ChronosBoltPipeline(BaseChronosPipeline):
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **predict_kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get quantile and mean forecasts for given time series.
+
+        Parameters
+        ----------
+        context : Union[torch.Tensor, List[torch.Tensor]]
+            Input series. This is either a 1D tensor, or a list
+            of 1D tensors, or a 2D tensor whose first dimension
+            is batch. In the latter case, use left-padding with
+            ``torch.nan`` to align series of different lengths.
+        prediction_length : Optional[int], optional
+            Time steps to predict. Defaults to a model-dependent
+            value if not given.
+        quantile_levels : List[float], optional
+            Quantile levels to compute, by default [0.1, 0.2, ..., 0.9]
+
+        Returns
+        -------
+        quantiles
+            Tensor containing quantile forecasts.
+            Shape: (batch_size, prediction_length, num_quantiles)
+        mean
+            Tensor containing mean (point) forecasts.
+            For official Chronos-Bolt models, the median is returned
+            as the point forecast.
+            Shape: (batch_size, prediction_length)
+        """
         # shape (batch_size, prediction_length, len(training_quantile_levels))
         predictions = (
             self.predict(context, prediction_length=prediction_length, **predict_kwargs)
             .detach()
-            .cpu()
             .swapaxes(1, 2)
         )
 

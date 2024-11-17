@@ -545,13 +545,37 @@ class ChronosPipeline(BaseChronosPipeline):
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **predict_kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get quantile and mean forecasts for given time series.
+
+        Parameters
+        ----------
+        context : Union[torch.Tensor, List[torch.Tensor]]
+            Input series. This is either a 1D tensor, or a list
+            of 1D tensors, or a 2D tensor whose first dimension
+            is batch. In the latter case, use left-padding with
+            ``torch.nan`` to align series of different lengths.
+        prediction_length : Optional[int], optional
+            Time steps to predict. Defaults to a model-dependent
+            value if not given.
+        quantile_levels : List[float], optional
+            Quantile levels to compute, by default [0.1, 0.2, ..., 0.9]
+
+        Returns
+        -------
+        quantiles
+            Tensor containing quantile forecasts.
+            Shape: (batch_size, prediction_length, num_quantiles)
+        mean
+            Tensor containing mean (point) forecasts.
+            Shape: (batch_size, prediction_length)
+        """
         prediction_samples = (
             self.predict(context, prediction_length=prediction_length, **predict_kwargs)
             .detach()
-            .cpu()
             .swapaxes(1, 2)
         )
-        mean = prediction_samples.mean(dim=-1, keepdim=True)
+        mean = prediction_samples.mean(dim=-1)
         quantiles = torch.quantile(
             prediction_samples,
             q=torch.tensor(quantile_levels, dtype=prediction_samples.dtype),
