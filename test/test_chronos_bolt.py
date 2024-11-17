@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Tuple
 
 import pytest
@@ -19,9 +20,8 @@ def test_base_chronos_pipeline_loads_from_huggingface():
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
 def test_pipeline_predict(torch_dtype: str):
-    # FIXME: Replace with amazon/chronos-bolt-tiny
     pipeline = ChronosBoltPipeline.from_pretrained(
-        "autogluon/chronos-bolt-tiny",
+        Path(__file__).parent / "dummy-chronos-bolt-model",
         device_map="cpu",
         torch_dtype=torch_dtype,
     )
@@ -83,9 +83,8 @@ def test_pipeline_predict(torch_dtype: str):
 def test_pipeline_predict_quantiles(
     torch_dtype: str, prediction_length: int, quantile_levels: list[int]
 ):
-    # FIXME: Replace with amazon/chronos-bolt-tiny
     pipeline = ChronosBoltPipeline.from_pretrained(
-        "autogluon/chronos-bolt-tiny",
+        Path(__file__).parent / "dummy-chronos-bolt-model",
         device_map="cpu",
         torch_dtype=torch_dtype,
     )
