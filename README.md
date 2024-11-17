@@ -57,19 +57,19 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 
 ### Zero-Shot Results
 
-The following figure showcases the remarkable **zero-shot** performance of Chronos models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
+The following figure showcases the remarkable **zero-shot** performance of Chronos and Chronos⚡️ models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
 
 <p align="center">
   <img src="figures/zero_shot-agg_scaled_score.png" width="80%">
   <br />
   <span>
-    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos models during training. This benchmark provides insights into the zero-shot performance of Chronos models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
+    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos and Chronos⚡️ models during training. This benchmark provides insights into the zero-shot performance of Chronos and Chronos⚡️ models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
   </span>
 </p>
 
 ## 📈 Usage
 
-To perform inference with Chronos models, install this package by running:
+To perform inference with Chronos or Chronos⚡️ models, install this package by running:
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
@@ -79,35 +79,41 @@ pip install git+https://github.com/amazon-science/chronos-forecasting.git
 
 ### Forecasting
 
-A minimal example showing how to perform forecasting using Chronos models:
+A minimal example showing how to perform forecasting using Chronos and Chronos⚡️ models:
 
 ```python
 import pandas as pd  # requires: pip install pandas
 import torch
-from chronos import ChronosPipeline
+from chronos import BaseChronosPipeline
 
-pipeline = ChronosPipeline.from_pretrained(
-    "amazon/chronos-t5-small",
+pipeline = BaseChronosPipeline.from_pretrained(
+    "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos⚡️ model
     device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
     torch_dtype=torch.bfloat16,
 )
 
-df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
+df = pd.read_csv(
+    "https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
+)
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
-# forecast shape: [num_series, num_samples, prediction_length]
+# The original Chronos models generate forecast samples, so forecast has shape
+# [num_series, num_samples, prediction_length].
+# Chronos⚡️ models generate quantile forecasts, so forecast has shape
+# [num_series, num_quantiles, prediction_length].
 forecast = pipeline.predict(
-    context=torch.tensor(df["#Passengers"]),
-    prediction_length=12,
-    num_samples=20,
+    context=torch.tensor(df["#Passengers"]), prediction_length=12
 )
 ```
 
 More options for `pipeline.predict` can be found with:
 
 ```python
-print(ChronosPipeline.predict.__doc__)
+from chronos import ChronosPipeline, ChronosBoltPipeline
+
+print(ChronosPipeline.predict.__doc__)  # for Chronos models
+print(ChronosBoltPipeline.predict.__doc__)  # for Chronos⚡️ models
 ```
 
 We can now visualize the forecast:
