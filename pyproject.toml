@@ -6,14 +6,14 @@ license = { file = "LICENSE" }
 dependencies = [
     "torch~=2.0",         # package was tested on 2.2
     "transformers~=4.30",
-    "accelerate",
+    "accelerate~=0.32",
 ]
 
 [project.optional-dependencies]
 test = ["pytest~=8.0", "numpy~=1.21"]
 typecheck = ["mypy~=1.9"]
-training = ["gluonts[pro]", "numpy", "datasets", "typer", "typer-config", "joblib", "scikit-learn", "tensorboard"]
-evaluation = ["gluonts[pro]", "datasets", "numpy", "typer"]
+training = ["gluonts[pro]~=0.15", "numpy~=1.21", "datasets~=2.18", "typer", "typer-config", "joblib", "scikit-learn", "tensorboard"]
+evaluation = ["gluonts[pro]~=0.15", "numpy~=1.21", "datasets~=2.18", "typer"]
 
 [tool.mypy]
 ignore_missing_imports = true
