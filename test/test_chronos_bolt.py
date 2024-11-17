@@ -75,6 +75,54 @@ def test_pipeline_predict(torch_dtype: str):
     validate_tensor(quantiles, (1, expected_num_quantiles, 65))
 
 
+@pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("prediction_length", [3, 65])
+@pytest.mark.parametrize(
+    "quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]]
+)
+def test_pipeline_predict_quantiles(
+    torch_dtype: str, prediction_length: int, quantile_levels: list[int]
+):
+    # FIXME: Replace with amazon/chronos-bolt-tiny
+    pipeline = ChronosBoltPipeline.from_pretrained(
+        "autogluon/chronos-bolt-tiny",
+        device_map="cpu",
+        torch_dtype=torch_dtype,
+    )
+    context = 10 * torch.rand(size=(4, 16)) + 10
+
+    num_expected_quantiles = len(quantile_levels)
+    # input: tensor of shape (batch_size, context_length)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        context,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (4, prediction_length))
+
+    # input: batch_size-long list of tensors of shape (context_length,)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        list(context),
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (4, prediction_length))
+
+    # input: tensor of shape (context_length,)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        context[0, ...],
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (1, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (1, prediction_length))
+
+
 # The following tests have been taken from
 # https://github.com/autogluon/autogluon/blob/f57beb26cb769c6e0d484a6af2b89eab8aee73a8/timeseries/tests/unittests/models/chronos/pipeline/test_chronos_bolt.py
 # Author: Caner Turkmen <atturkm@amazon.com>

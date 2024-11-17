@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pytest
 import torch
@@ -166,10 +166,14 @@ def test_tokenizer_random_data(use_eos_token: bool):
     assert samples.shape == (2, 10, 4)
 
 
-def validate_tensor(a: torch.Tensor, shape: Tuple[int, ...], dtype) -> None:
+def validate_tensor(
+    a: torch.Tensor, shape: Tuple[int, ...], dtype: Optional[torch.dtype] = None
+) -> None:
     assert isinstance(a, torch.Tensor)
     assert a.shape == shape
-    assert a.dtype == dtype
+
+    if dtype is not None:
+        assert a.dtype == dtype
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
@@ -237,6 +241,58 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
         prediction_length=65,
     )
     validate_tensor(samples, shape=(1, 7, 65), dtype=input_dtype)
+
+
+@pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("prediction_length", [3, 65])
+@pytest.mark.parametrize(
+    "quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]]
+)
+def test_pipeline_predict_quantiles(
+    model_dtype: torch.dtype,
+    prediction_length: int,
+    quantile_levels: list[int],
+):
+    pipeline = ChronosPipeline.from_pretrained(
+        Path(__file__).parent / "dummy-chronos-model",
+        device_map="cpu",
+        torch_dtype=model_dtype,
+    )
+    context = 10 * torch.rand(size=(4, 16)) + 10
+
+    num_expected_quantiles = len(quantile_levels)
+    # input: tensor of shape (batch_size, context_length)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        context,
+        num_samples=12,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (4, prediction_length))
+
+    # input: batch_size-long list of tensors of shape (context_length,)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        list(context),
+        num_samples=12,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (4, prediction_length))
+
+    # input: tensor of shape (context_length,)
+
+    quantiles, mean = pipeline.predict_quantiles(
+        context[0, ...],
+        num_samples=12,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+    validate_tensor(quantiles, (1, prediction_length, num_expected_quantiles))
+    validate_tensor(mean, (1, prediction_length))
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
