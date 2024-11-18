@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>, Caner Turkmen <atturkm@amazon.com>, Lorenzo Stella <stellalo@amazon.com>
+# Original source:
+# https://github.com/autogluon/autogluon/blob/f57beb26cb769c6e0d484a6af2b89eab8aee73a8/timeseries/src/autogluon/timeseries/models/chronos/pipeline/chronos_bolt.py
 
 import copy
 import logging
@@ -431,7 +433,7 @@ class ChronosBoltPipeline(BaseChronosPipeline):
 
         Refer to the base method (``BaseChronosPipeline.predict``)
         for details on shared parameters.
-        
+
         limit_prediction_length
             Force prediction length smaller or equal than the
             built-in prediction length from the model. False by
