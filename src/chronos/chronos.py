@@ -456,16 +456,11 @@ class ChronosPipeline(BaseChronosPipeline):
         """
         Get forecasts for the given time series.
 
-        Parameters
-        ----------
-        context
-            Input series. This is either a 1D tensor, or a list
-            of 1D tensors, or a 2D tensor whose first dimension
-            is batch. In the latter case, use left-padding with
-            ``torch.nan`` to align series of different lengths.
-        prediction_length
-            Time steps to predict. Defaults to what specified
-            in ``self.model.config``.
+        Refer to the base method (``BaseChronosPipeline.predict``)
+        for details on shared parameters.
+
+        Additional Parameters:
+        ----------------------
         num_samples
             Number of sample paths to predict. Defaults to what
             specified in ``self.model.config``.
@@ -548,29 +543,7 @@ class ChronosPipeline(BaseChronosPipeline):
         **predict_kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Get quantile and mean forecasts for given time series.
-
-        Parameters
-        ----------
-        context : Union[torch.Tensor, List[torch.Tensor]]
-            Input series. This is either a 1D tensor, or a list
-            of 1D tensors, or a 2D tensor whose first dimension
-            is batch. In the latter case, use left-padding with
-            ``torch.nan`` to align series of different lengths.
-        prediction_length : Optional[int], optional
-            Time steps to predict. Defaults to a model-dependent
-            value if not given.
-        quantile_levels : List[float], optional
-            Quantile levels to compute, by default [0.1, 0.2, ..., 0.9]
-
-        Returns
-        -------
-        quantiles
-            Tensor containing quantile forecasts.
-            Shape: (batch_size, prediction_length, num_quantiles)
-        mean
-            Tensor containing mean (point) forecasts.
-            Shape: (batch_size, prediction_length)
+        Refer to the base method (``BaseChronosPipeline.predict_quantiles``).
         """
         prediction_samples = (
             self.predict(context, prediction_length=prediction_length, **predict_kwargs)

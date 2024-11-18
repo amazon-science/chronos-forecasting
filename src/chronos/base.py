@@ -97,16 +97,16 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         Parameters
         ----------
-        context
+        context : Union[torch.Tensor, List[torch.Tensor]]
             Input series. This is either a 1D tensor, or a list
             of 1D tensors, or a 2D tensor whose first dimension
             is batch. In the latter case, use left-padding with
             ``torch.nan`` to align series of different lengths.
-        prediction_length
+        prediction_length : Optional[int], optional
             Time steps to predict. Defaults to a model-dependent
             value if not given.
-        quantile_levels: List[float]
-            Quantile levels to compute
+        quantile_levels : List[float], optional
+            Quantile levels to compute, by default [0.1, 0.2, ..., 0.9]
 
         Returns
         -------
@@ -130,8 +130,6 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         Load the model, either from a local path or from the HuggingFace Hub.
         Supports the same arguments as ``AutoConfig`` and ``AutoModel``
         from ``transformers``.
-
-        When a local path is provided, supports both a folder or a .tar.gz archive.
         """
         from transformers import AutoConfig
 
