@@ -169,6 +169,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
     def _input_transform(
         self, context: torch.Tensor, scale: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        context = context.to(dtype=torch.float32)
         attention_mask = ~torch.isnan(context)
 
         if scale is None:
@@ -373,7 +374,7 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
             size=(max_len - len(c),), fill_value=torch.nan, device=c.device
         )
         padded.append(torch.concat((padding, c), dim=-1))
-    return torch.stack(padded)
+    return torch.stack(padded).to(tensors[0])
 
 
 @dataclass
@@ -506,6 +507,9 @@ class ChronosPipeline:
                 raise ValueError(msg)
             warnings.warn(msg)
 
+        input_dtype = context_tensor.dtype
+        input_device = context_tensor.device
+
         predictions = []
         remaining = prediction_length
 
@@ -536,7 +540,7 @@ class ChronosPipeline:
                 [context_tensor, prediction.median(dim=1).values], dim=-1
             )
 
-        return torch.cat(predictions, dim=-1)
+        return torch.cat(predictions, dim=-1).to(dtype=input_dtype, device=input_device)
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
