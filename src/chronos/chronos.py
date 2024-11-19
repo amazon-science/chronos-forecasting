@@ -459,8 +459,8 @@ class ChronosPipeline(BaseChronosPipeline):
         Refer to the base method (``BaseChronosPipeline.predict``)
         for details on shared parameters.
 
-        Additional Parameters:
-        ----------------------
+        Additional parameters
+        ---------------------
         num_samples
             Number of sample paths to predict. Defaults to what
             specified in ``self.model.config``.

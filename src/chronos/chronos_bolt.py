@@ -433,7 +433,8 @@ class ChronosBoltPipeline(BaseChronosPipeline):
 
         Refer to the base method (``BaseChronosPipeline.predict``)
         for details on shared parameters.
-
+        Additional parameters
+        ---------------------
         limit_prediction_length
             Force prediction length smaller or equal than the
             built-in prediction length from the model. False by
