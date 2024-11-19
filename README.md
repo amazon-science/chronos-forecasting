@@ -1,5 +1,9 @@
 <div align="center">
 <img src="figures/chronos-logo.png" width="60%">
+</div>
+
+
+<div align="center">
 
 # Chronos: Learning the Language of Time Series
 
@@ -8,6 +12,7 @@
 [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-FFD21E)](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444)
 [![faq](https://img.shields.io/badge/FAQ-Questions%3F-blue)](https://github.com/amazon-science/chronos-forecasting/issues?q=is%3Aissue+label%3AFAQ)
 [![License: MIT](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
+
 </div>
 
 ## 🚀 News
