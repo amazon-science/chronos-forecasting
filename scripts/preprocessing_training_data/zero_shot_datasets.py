@@ -6,6 +6,8 @@ from os.path import join
 import numpy as np
 import pandas as pd
 import json
+import os
+import argparse
 
 
 def check_nan(df: pd.DataFrame):
@@ -126,9 +128,30 @@ def preprocess_train_dataset(backtest_config: dict, save_path: str, create_val: 
 
 
 if __name__ == '__main__':
-    create_val = True
-    save_dir = "zero_shot_datasets_train_val/"
-    config_path = "../evaluation/configs/zero-shot.yaml"
+
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Script to create a directory and specify a configuration path.")
+    parser.add_argument('--save_dir', type=str, default="zero_shot_datasets_train_val/",
+                        help="Directory to save datasets. Default is 'zero_shot_datasets_train_val/'.")
+    parser.add_argument('--config_path', type=str, default="../evaluation/configs/zero-shot.yaml",
+                        help="Path to the configuration file. Default is '../evaluation/configs/zero-shot.yaml'.")
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    # Assign variables from parsed arguments
+    save_dir = args.save_dir
+    config_path = args.config_path
+
+    # Ensure the save directory exists
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        print(f"Directory '{save_dir}' created.")
+    else:
+        print(f"Directory '{save_dir}' already exists.")
+
+    # Print the configuration path
+    print(f"Using configuration file: {config_path}")
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
     prediction_lengths = {}
@@ -138,15 +161,9 @@ if __name__ == '__main__':
         prediction_lengths[item['name']] = prediction_length
         print(f"dataset name:{item['name']}")
         print(f"offset number:{item['offset']}")
-        if create_val:
-            save_path = join(join(save_dir, 'train/'), item['name'] + '.arrow')
-            save_path_val = join(join(save_dir, 'val/'), item['name'] + '.arrow')
-            # preprocess_train_dataset(item, save_path, True, save_path_val)
-            number_of_rows[item['name']] = read_check_dataset(save_path, item['offset'], save_path_val)
-        else:
-            save_path = join(save_dir, item['name'] + '.arrow')
-            preprocess_train_dataset(item, save_path)
-            read_check_dataset(save_path, item['offset'])
+        save_path = join(save_dir, item['name'] + '.arrow')
+        preprocess_train_dataset(item, save_path)
+        read_check_dataset(save_path, item['offset'])
 
     json_save_path = 'prediction_lengths.json'
     json_save_path_number_of_rows = 'number_of_rows.json'
