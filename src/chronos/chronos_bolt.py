@@ -87,7 +87,7 @@ class InstanceNorm(nn.Module):
         if loc_scale is None:
             loc = torch.nan_to_num(torch.nanmean(x, dim=-1, keepdim=True), nan=0.0)
             scale = torch.nan_to_num(
-                (x - loc).square().nanmean(dim=-1, keepdim=True).sqrt(), nan=1.0
+                torch.nanmean((x - loc).square(), dim=-1, keepdim=True).sqrt(), nan=1.0
             )
             scale = torch.where(scale == 0, torch.abs(loc) + self.eps, scale)
         else:
@@ -269,7 +269,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         # patching
         patched_context = self.patch(context)
         patched_mask = torch.nan_to_num(self.patch(mask), nan=0.0)
-        patched_context[~(patched_mask > 0)] = 0.0
+        patched_context = torch.where(patched_mask > 0.0, patched_context, 0.0)
         # concat context and mask along patch dim
         patched_context = torch.cat([patched_context, patched_mask], dim=-1)
 
@@ -290,7 +290,11 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
             reg_embeds = self.shared(reg_input_ids)
             input_embeds = torch.cat([input_embeds, reg_embeds], dim=-2)
             attention_mask = torch.cat(
-                [attention_mask, torch.ones_like(reg_input_ids)], dim=-1
+                [
+                    attention_mask.to(self.dtype),
+                    torch.ones_like(reg_input_ids).to(self.dtype),
+                ],
+                dim=-1,
             )
 
         encoder_outputs = self.encoder(
