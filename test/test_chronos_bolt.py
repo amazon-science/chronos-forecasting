@@ -14,8 +14,7 @@ def validate_tensor(input: torch.Tensor, shape: Tuple[int, ...]) -> None:
 
 
 def test_base_chronos_pipeline_loads_from_huggingface():
-    # FIXME: Replace with amazon/chronos-bolt-tiny
-    BaseChronosPipeline.from_pretrained("autogluon/chronos-bolt-tiny", device_map="cpu")
+    BaseChronosPipeline.from_pretrained("amazon/chronos-bolt-tiny", device_map="cpu")
 
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
