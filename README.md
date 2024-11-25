@@ -17,7 +17,8 @@
 
 ## 🚀 News
 
-- **27 June 2024**: 🚀 [Released datasets](https://huggingface.co/datasets/autogluon/chronos_datasets) used in the paper and an [evaluation script](./scripts/README.md#evaluating-chronos-models) to compute the WQL and MASE scores reported in the paper. 
+- **25 Nov 2024**: 🚀 Chronos⚡️ (read: Chronos-Bolt) models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos⚡️ models are more accurate (5% lower error) and 100x faster than the original Chronos models! 
+- **27 Jun 2024**: 🚀 [Released datasets](https://huggingface.co/datasets/autogluon/chronos_datasets) used in the paper and an [evaluation script](./scripts/README.md#evaluating-chronos-models) to compute the WQL and MASE scores reported in the paper. 
 - **17 May 2024**: 🐛 Fixed an off-by-one error in bin indices in the `output_transform`. This simple fix significantly improves the overall performance of Chronos. We will update the results in the next revision on ArXiv.
 - **10 May 2024**: 🚀 We added the code for pretraining and fine-tuning Chronos models. You can find it in [this folder](./scripts/training). We also added [a script](./scripts/kernel-synth.py) for generating synthetic time series data from Gaussian processes (KernelSynth; see Section 4.2 in the paper for details). Check out the [usage examples](./scripts/).
 - **19 Apr 2024**: 🚀 Chronos is now supported on [AutoGluon-TimeSeries](https://auto.gluon.ai/stable/tutorials/timeseries/index.html), the powerful AutoML package for time series forecasting which enables model ensembles, cloud deployments, and much more. Get started with the [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
@@ -52,62 +53,72 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 | [**chronos-t5-small**](https://huggingface.co/amazon/chronos-t5-small) | 46M        | [t5-efficient-small](https://huggingface.co/google/t5-efficient-small) |
 | [**chronos-t5-base**](https://huggingface.co/amazon/chronos-t5-base)   | 200M       | [t5-efficient-base](https://huggingface.co/google/t5-efficient-base)   |
 | [**chronos-t5-large**](https://huggingface.co/amazon/chronos-t5-large) | 710M       | [t5-efficient-large](https://huggingface.co/google/t5-efficient-large) |
+| [**chronos-bolt-tiny**](https://huggingface.co/amazon/chronos-bolt-tiny)   | 9M         | [t5-efficient-tiny](https://huggingface.co/google/t5-efficient-tiny)   |
+| [**chronos-bolt-mini**](https://huggingface.co/amazon/chronos-bolt-mini)   | 21M        | [t5-efficient-mini](https://huggingface.co/google/t5-efficient-mini)   |
+| [**chronos-bolt-small**](https://huggingface.co/amazon/chronos-bolt-small) | 48M        | [t5-efficient-small](https://huggingface.co/google/t5-efficient-small) |
+| [**chronos-bolt-base**](https://huggingface.co/amazon/chronos-bolt-base)   | 205M       | [t5-efficient-base](https://huggingface.co/google/t5-efficient-base)   |
 
 </div>
 
 ### Zero-Shot Results
 
-The following figure showcases the remarkable **zero-shot** performance of Chronos models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
+The following figure showcases the remarkable **zero-shot** performance of Chronos and Chronos⚡️ models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
 
 <p align="center">
   <img src="figures/zero_shot-agg_scaled_score.png" width="80%">
   <br />
   <span>
-    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos models during training. This benchmark provides insights into the zero-shot performance of Chronos models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
+    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos and Chronos⚡️ models during training. This benchmark provides insights into the zero-shot performance of Chronos and Chronos⚡️ models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
   </span>
 </p>
 
 ## 📈 Usage
 
-To perform inference with Chronos models, install this package by running:
+To perform inference with Chronos or Chronos⚡️ models, install this package by running:
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
 > [!TIP]  
-> The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features ensembling with other statistical and machine learning models for time series forecasting as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
+> This repository is intended for research purposes and provides a minimal interface to Chronos models. The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features effortless fine-tuning, augmenting Chronos models with exogenous information through covariate regressors, ensembling with other statistical and machine learning models, as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
 ### Forecasting
 
-A minimal example showing how to perform forecasting using Chronos models:
+A minimal example showing how to perform forecasting using Chronos and Chronos⚡️ models:
 
 ```python
 import pandas as pd  # requires: pip install pandas
 import torch
-from chronos import ChronosPipeline
+from chronos import BaseChronosPipeline
 
-pipeline = ChronosPipeline.from_pretrained(
-    "amazon/chronos-t5-small",
+pipeline = BaseChronosPipeline.from_pretrained(
+    "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos⚡️ model
     device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
     torch_dtype=torch.bfloat16,
 )
 
-df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
+df = pd.read_csv(
+    "https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
+)
 
 # context must be either a 1D tensor, a list of 1D tensors,
 # or a left-padded 2D tensor with batch as the first dimension
-# forecast shape: [num_series, num_samples, prediction_length]
+# The original Chronos models generate forecast samples, so forecast has shape
+# [num_series, num_samples, prediction_length].
+# Chronos⚡️ models generate quantile forecasts, so forecast has shape
+# [num_series, num_quantiles, prediction_length].
 forecast = pipeline.predict(
-    context=torch.tensor(df["#Passengers"]),
-    prediction_length=12,
-    num_samples=20,
+    context=torch.tensor(df["#Passengers"]), prediction_length=12
 )
 ```
 
 More options for `pipeline.predict` can be found with:
 
 ```python
-print(ChronosPipeline.predict.__doc__)
+from chronos import ChronosPipeline, ChronosBoltPipeline
+
+print(ChronosPipeline.predict.__doc__)  # for Chronos models
+print(ChronosBoltPipeline.predict.__doc__)  # for Chronos⚡️ models
 ```
 
 We can now visualize the forecast:

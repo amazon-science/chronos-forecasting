@@ -1,0 +1,5 @@
+benchmark,metric,value
+in-domain,MASE,0.7030801652116672
+in-domain,WQL,0.5443547623341555
+zero-shot,MASE,0.8192127745093378
+zero-shot,WQL,0.6356097843099521

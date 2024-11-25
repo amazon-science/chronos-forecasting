@@ -12,10 +12,15 @@ from gluonts.dataset.split import split
 from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss
 from gluonts.itertools import batcher
 from gluonts.model.evaluation import evaluate_forecasts
-from gluonts.model.forecast import SampleForecast
+from gluonts.model.forecast import QuantileForecast, SampleForecast
 from tqdm.auto import tqdm
 
-from chronos import ChronosPipeline
+from chronos import (
+    BaseChronosPipeline,
+    ChronosBoltPipeline,
+    ChronosPipeline,
+    ForecastType,
+)
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
@@ -228,37 +233,45 @@ def load_and_split_dataset(backtest_config: dict):
     return test_data
 
 
-def generate_sample_forecasts(
+def generate_forecasts(
     test_data_input: Iterable,
-    pipeline: ChronosPipeline,
+    pipeline: BaseChronosPipeline,
     prediction_length: int,
     batch_size: int,
-    num_samples: int,
     **predict_kwargs,
 ):
-    # Generate forecast samples
-    forecast_samples = []
+    # Generate forecasts
+    forecast_outputs = []
     for batch in tqdm(batcher(test_data_input, batch_size=batch_size)):
         context = [torch.tensor(entry["target"]) for entry in batch]
-        forecast_samples.append(
+        forecast_outputs.append(
             pipeline.predict(
                 context,
                 prediction_length=prediction_length,
-                num_samples=num_samples,
                 **predict_kwargs,
             ).numpy()
         )
-    forecast_samples = np.concatenate(forecast_samples)
+    forecast_outputs = np.concatenate(forecast_outputs)
 
-    # Convert forecast samples into gluonts SampleForecast objects
-    sample_forecasts = []
-    for item, ts in zip(forecast_samples, test_data_input):
+    # Convert forecast samples into gluonts Forecast objects
+    forecasts = []
+    for item, ts in zip(forecast_outputs, test_data_input):
         forecast_start_date = ts["start"] + len(ts["target"])
-        sample_forecasts.append(
-            SampleForecast(samples=item, start_date=forecast_start_date)
-        )
 
-    return sample_forecasts
+        if pipeline.forecast_type == ForecastType.SAMPLES:
+            forecasts.append(
+                SampleForecast(samples=item, start_date=forecast_start_date)
+            )
+        elif pipeline.forecast_type == ForecastType.QUANTILES:
+            forecasts.append(
+                QuantileForecast(
+                    forecast_arrays=item,
+                    forecast_keys=list(map(str, pipeline.quantiles)),
+                    start_date=forecast_start_date,
+                )
+            )
+
+    return forecasts
 
 
 @app.command()
@@ -274,16 +287,64 @@ def main(
     top_k: Optional[int] = None,
     top_p: Optional[float] = None,
 ):
+    """Evaluate Chronos models.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to the evaluation config. See ./configs/.
+    metrics_path : Path
+        Path to the CSV file where metrics will be saved.
+    chronos_model_id : str, optional, default = "amazon/chronos-t5-small"
+        HuggingFace ID of the Chronos model or local path
+        Available models on HuggingFace:
+        Chronos:
+            - amazon/chronos-t5-tiny
+            - amazon/chronos-t5-mini
+            - amazon/chronos-t5-small
+            - amazon/chronos-t5-base
+            - amazon/chronos-t5-large
+        Chronos-Bolt:
+            - amazon/chronos-bolt-tiny
+            - amazon/chronos-bolt-mini
+            - amazon/chronos-bolt-small
+            - amazon/chronos-bolt-base
+    device : str, optional, default = "cuda"
+        Device on which inference will be performed
+    torch_dtype : str, optional
+        Model's dtype, by default "bfloat16"
+    batch_size : int, optional, default = 32
+        Batch size for inference. For Chronos-Bolt models, significantly larger
+        batch sizes can be used
+    num_samples : int, optional, default = 20
+        Number of samples to draw when using the original Chronos models
+    temperature : Optional[float], optional, default = 1.0
+        Softmax temperature to used for the original Chronos models
+    top_k : Optional[int], optional, default = 50
+        Top-K sampling, by default None
+    top_p : Optional[float], optional, default = 1.0
+        Top-p sampling, by default None
+    """
     if isinstance(torch_dtype, str):
         torch_dtype = getattr(torch, torch_dtype)
     assert isinstance(torch_dtype, torch.dtype)
 
     # Load Chronos
-    pipeline = ChronosPipeline.from_pretrained(
+    pipeline = BaseChronosPipeline.from_pretrained(
         chronos_model_id,
         device_map=device,
         torch_dtype=torch_dtype,
     )
+
+    if isinstance(pipeline, ChronosPipeline):
+        predict_kwargs = dict(
+            num_samples=num_samples,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+        )
+    elif isinstance(pipeline, ChronosBoltPipeline):
+        predict_kwargs = {}
 
     # Load backtest configs
     with open(config_path) as fp:
@@ -301,21 +362,18 @@ def main(
             f"Generating forecasts for {dataset_name} "
             f"({len(test_data.input)} time series)"
         )
-        sample_forecasts = generate_sample_forecasts(
+        forecasts = generate_forecasts(
             test_data.input,
             pipeline=pipeline,
             prediction_length=prediction_length,
             batch_size=batch_size,
-            num_samples=num_samples,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
+            **predict_kwargs,
         )
 
         logger.info(f"Evaluating forecasts for {dataset_name}")
         metrics = (
             evaluate_forecasts(
-                sample_forecasts,
+                forecasts,
                 test_data=test_data,
                 metrics=[
                     MASE(),
