@@ -80,7 +80,7 @@ To perform inference with Chronos or Chronos⚡️ models, install this package 
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
 ```
 > [!TIP]  
-> This repository is intended for research purposes and provides a minimal interface to Chronos models. The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features effortless fine-tuning, ensembling with other statistical and machine learning models for time series forecasting as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
+> This repository is intended for research purposes and provides a minimal interface to Chronos models. The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features effortless fine-tuning, augmenting Chronos models with exogenous information through covariate regressors, ensembling with other statistical and machine learning models, as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
 ### Forecasting
 
