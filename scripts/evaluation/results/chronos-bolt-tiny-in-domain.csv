@@ -1,0 +1,16 @@
+dataset,model,MASE,WQL
+electricity_15min,amazon/chronos-bolt-tiny,0.4676384089765091,0.0861229808117837
+m4_daily,amazon/chronos-bolt-tiny,3.1789994761356795,0.020961883512815756
+m4_hourly,amazon/chronos-bolt-tiny,0.9348005698736752,0.021087527284114574
+m4_monthly,amazon/chronos-bolt-tiny,0.965298729632761,0.0950380483243082
+m4_weekly,amazon/chronos-bolt-tiny,2.261575511029903,0.04093653263178429
+monash_electricity_hourly,amazon/chronos-bolt-tiny,1.5739346351263623,0.10808418398945202
+monash_electricity_weekly,amazon/chronos-bolt-tiny,1.8628689103722829,0.05773335283584782
+monash_kdd_cup_2018,amazon/chronos-bolt-tiny,0.6869549985391232,0.28012801092758166
+monash_london_smart_meters,amazon/chronos-bolt-tiny,0.7284234905933779,0.33496438244693033
+monash_pedestrian_counts,amazon/chronos-bolt-tiny,0.32338947321773864,0.2530637833749087
+monash_rideshare,amazon/chronos-bolt-tiny,0.8562780835002918,0.1304317657933891
+monash_temperature_rain,amazon/chronos-bolt-tiny,0.9030707620825977,0.6064087080755548
+taxi_30min,amazon/chronos-bolt-tiny,0.9122159603256838,0.28002194370731626
+uber_tlc_daily,amazon/chronos-bolt-tiny,0.9087055420190513,0.11193388685815164
+uber_tlc_hourly,amazon/chronos-bolt-tiny,0.6716569179590032,0.15310845458208555
