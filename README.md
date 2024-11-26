@@ -17,7 +17,7 @@
 
 ## 🚀 News
 
-- **25 Nov 2024**: 🚀 Chronos⚡️ (read: Chronos-Bolt) models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos⚡️ models are more accurate (5% lower error) and 100x faster than the original Chronos models! 
+- **25 Nov 2024**: ⚡️ Chronos-Bolt models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos-Bolt models are more accurate (5% lower error), up to 250x faster and 20x more memory efficient than the original Chronos models of the same size! 
 - **27 Jun 2024**: 🚀 [Released datasets](https://huggingface.co/datasets/autogluon/chronos_datasets) used in the paper and an [evaluation script](./scripts/README.md#evaluating-chronos-models) to compute the WQL and MASE scores reported in the paper. 
 - **17 May 2024**: 🐛 Fixed an off-by-one error in bin indices in the `output_transform`. This simple fix significantly improves the overall performance of Chronos. We will update the results in the next revision on ArXiv.
 - **10 May 2024**: 🚀 We added the code for pretraining and fine-tuning Chronos models. You can find it in [this folder](./scripts/training). We also added [a script](./scripts/kernel-synth.py) for generating synthetic time series data from Gaussian processes (KernelSynth; see Section 4.2 in the paper for details). Check out the [usage examples](./scripts/).
@@ -62,19 +62,19 @@ The models in this repository are based on the [T5 architecture](https://arxiv.o
 
 ### Zero-Shot Results
 
-The following figure showcases the remarkable **zero-shot** performance of Chronos and Chronos⚡️ models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
+The following figure showcases the remarkable **zero-shot** performance of Chronos and Chronos-Bolt models on 27 datasets against local models, task-specific models and other pretrained models. For details on the evaluation setup and other results, please refer to [the paper](https://arxiv.org/abs/2403.07815). 
 
 <p align="center">
   <img src="figures/zero_shot-agg_scaled_score.png" width="80%">
   <br />
   <span>
-    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos and Chronos⚡️ models during training. This benchmark provides insights into the zero-shot performance of Chronos and Chronos⚡️ models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
+    Fig. 2: Performance of different models on Benchmark II, comprising 27 datasets <b>not seen</b> by Chronos and Chronos-Bolt models during training. This benchmark provides insights into the zero-shot performance of Chronos and Chronos-Bolt models against local statistical models, which fit parameters individually for each time series, task-specific models <i>trained on each task</i>, and pretrained models trained on a large corpus of time series. Pretrained Models (Other) indicates that some (or all) of the datasets in Benchmark II may have been in the training corpus of these models. The probabilistic (WQL) and point (MASE) forecasting metrics were normalized using the scores of the Seasonal Naive baseline and aggregated through a geometric mean to obtain the Agg. Relative WQL and MASE, respectively.
   </span>
 </p>
 
 ## 📈 Usage
 
-To perform inference with Chronos or Chronos⚡️ models, install this package by running:
+To perform inference with Chronos or Chronos-Bolt models, install this package by running:
 
 ```
 pip install git+https://github.com/amazon-science/chronos-forecasting.git
@@ -84,7 +84,7 @@ pip install git+https://github.com/amazon-science/chronos-forecasting.git
 
 ### Forecasting
 
-A minimal example showing how to perform forecasting using Chronos and Chronos⚡️ models:
+A minimal example showing how to perform forecasting using Chronos and Chronos-Bolt models:
 
 ```python
 import pandas as pd  # requires: pip install pandas
@@ -92,7 +92,7 @@ import torch
 from chronos import BaseChronosPipeline
 
 pipeline = BaseChronosPipeline.from_pretrained(
-    "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos⚡️ model
+    "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos-Bolt model
     device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
     torch_dtype=torch.bfloat16,
 )
@@ -105,7 +105,7 @@ df = pd.read_csv(
 # or a left-padded 2D tensor with batch as the first dimension
 # The original Chronos models generate forecast samples, so forecast has shape
 # [num_series, num_samples, prediction_length].
-# Chronos⚡️ models generate quantile forecasts, so forecast has shape
+# Chronos-Bolt models generate quantile forecasts, so forecast has shape
 # [num_series, num_quantiles, prediction_length].
 forecast = pipeline.predict(
     context=torch.tensor(df["#Passengers"]), prediction_length=12
@@ -118,7 +118,7 @@ More options for `pipeline.predict` can be found with:
 from chronos import ChronosPipeline, ChronosBoltPipeline
 
 print(ChronosPipeline.predict.__doc__)  # for Chronos models
-print(ChronosBoltPipeline.predict.__doc__)  # for Chronos⚡️ models
+print(ChronosBoltPipeline.predict.__doc__)  # for Chronos-Bolt models
 ```
 
 We can now visualize the forecast:
