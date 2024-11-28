@@ -9,7 +9,7 @@ authors = [
 description = "Chronos: Pretrained models for time series forecasting"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "torch>=2.0,<2.6",         # package was tested on 2.2
     "transformers>=4.30,<4.48",
