@@ -74,11 +74,22 @@ The following figure showcases the remarkable **zero-shot** performance of Chron
 
 ## 📈 Usage
 
-To perform inference with Chronos or Chronos-Bolt models, install this package by running:
+To perform inference with Chronos or Chronos-Bolt models, the easiest way is to install this package through `pip`:
 
+```sh
+pip install chronos-forecasting
 ```
-pip install git+https://github.com/amazon-science/chronos-forecasting.git
+
+If you're interested in pretraining, fine-tuning, and other research & development, clone and install the package from source:
+
+```sh
+# Clone the repository
+git clone https://github.com/amazon-science/chronos-forecasting.git
+
+# Install in editable mode with extra training-related dependencies
+pip install --editable ".[training]"
 ```
+
 > [!TIP]  
 > This repository is intended for research purposes and provides a minimal interface to Chronos models. The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features effortless fine-tuning, augmenting Chronos models with exogenous information through covariate regressors, ensembling with other statistical and machine learning models, as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
@@ -196,10 +207,12 @@ If you find Chronos models useful for your research, please consider citing the 
 
 ```
 @article{ansari2024chronos,
-  author  = {Ansari, Abdul Fatir and Stella, Lorenzo and Turkmen, Caner and Zhang, Xiyuan and Mercado, Pedro and Shen, Huibin and Shchur, Oleksandr and Rangapuram, Syama Syndar and Pineda Arango, Sebastian and Kapoor, Shubham and Zschiegner, Jasper and Maddix, Danielle C. and Wang, Hao and Mahoney, Michael W. and Torkkola, Kari and Gordon Wilson, Andrew and Bohlke-Schneider, Michael and Wang, Yuyang},
-  title   = {Chronos: Learning the Language of Time Series},
-  journal = {arXiv preprint arXiv:2403.07815},
-  year    = {2024}
+    title={Chronos: Learning the Language of Time Series},
+    author={Ansari, Abdul Fatir and Stella, Lorenzo and Turkmen, Caner and Zhang, Xiyuan, and Mercado, Pedro and Shen, Huibin and Shchur, Oleksandr and Rangapuram, Syama Syndar and Pineda Arango, Sebastian and Kapoor, Shubham and Zschiegner, Jasper and Maddix, Danielle C. and Mahoney, Michael W. and Torkkola, Kari and Gordon Wilson, Andrew and Bohlke-Schneider, Michael and Wang, Yuyang},
+    journal={Transactions on Machine Learning Research},
+    issn={2835-8856},
+    year={2024},
+    url={https://openreview.net/forum?id=gerNCVqqtR}
 }
 ```
 

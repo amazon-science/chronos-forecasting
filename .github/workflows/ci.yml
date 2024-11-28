@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"] # Run on any branch
+    branches: ["main"] # Run only on main branch
   pull_request:
     branches: ["**"] # Run on any branch
   schedule:
@@ -14,7 +14,7 @@ jobs:
       max-parallel: 4
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         platform: [ubuntu-latest]
 
     runs-on: ${{ matrix.platform }}
@@ -35,7 +35,7 @@ jobs:
       max-parallel: 4
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         platform: [ubuntu-latest]
 
     runs-on: ${{ matrix.platform }}
