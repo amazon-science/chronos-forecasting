@@ -86,7 +86,7 @@ If you're interested in pretraining, fine-tuning, and other research & developme
 # Clone the repository
 git clone https://github.com/amazon-science/chronos-forecasting.git
 
-# Install it in editable mode with extra training-related dependencies
+# Install in editable mode with extra training-related dependencies
 pip install --editable ".[training]"
 ```
 
