@@ -74,11 +74,22 @@ The following figure showcases the remarkable **zero-shot** performance of Chron
 
 ## 📈 Usage
 
-To perform inference with Chronos or Chronos-Bolt models, install this package by running:
+To perform inference with Chronos or Chronos-Bolt models, the easiest way to install this package through `pip`:
 
+```sh
+pip install chronos-forecasting
 ```
-pip install git+https://github.com/amazon-science/chronos-forecasting.git
+
+If you're interested in pretraining, fine-tuning, and other research & development, clone and install the package from source:
+
+```sh
+# Clone the repository
+git clone https://github.com/amazon-science/chronos-forecasting.git
+
+# Install it in editable mode with extra training-related dependencies
+pip install --editable ".[training]"
 ```
+
 > [!TIP]  
 > This repository is intended for research purposes and provides a minimal interface to Chronos models. The recommended way of using Chronos for production use cases is through [AutoGluon](https://auto.gluon.ai), which features effortless fine-tuning, augmenting Chronos models with exogenous information through covariate regressors, ensembling with other statistical and machine learning models, as well as seamless deployments on AWS with SageMaker 🧠. Check out the AutoGluon Chronos [tutorial](https://auto.gluon.ai/stable/tutorials/timeseries/forecasting-chronos.html).
 
