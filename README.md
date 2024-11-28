@@ -74,7 +74,7 @@ The following figure showcases the remarkable **zero-shot** performance of Chron
 
 ## 📈 Usage
 
-To perform inference with Chronos or Chronos-Bolt models, the easiest way to install this package through `pip`:
+To perform inference with Chronos or Chronos-Bolt models, the easiest way is to install this package through `pip`:
 
 ```sh
 pip install chronos-forecasting
