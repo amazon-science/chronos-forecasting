@@ -104,7 +104,7 @@ from chronos import BaseChronosPipeline
 
 pipeline = BaseChronosPipeline.from_pretrained(
     "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos-Bolt model
-    device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
+    device_map="cuda",  # use "cpu" for CPU inference
     torch_dtype=torch.bfloat16,
 )
 
