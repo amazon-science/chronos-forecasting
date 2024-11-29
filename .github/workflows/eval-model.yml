@@ -9,7 +9,6 @@ jobs:
   evaluate-and-post:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
-    environment: evaluate
 
     steps:
       - name: Checkout Repository
