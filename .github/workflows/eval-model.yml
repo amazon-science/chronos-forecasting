@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug Token Partially
+        run: |
+          echo "Token starts with: ${${{ secrets.PR_COMMENT_TOKEN }}:0:4}****"
       - name: Checkout Repository
         uses: actions/checkout@v4
 
