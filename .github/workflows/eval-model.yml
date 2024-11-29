@@ -11,13 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test
-        env:
-          TEST_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TEST_SECRET: ${{ secrets.PR_COMMENT_TOKEN }}
-        run: |
-          echo ${#TEST_GITHUB_TOKEN}
-          echo ${#TEST_SECRET}
       - name: Checkout Repository
         uses: actions/checkout@v4
 
