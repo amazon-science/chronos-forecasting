@@ -3,7 +3,7 @@ name: Evaluate
 
 on:
   pull_request_target:
-    branches: ["**"] # Run on any branch
+    types: [labeled]
 
 jobs:
   evaluate-and-post:
