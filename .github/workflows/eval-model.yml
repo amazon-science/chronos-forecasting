@@ -28,12 +28,12 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
 
-      # - name: Post Image as a Comment
-      #   uses: peter-evans/create-or-update-comment@v3
-      #   with:
-      #     token: ${{ secrets.GITHUB_TOKEN }}
-      #     repository: ${{ github.repository }}
-      #     issue-number: ${{ github.event.pull_request.number }}
-      #     body: |
-      #       **Generated Image:**
-      #       ![Generated Image](./generated-image/image.png)
+      - name: Post Image as a Comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            **Forecasts:**
+            ![Bolt Tiny](./ci/eval-output/amazon_chronos-bolt-tiny-forecast.png)
