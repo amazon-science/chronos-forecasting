@@ -1,4 +1,4 @@
-# Evaluates Tiny Models on Some Datasets
+# Evaluates Chronos-Bolt (Tiny) Model on Some Datasets
 name: Evaluate
 
 on:
@@ -23,7 +23,7 @@ jobs:
         run: pip install ".[evaluation]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script
-        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-tiny
+        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-tiny --device=cpu
       
       - name: Read CSV
         id: csv
