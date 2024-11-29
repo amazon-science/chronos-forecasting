@@ -11,16 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug Token Partially
-        env: # Or as an environment variable
-          super_secret: ${{ secrets.PR_COMMENT_TOKEN }}
+       - name: Test
+        env:
+          TEST_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_SECRET: ${{ secrets.PR_COMMENT_TOKEN }}
         run: |
-          if [ -z "${{ secrets.PR_COMMENT_TOKEN }}" ]; then
-            echo "Token is not set."
-            exit 1
-          else
-            echo "Token is set."
-          fi
+          echo ${#TEST_GITHUB_TOKEN}
+          echo ${#TEST_SECRET}
       - name: Checkout Repository
         uses: actions/checkout@v4
 
