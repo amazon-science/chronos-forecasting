@@ -487,13 +487,14 @@ class ChronosBoltPipeline(BaseChronosPipeline):
         # TODO: We unroll the forecast of Chronos Bolt greedily with the full forecast
         # horizon that the model was trained with (i.e., 64). This results in variance collapsing
         # every 64 steps.
+        context_tensor = context_tensor.to(
+            device=self.model.device,
+            dtype=torch.float32,
+        )
         while remaining > 0:
             with torch.no_grad():
                 prediction = self.model(
-                    context=context_tensor.to(
-                        device=self.model.device,
-                        dtype=torch.float32,  # scaling should be done in 32-bit precision
-                    ),
+                    context=context_tensor,
                 ).quantile_preds.to(context_tensor)
 
             predictions.append(prediction)
@@ -507,7 +508,9 @@ class ChronosBoltPipeline(BaseChronosPipeline):
 
             context_tensor = torch.cat([context_tensor, central_prediction], dim=-1)
 
-        return torch.cat(predictions, dim=-1)[..., :prediction_length]
+        return torch.cat(predictions, dim=-1)[..., :prediction_length].to(
+            dtype=torch.float32, device="cpu"
+        )
 
     def predict_quantiles(
         self,

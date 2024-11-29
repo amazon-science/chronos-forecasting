@@ -177,19 +177,20 @@ def validate_tensor(
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
-@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = ChronosPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-model",
         device_map="cpu",
         torch_dtype=model_dtype,
     )
-    context = 10 * torch.rand(size=(4, 16), dtype=input_dtype) + 10
+    context = 10 * torch.rand(size=(4, 16)) + 10
+    context = context.to(dtype=input_dtype)
 
     # input: tensor of shape (batch_size, context_length)
 
     samples = pipeline.predict(context, num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
+    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(
@@ -199,12 +200,12 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     samples = pipeline.predict(
         context, num_samples=7, prediction_length=65, limit_prediction_length=False
     )
-    validate_tensor(samples, shape=(4, 7, 65), dtype=input_dtype)
+    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
     samples = pipeline.predict(list(context), num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(4, 12, 3), dtype=input_dtype)
+    validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(
@@ -220,12 +221,12 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
         prediction_length=65,
         limit_prediction_length=False,
     )
-    validate_tensor(samples, shape=(4, 7, 65), dtype=input_dtype)
+    validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
 
     samples = pipeline.predict(context[0, ...], num_samples=12, prediction_length=3)
-    validate_tensor(samples, shape=(1, 12, 3), dtype=input_dtype)
+    validate_tensor(samples, shape=(1, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         samples = pipeline.predict(
@@ -240,16 +241,18 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
         num_samples=7,
         prediction_length=65,
     )
-    validate_tensor(samples, shape=(1, 7, 65), dtype=input_dtype)
+    validate_tensor(samples, shape=(1, 7, 65), dtype=torch.float32)
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 @pytest.mark.parametrize("prediction_length", [3, 65])
 @pytest.mark.parametrize(
     "quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]]
 )
 def test_pipeline_predict_quantiles(
     model_dtype: torch.dtype,
+    input_dtype: torch.dtype,
     prediction_length: int,
     quantile_levels: list[int],
 ):
@@ -259,6 +262,7 @@ def test_pipeline_predict_quantiles(
         torch_dtype=model_dtype,
     )
     context = 10 * torch.rand(size=(4, 16)) + 10
+    context = context.to(dtype=input_dtype)
 
     num_expected_quantiles = len(quantile_levels)
     # input: tensor of shape (batch_size, context_length)
@@ -269,8 +273,10 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (4, prediction_length))
+    validate_tensor(
+        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
@@ -280,8 +286,10 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (4, prediction_length))
+    validate_tensor(
+        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
 
@@ -291,12 +299,14 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (1, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (1, prediction_length))
+    validate_tensor(
+        quantiles, (1, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (1, prediction_length), dtype=torch.float32)
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
-@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = ChronosPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-model",
@@ -304,7 +314,8 @@ def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
         torch_dtype=model_dtype,
     )
     d_model = pipeline.model.model.config.d_model
-    context = 10 * torch.rand(size=(4, 16), dtype=input_dtype) + 10
+    context = 10 * torch.rand(size=(4, 16)) + 10
+    context = context.to(dtype=input_dtype)
     expected_embed_length = 16 + (1 if pipeline.model.config.use_eos_token else 0)
 
     # input: tensor of shape (batch_size, context_length)
