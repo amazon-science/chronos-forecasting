@@ -6,7 +6,7 @@ on:
     branches: ["**"] # Run on any branch
 
 jobs:
-  generate-and-post:
+  evaluate-and-post:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
 
@@ -44,5 +44,5 @@ jobs:
           repository: ${{ github.repository }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            **Evaluation:**
+            ### Evaluation Metrics
             ${{steps.csv-table-output.outputs.markdown-table}}
