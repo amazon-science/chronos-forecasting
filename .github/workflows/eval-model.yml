@@ -1,4 +1,5 @@
-name: Evaluate Tiny Models on Some Datasets
+# Evaluates Tiny Models on Some Datasets
+name: Evaluate
 
 on:
   pull_request:
@@ -29,7 +30,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-output
-          path: ./
+          path: ci/eval-output/
           retention-days: 1
           overwrite: true
 

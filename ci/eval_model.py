@@ -7,6 +7,7 @@ import torch
 from chronos import BaseChronosPipeline
 
 AIR_PASSENGERS_CSV = "https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
+OUTPUT_DIR = Path(__file__).parent / "eval-output"
 
 
 def forecast_and_plot(model_id: str = "amazon/chronos-bolt-tiny"):
@@ -41,10 +42,9 @@ def forecast_and_plot(model_id: str = "amazon/chronos-bolt-tiny"):
     plt.title(model_id)
     plt.legend()
     plt.grid()
-    plt.savefig(
-        Path(__file__).parent / f"{model_id.replace('/', '_')}-forecast.png"
-    )
+    plt.savefig(OUTPUT_DIR / f"{model_id.replace('/', '_')}-forecast.png")
 
 
 if __name__ == "__main__":
+    OUTPUT_DIR.mkdir(exist_ok=True)
     forecast_and_plot(model_id="amazon/chronos-bolt-tiny")
