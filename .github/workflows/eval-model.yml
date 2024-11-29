@@ -15,7 +15,12 @@ jobs:
         env: # Or as an environment variable
           super_secret: ${{ secrets.PR_COMMENT_TOKEN }}
         run: |
-          echo "Token starts with: ${super_secret:0:6}****"
+          if [ -z "${{ secrets.PR_COMMENT_TOKEN }}" ]; then
+            echo "Token is not set."
+            exit 1
+          else
+            echo "Token is set."
+          fi
       - name: Checkout Repository
         uses: actions/checkout@v4
 
