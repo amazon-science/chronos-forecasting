@@ -20,20 +20,29 @@ jobs:
           python-version: '3.11'
 
       - name: Install Dependencies
-        run: pip install ".[evaluation]" pandas matplotlib -f https://download.pytorch.org/whl/cpu/torch_stable.html
+        run: pip install ".[evaluation]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
-      - name: Run CI Eval Script
-        run: python ci/eval_model.py
+      - name: Run Eval Script
+        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-tiny
       
-      - name: Display structure of downloaded files
-        run: ls -R
+      - name: Read CSV
+        id: csv
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: eval-ci-metrics.csv
 
-      - name: Post Image as a Comment
+      - name: Create Markdown Table
+        uses: petems/csv-to-md-table-action@master
+        id: csv-table-output
+        with:
+          csvinput: ${{ steps.csv.outputs.content }}
+
+      - name: Post Table as a Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            **Forecasts:**
-            ![Bolt Tiny](./ci/eval-output/amazon_chronos-bolt-tiny-forecast.png)
+            **Evaluation:**
+            ${{steps.csv-table-output.outputs.markdown-table}}
