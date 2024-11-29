@@ -9,6 +9,7 @@ jobs:
   evaluate-and-post:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
+    environment: evaluate
 
     steps:
       - name: Checkout Repository
@@ -40,7 +41,7 @@ jobs:
       - name: Post Table as a Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PR_COMMENT_TOKEN }}
           repository: ${{ github.repository }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
