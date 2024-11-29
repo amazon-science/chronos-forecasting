@@ -1,0 +1,53 @@
+name: Evaluate Tiny Models on Some Datasets
+
+on:
+  pull_request:
+    types:
+      - labeled  # Trigger when a label is added to a PR
+
+jobs:
+  generate-and-post:
+    if: contains(github.event.label.name, 'run-eval')  # Only run if 'run-eval' label is added
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install ".[evaluation]" pandas matplotlib -f https://download.pytorch.org/whl/cpu/torch_stable.html
+
+      - name: Run CI Eval Script
+        run: python ci/eval_model.py
+
+      - name: Upload Ouput of Eval Script
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-output
+          path: ./
+          retention-days: 1
+          overwrite: true
+
+      - name: Download Image Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-output
+          path: ./
+      
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      # - name: Post Image as a Comment
+      #   uses: peter-evans/create-or-update-comment@v3
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     repository: ${{ github.repository }}
+      #     issue-number: ${{ github.event.pull_request.number }}
+      #     body: |
+      #       **Generated Image:**
+      #       ![Generated Image](./generated-image/image.png)
