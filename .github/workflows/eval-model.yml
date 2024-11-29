@@ -3,7 +3,7 @@ name: Evaluate
 
 on:
   pull_request:
-    branches: ["**"] # Run on any branch
+    branches: ["main"] # Run on PRs to main branch
 
 jobs:
   evaluate-and-post:
