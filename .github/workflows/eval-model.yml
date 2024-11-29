@@ -24,20 +24,6 @@ jobs:
 
       - name: Run CI Eval Script
         run: python ci/eval_model.py
-
-      - name: Upload Ouput of Eval Script
-        uses: actions/upload-artifact@v4
-        with:
-          name: eval-output
-          path: ci/eval-output/
-          retention-days: 1
-          overwrite: true
-
-      - name: Download Image Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: eval-output
-          path: ./
       
       - name: Display structure of downloaded files
         run: ls -R
