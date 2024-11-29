@@ -1,21 +1,14 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from pathlib import Path
-from typing import Optional, Tuple
 
 import pytest
 import torch
 
 from chronos import BaseChronosPipeline, ChronosBoltPipeline
 from chronos.chronos_bolt import InstanceNorm, Patch
-
-
-def validate_tensor(
-    a: torch.Tensor, shape: Tuple[int, ...], dtype: Optional[torch.dtype] = None
-) -> None:
-    assert isinstance(a, torch.Tensor)
-    assert a.shape == shape
-
-    if dtype is not None:
-        assert a.dtype == dtype
+from test.util import validate_tensor
 
 
 def test_base_chronos_pipeline_loads_from_huggingface():

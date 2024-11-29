@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
-from typing import Optional, Tuple
 
 import pytest
 import torch
@@ -13,6 +12,7 @@ from chronos import (
     ChronosPipeline,
     MeanScaleUniformBins,
 )
+from test.util import validate_tensor
 
 
 def test_base_chronos_pipeline_loads_from_huggingface():
@@ -164,16 +164,6 @@ def test_tokenizer_random_data(use_eos_token: bool):
     samples = tokenizer.output_transform(sample_ids, scale)
 
     assert samples.shape == (2, 10, 4)
-
-
-def validate_tensor(
-    a: torch.Tensor, shape: Tuple[int, ...], dtype: Optional[torch.dtype] = None
-) -> None:
-    assert isinstance(a, torch.Tensor)
-    assert a.shape == shape
-
-    if dtype is not None:
-        assert a.dtype == dtype
 
 
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
