@@ -1,16 +1,14 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from pathlib import Path
-from typing import Tuple
 
 import pytest
 import torch
 
 from chronos import BaseChronosPipeline, ChronosBoltPipeline
 from chronos.chronos_bolt import InstanceNorm, Patch
-
-
-def validate_tensor(input: torch.Tensor, shape: Tuple[int, ...]) -> None:
-    assert isinstance(input, torch.Tensor)
-    assert input.shape == shape
+from test.util import validate_tensor
 
 
 def test_base_chronos_pipeline_loads_from_huggingface():
@@ -18,19 +16,21 @@ def test_base_chronos_pipeline_loads_from_huggingface():
 
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
-def test_pipeline_predict(torch_dtype: str):
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
+def test_pipeline_predict(torch_dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = ChronosBoltPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-bolt-model",
         device_map="cpu",
         torch_dtype=torch_dtype,
     )
     context = 10 * torch.rand(size=(4, 16)) + 10
+    context = context.to(dtype=input_dtype)
     expected_num_quantiles = len(pipeline.quantiles)
 
     # input: tensor of shape (batch_size, context_length)
 
     quantiles = pipeline.predict(context, prediction_length=3)
-    validate_tensor(quantiles, (4, expected_num_quantiles, 3))
+    validate_tensor(quantiles, (4, expected_num_quantiles, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         quantiles = pipeline.predict(
@@ -43,7 +43,7 @@ def test_pipeline_predict(torch_dtype: str):
     # input: batch_size-long list of tensors of shape (context_length,)
 
     quantiles = pipeline.predict(list(context), prediction_length=3)
-    validate_tensor(quantiles, (4, expected_num_quantiles, 3))
+    validate_tensor(quantiles, (4, expected_num_quantiles, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         quantiles = pipeline.predict(
@@ -53,12 +53,12 @@ def test_pipeline_predict(torch_dtype: str):
         )
 
     quantiles = pipeline.predict(list(context), prediction_length=65)
-    validate_tensor(quantiles, (4, expected_num_quantiles, 65))
+    validate_tensor(quantiles, (4, expected_num_quantiles, 65), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
 
     quantiles = pipeline.predict(context[0, ...], prediction_length=3)
-    validate_tensor(quantiles, (1, expected_num_quantiles, 3))
+    validate_tensor(quantiles, (1, expected_num_quantiles, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
         quantiles = pipeline.predict(
@@ -71,16 +71,20 @@ def test_pipeline_predict(torch_dtype: str):
         context[0, ...],
         prediction_length=65,
     )
-    validate_tensor(quantiles, (1, expected_num_quantiles, 65))
+    validate_tensor(quantiles, (1, expected_num_quantiles, 65), dtype=torch.float32)
 
 
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 @pytest.mark.parametrize("prediction_length", [3, 65])
 @pytest.mark.parametrize(
     "quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]]
 )
 def test_pipeline_predict_quantiles(
-    torch_dtype: str, prediction_length: int, quantile_levels: list[int]
+    torch_dtype: torch.dtype,
+    input_dtype: torch.dtype,
+    prediction_length: int,
+    quantile_levels: list[int],
 ):
     pipeline = ChronosBoltPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos-bolt-model",
@@ -88,6 +92,7 @@ def test_pipeline_predict_quantiles(
         torch_dtype=torch_dtype,
     )
     context = 10 * torch.rand(size=(4, 16)) + 10
+    context = context.to(dtype=input_dtype)
 
     num_expected_quantiles = len(quantile_levels)
     # input: tensor of shape (batch_size, context_length)
@@ -97,8 +102,10 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (4, prediction_length))
+    validate_tensor(
+        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
@@ -107,8 +114,10 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (4, prediction_length))
+    validate_tensor(
+        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
 
@@ -117,8 +126,10 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(quantiles, (1, prediction_length, num_expected_quantiles))
-    validate_tensor(mean, (1, prediction_length))
+    validate_tensor(
+        quantiles, (1, prediction_length, num_expected_quantiles), dtype=torch.float32
+    )
+    validate_tensor(mean, (1, prediction_length), dtype=torch.float32)
 
 
 # The following tests have been taken from
