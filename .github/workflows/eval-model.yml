@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-       - name: Test
+      - name: Test
         env:
           TEST_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_SECRET: ${{ secrets.PR_COMMENT_TOKEN }}
