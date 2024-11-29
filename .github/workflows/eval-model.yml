@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Debug Token Partially
         run: |
-          echo "Token starts with: ${${{ secrets.PR_COMMENT_TOKEN }}:0:4}****"
+          echo "Token starts with: $(echo ${{ secrets.PR_COMMENT_TOKEN }} | head -c 4)****"
       - name: Checkout Repository
         uses: actions/checkout@v4
 
