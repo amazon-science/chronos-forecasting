@@ -7,7 +7,7 @@ on:
 
 jobs:
   generate-and-post:
-    if: contains(github.event.label.name, 'run-eval')  # Only run if 'run-eval' label is added
+    if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
 
     steps:
