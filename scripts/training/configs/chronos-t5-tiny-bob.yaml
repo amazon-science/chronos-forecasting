@@ -1,0 +1,46 @@
+# Data paths and mixing probabilities
+training_data_paths:
+"/content/data/elec_hourly/data.json"
+"/content/data/elec_hourly/data.json"
+probability:
+0.9
+0.1
+
+# Model configuration - T5-tiny for T4 GPU
+model_id: "google/t5-efficient-tiny"
+model_type: "seq2seq"
+
+# Training parameters - reduced for T4 GPU
+max_steps: 50000
+save_steps: 5000
+log_steps: 100
+per_device_train_batch_size: 8  # Reduced from 16 for T4
+learning_rate: 1e-3
+gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 32
+
+# Data processing parameters - adjusted for memory
+context_length: 256  # Reduced from 512 for T4
+prediction_length: 64
+min_past: 64
+shuffle_buffer_length: 100
+dataloader_num_workers: 2  # Reduced for Colab
+max_missing_prop: 0.9
+
+# Rest of the config remains same
+tokenizer_class: "MeanScaleUniformBins"
+tokenizer_kwargs: "{'low_limit': -15.0, 'high_limit': 15.0}"
+n_tokens: 4096
+n_special_tokens: 2
+pad_token_id: 0
+eos_token_id: 1
+use_eos_token: true
+
+num_samples: 20
+temperature: 1.0
+top_k: 50
+top_p: 1.0
+
+tf32: true
+torch_compile: true
+
+output_dir: "./chronos_output/"
