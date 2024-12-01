@@ -1,0 +1,24 @@
+# Post evaluation results from the "Evaluate" workflow as a PR comment
+name: Post Eval Metrics
+
+on:
+  workflow_run:
+    workflows: ["Evaluate"]
+    types:
+      - completed
+
+jobs:
+  comment-eval-results:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Download Eval Metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-metrics
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+      - name: Display structure of downloaded files
+        run: ls -R

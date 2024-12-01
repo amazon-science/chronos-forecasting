@@ -25,24 +25,32 @@ jobs:
       - name: Run Eval Script
         run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-tiny --device=cpu --torch-dtype=float32
       
-      - name: Read CSV
-        id: csv
-        uses: juliangruber/read-file-action@v1
+      - name: Upload CSV
+        uses: actions/upload-artifact@v4
         with:
+          name: eval-metrics
           path: eval-ci-metrics.csv
+          retention-days: 1
+          overwrite: true
 
-      - name: Create Markdown Table
-        uses: petems/csv-to-md-table-action@master
-        id: csv-table-output
-        with:
-          csvinput: ${{ steps.csv.outputs.content }}
+      # - name: Read CSV
+      #   id: csv
+      #   uses: juliangruber/read-file-action@v1
+      #   with:
+      #     path: eval-ci-metrics.csv
 
-      - name: Post Table as a Comment
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ### Evaluation Metrics
-            ${{steps.csv-table-output.outputs.markdown-table}}
+      # - name: Create Markdown Table
+      #   uses: petems/csv-to-md-table-action@master
+      #   id: csv-table-output
+      #   with:
+      #     csvinput: ${{ steps.csv.outputs.content }}
+
+      # - name: Post Table as a Comment
+      #   uses: peter-evans/create-or-update-comment@v4
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     repository: ${{ github.repository }}
+      #     issue-number: ${{ github.event.pull_request.number }}
+      #     body: |
+      #       ### Evaluation Metrics
+      #       ${{steps.csv-table-output.outputs.markdown-table}}
