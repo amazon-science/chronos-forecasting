@@ -21,7 +21,7 @@ jobs:
           name: eval-metrics
           path: eval-metrics-artifact/
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.run_id }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Display structure of downloaded files
         run: ls -R
