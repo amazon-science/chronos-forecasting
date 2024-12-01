@@ -23,7 +23,7 @@ jobs:
         run: pip install ".[evaluation]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script
-        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-tiny --device=cpu --torch-dtype=float32
+        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
       
       - name: Upload CSV
         uses: actions/upload-artifact@v4
