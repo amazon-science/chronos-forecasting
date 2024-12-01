@@ -2,6 +2,7 @@
 name: Post Eval Metrics
 
 on:
+  # Runs with read & write privilages for the GITHUB_TOKEN
   workflow_run:
     workflows: ["Evaluate"]
     types:
@@ -18,7 +19,31 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: eval-metrics
+          path: eval-metrics-artifact/
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.run_id }}
+
       - name: Display structure of downloaded files
         run: ls -R
+
+      - name: Read CSV
+        id: csv
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: eval-metrics-artifact/eval-ci-metrics.csv
+
+      - name: Create Markdown Table
+        uses: petems/csv-to-md-table-action@master
+        id: csv-table-output
+        with:
+          csvinput: ${{ steps.csv.outputs.content }}
+
+      - name: Post Table as a Comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ### Evaluation Metrics
+            ${{steps.csv-table-output.outputs.markdown-table}}
