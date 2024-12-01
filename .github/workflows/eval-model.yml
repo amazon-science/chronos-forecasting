@@ -33,6 +33,15 @@ jobs:
           retention-days: 1
           overwrite: true
 
+      - name: Download Eval Metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-metrics
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.run_id }}
+      - name: Display structure of downloaded files
+        run: ls -R
+          
       # - name: Read CSV
       #   id: csv
       #   uses: juliangruber/read-file-action@v1
