@@ -29,12 +29,19 @@ jobs:
 
       - name: Display structure of downloaded files
         run: ls -R
+      
+      - name: Extract PR number from file name
+        id: extract-pr
+        run: |
+          FILE_NAME=$(ls eval-metrics-artifact/eval-ci-metrics-*.csv)
+          PR_NUMBER=$(echo $FILE_NAME | sed -E 's/.*eval-ci-metrics-(.*).csv/\1/')
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
 
       - name: Read CSV
         id: csv
         uses: juliangruber/read-file-action@v1
         with:
-          path: eval-metrics-artifact/eval-ci-metrics.csv
+          path: eval-metrics-artifact/eval-ci-metrics-${{ env.PR_NUMBER }}.csv
 
       - name: Create Markdown Table
         uses: petems/csv-to-md-table-action@master
@@ -47,7 +54,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          issue-number: ${{ github.event.pull_request.number }}
+          issue-number: ${{ env.PR_NUMBER }}
           body: |
             ### Evaluation Metrics
             ${{steps.csv-table-output.outputs.markdown-table}}
