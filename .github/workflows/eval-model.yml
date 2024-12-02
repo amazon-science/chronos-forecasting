@@ -5,11 +5,18 @@ on:
   # Runs only with read privilages for the GITHUB_TOKEN
   pull_request:
     branches: ["main"] # Run on PRs to main branch
+    types:
+      - opened      # When a PR is created
+      - reopened    # When a closed PR is reopened
+      - synchronize # When new commits are pushed to the PR
+      - labeled     # When a label is added to the PR
 
 jobs:
   evaluate-and-post:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
+    env:
+      RESULTS_CSV: "eval-ci-metrics-${{ github.event.pull_request.number }}.csv"
 
     steps:
       - name: Checkout Repository
@@ -24,12 +31,12 @@ jobs:
         run: pip install ".[evaluation]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script
-        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml eval-ci-metrics.csv --chronos-model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
+        run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml $RESULTS_CSV --chronos-model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
       
       - name: Upload CSV
         uses: actions/upload-artifact@v4
         with:
           name: eval-metrics
-          path: eval-ci-metrics.csv
+          path: ${{ env.RESULTS_CSV }}
           retention-days: 1
           overwrite: true
