@@ -5,6 +5,11 @@ on:
   # Runs only with read privilages for the GITHUB_TOKEN
   pull_request:
     branches: ["main"] # Run on PRs to main branch
+    types:
+      - opened      # When a PR is created
+      - reopened    # When a closed PR is reopened
+      - synchronize # When new commits are pushed to the PR
+      - labeled     # When a label is added to the PR
 
 jobs:
   evaluate-and-post:
