@@ -17,4 +17,4 @@ def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
             size=(max_len - len(c),), fill_value=torch.nan, device=c.device
         )
         padded.append(torch.concat((padding, c), dim=-1))
-    return torch.stack(padded).to(tensors[0])
+    return torch.stack(padded)
