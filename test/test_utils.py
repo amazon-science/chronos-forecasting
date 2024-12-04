@@ -14,4 +14,5 @@ def test_pad_and_stack(tensors: list):
 
     ref = torch.concat(tensors).to(dtype=stacked_and_padded.dtype)
 
+    assert torch.sum(stacked_and_padded) == torch.sum(ref)
     assert torch.nanmean(stacked_and_padded) == torch.nanmean(ref)
