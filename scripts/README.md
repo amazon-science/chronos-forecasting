@@ -4,7 +4,7 @@
 
 - Install this package with with the `training` extra:
     ```
-    pip install "chronos[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Run `kernel-synth.py`:
     ```sh
@@ -21,7 +21,7 @@
 ## Pretraining (and fine-tuning) Chronos models
 - Install this package with with the `training` extra:
     ```
-    pip install "chronos[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Convert your time series dataset into a GluonTS-compatible file dataset. We recommend using the arrow format. You may use the `convert_to_arrow` function from the following snippet for that. Optionally, you may use [synthetic data from KernelSynth](#generating-synthetic-time-series-kernelsynth) to follow along.
     ```py
@@ -113,7 +113,7 @@ Follow these steps to compute the WQL and MASE values for the in-domain and zero
 
 - Install this package with with the `evaluation` extra:
     ```
-    pip install "chronos[evaluation] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[evaluation] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Run the evaluation script:
     ```sh
