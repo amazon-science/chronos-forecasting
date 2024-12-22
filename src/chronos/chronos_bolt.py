@@ -241,7 +241,9 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
 
     def encode(
         self, context: torch.Tensor, mask: Optional[torch.Tensor] = None
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor]:
+    ) -> Tuple[
+        torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor
+    ]:
         mask = (
             mask.to(context.dtype)
             if mask is not None
@@ -469,7 +471,10 @@ class ChronosBoltPipeline(BaseChronosPipeline):
             dtype=torch.float32,
         )
         embeddings, loc_scale, *_ = self.model.encode(context=context_tensor)
-        return embeddings.cpu(), (loc_scale[0].cpu(), loc_scale[1].cpu())
+        return embeddings.cpu(), (
+            loc_scale[0].squeeze(-1).cpu(),
+            loc_scale[1].squeeze(-1).cpu(),
+        )
 
     def predict(  # type: ignore[override]
         self,
