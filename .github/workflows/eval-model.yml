@@ -12,7 +12,7 @@ on:
       - labeled     # When a label is added to the PR
 
 jobs:
-  evaluate-and-post:
+  evaluate-and-print:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
     runs-on: ubuntu-latest
     env:
@@ -33,10 +33,5 @@ jobs:
       - name: Run Eval Script
         run: python scripts/evaluation/evaluate.py ci/evaluate/backtest_config.yaml $RESULTS_CSV --chronos-model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
       
-      - name: Upload CSV
-        uses: actions/upload-artifact@v4
-        with:
-          name: eval-metrics
-          path: ${{ env.RESULTS_CSV }}
-          retention-days: 1
-          overwrite: true
+      - name: Print CSV
+        run: cat $RESULTS_CSV
