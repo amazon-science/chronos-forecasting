@@ -25,7 +25,6 @@ from transformers.utils import ModelOutput
 
 from .base import BaseChronosPipeline, ForecastType
 
-
 logger = logging.getLogger(__file__)
 
 
@@ -240,13 +239,9 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
             ):
                 module.output_layer.bias.data.zero_()
 
-    def forward(
-        self,
-        context: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        target: Optional[torch.Tensor] = None,
-        target_mask: Optional[torch.Tensor] = None,
-    ) -> ChronosBoltOutput:
+    def encode(
+        self, context: torch.Tensor, mask: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor]:
         mask = (
             mask.to(context.dtype)
             if mask is not None
@@ -301,8 +296,21 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
             attention_mask=attention_mask,
             inputs_embeds=input_embeds,
         )
-        hidden_states = encoder_outputs[0]
 
+        return encoder_outputs[0], loc_scale, input_embeds, attention_mask
+
+    def forward(
+        self,
+        context: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        target: Optional[torch.Tensor] = None,
+        target_mask: Optional[torch.Tensor] = None,
+    ) -> ChronosBoltOutput:
+        batch_size = context.size(0)
+
+        hidden_states, loc_scale, input_embeds, attention_mask = self.encode(
+            context=context, mask=mask
+        )
         sequence_output = self.decode(input_embeds, attention_mask, hidden_states)
 
         quantile_preds_shape = (
@@ -425,6 +433,43 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     @property
     def quantiles(self) -> List[float]:
         return self.model.config.chronos_config["quantiles"]
+
+    @torch.no_grad()
+    def embed(
+        self, context: Union[torch.Tensor, List[torch.Tensor]]
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Get encoder embeddings for the given time series.
+
+        Parameters
+        ----------
+        context
+            Input series. This is either a 1D tensor, or a list
+            of 1D tensors, or a 2D tensor whose first dimension
+            is batch. In the latter case, use left-padding with
+            ``torch.nan`` to align series of different lengths.
+
+        Returns
+        -------
+        embeddings, loc_scale
+            A tuple of two items: the encoder embeddings and the loc_scale,
+            i.e., the mean and std of the original time series.
+            The encoder embeddings are shaped (batch_size, num_patches + 1, d_model),
+            where num_patches is the number of patches in the time series
+            and the extra 1 is for the [REG] token (if used by the model).
+        """
+        context_tensor = self._prepare_and_validate_context(context=context)
+        model_context_length = self.model.config.chronos_config["context_length"]
+
+        if context_tensor.shape[-1] > model_context_length:
+            context_tensor = context_tensor[..., -model_context_length:]
+
+        context_tensor = context_tensor.to(
+            device=self.model.device,
+            dtype=torch.float32,
+        )
+        embeddings, loc_scale, *_ = self.model.encode(context=context_tensor)
+        return embeddings.cpu(), (loc_scale[0].cpu(), loc_scale[1].cpu())
 
     def predict(  # type: ignore[override]
         self,
