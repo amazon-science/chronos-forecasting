@@ -42,3 +42,14 @@ Paper = "https://arxiv.org/abs/2403.07815"
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "autogluon>=1.2",
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.9.4",
+    "pandas>=2.2.3",
+    "pillow>=11.0.0",
+    "pip>=24.3.1",
+    "webdataset>=0.2.100",
+]
