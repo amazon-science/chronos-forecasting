@@ -753,6 +753,7 @@ dependencies = [
     { name = "accelerate" },
     { name = "torch" },
     { name = "transformers" },
+    { name = "typer-config" },
 ]
 
 [package.optional-dependencies]
@@ -811,6 +812,7 @@ requires-dist = [
     { name = "transformers", specifier = ">=4.30,<4.48" },
     { name = "typer", marker = "extra == 'evaluation'" },
     { name = "typer", marker = "extra == 'training'" },
+    { name = "typer-config", specifier = ">=1.4.2" },
     { name = "typer-config", marker = "extra == 'training'" },
 ]
 

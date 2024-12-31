@@ -11,9 +11,10 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = [
-    "torch>=2.0,<2.6",         # package was tested on 2.2
+    "torch>=2.0,<2.6", # package was tested on 2.2
     "transformers>=4.30,<4.48",
     "accelerate>=0.32,<1",
+    "typer-config>=1.4.2",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
