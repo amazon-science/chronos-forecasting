@@ -47,10 +47,13 @@ ignore_missing_imports = true
 [dependency-groups]
 dev = [
     "autogluon>=1.2",
+    "clearml>=1.17.0",
+    "fastparquet>=2024.11.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.9.4",
     "pandas>=2.2.3",
     "pillow>=11.0.0",
     "pip>=24.3.1",
+    "ruff>=0.8.5",
     "webdataset>=0.2.100",
 ]
