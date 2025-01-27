@@ -1,9 +1,9 @@
 training_data_paths:
-- "/home/ubuntu/tsmixup-data.arrow"
-- "/home/ubuntu/kernelsynth-data.arrow"
+- "preprocessing_training_data/zero_shot_datasets_train_val/dominick.arrow"
+
 probability:
-- 0.9
-- 0.1
+- 1.0
+
 context_length: 512
 prediction_length: 64
 min_past: 60
