@@ -88,7 +88,7 @@ class InstanceNorm(nn.Module):
             scale = torch.nan_to_num(
                 torch.nanmean((x - loc).square(), dim=-1, keepdim=True).sqrt(), nan=1.0
             )
-            scale = torch.where(scale == 0, torch.abs(loc) + self.eps, scale)
+            scale = torch.where(scale == 0, self.eps, scale)
         else:
             loc, scale = loc_scale
 
