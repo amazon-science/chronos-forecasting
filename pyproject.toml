@@ -1,6 +1,6 @@
 [project]
 name = "chronos-forecasting"
-version = "1.5.0"
+version = "1.5.1"
 authors = [
   { name="Abdul Fatir Ansari", email="ansarnd@amazon.com" },
   { name="Lorenzo Stella", email="stellalo@amazon.com" },
