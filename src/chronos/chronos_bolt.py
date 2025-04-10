@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig
+from transformers import AutoConfig, PreTrainedModel
 from transformers.models.t5.modeling_t5 import (
     ACT2FN,
     T5Config,
@@ -136,12 +136,12 @@ class ResidualBlock(nn.Module):
 
 
 class ChronosBoltModelForForecasting(T5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
+    _keys_to_ignore_on_load_missing = [  # type: ignore
         r"input_patch_embedding\.",
         r"output_patch_embedding\.",
     ]
-    _keys_to_ignore_on_load_unexpected = [r"lm_head.weight"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"lm_head.weight"]  # type: ignore
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]  # type: ignore
 
     def __init__(self, config: T5Config):
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
@@ -358,7 +358,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
                     (target - quantile_preds)
                     * (
                         (target <= quantile_preds).float()
-                        - self.quantiles.view(1, self.num_quantiles, 1)
+                        - self.quantiles.view(1, self.num_quantiles, 1)  # type: ignore
                     )
                 )
                 * target_mask.float()
@@ -429,6 +429,7 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     default_context_length: int = 2048
 
     def __init__(self, model: ChronosBoltModelForForecasting):
+        assert isinstance(model, PreTrainedModel)
         super().__init__(inner_model=model)
         self.model = model
 
