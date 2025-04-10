@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig, PreTrainedModel
+from transformers import AutoConfig
 from transformers.models.t5.modeling_t5 import (
     ACT2FN,
     T5Config,
@@ -429,8 +429,7 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     default_context_length: int = 2048
 
     def __init__(self, model: ChronosBoltModelForForecasting):
-        assert isinstance(model, PreTrainedModel)
-        super().__init__(inner_model=model)
+        super().__init__(inner_model=model)  # type: ignore
         self.model = model
 
     @property
