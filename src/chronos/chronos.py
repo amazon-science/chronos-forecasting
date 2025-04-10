@@ -305,6 +305,8 @@ class ChronosModel(nn.Module):
         assert (
             self.config.model_type == "seq2seq"
         ), "Encoder embeddings are only supported for encoder-decoder models"
+        assert hasattr(self.model, "encoder")
+
         return self.model.encoder(
             input_ids=input_ids, attention_mask=attention_mask
         ).last_hidden_state
@@ -343,6 +345,8 @@ class ChronosModel(nn.Module):
             top_k = self.config.top_k
         if top_p is None:
             top_p = self.config.top_p
+
+        assert hasattr(self.model, "generate")
 
         preds = self.model.generate(
             input_ids=input_ids,
