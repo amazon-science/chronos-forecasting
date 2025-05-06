@@ -13,7 +13,7 @@ requires-python = ">=3.9"
 dependencies = [
     "torch>=2.0,<3",         # package was tested on 2.2
     "transformers>=4.48,<5",
-    "accelerate>=0.32,<1",
+    "accelerate>=0.32,<2",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
