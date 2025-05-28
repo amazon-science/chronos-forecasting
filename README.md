@@ -12,7 +12,7 @@
 
 ## 📝 Citation
 
-If you find Chronos models useful for your research, please consider citing the associated [paper](https://arxiv.org/abs/2403.07815):
+If you find the code useful for your research, please consider citing the associated [paper](https://arxiv.org/abs/2412.05244):
 
 ```
 @InProceedings{masserano2024enhancing,
