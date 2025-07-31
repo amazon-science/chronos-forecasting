@@ -120,7 +120,7 @@ Follow these steps to compute the WQL and MASE values for the in-domain and zero
     # In-domain evaluation
     # Results will be saved in: evaluation/results/chronos-t5-small-in-domain.csv
     python evaluation/evaluate.py evaluation/configs/in-domain.yaml evaluation/results/chronos-t5-small-in-domain.csv \
-        --chronos-model-id "amazon/chronos-t5-small" \
+        --chronos-model-id "amazon/chronos-t5-small"\
         --batch-size=32 \
         --device=cuda:0 \
         --num-samples 20

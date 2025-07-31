@@ -1,20 +1,18 @@
 training_data_paths:
-- "/home/ubuntu/tsmixup-data.arrow"
-- "/home/ubuntu/kernelsynth-data.arrow"
+- "/home/shane/projects/chronos-forecasting/scripts/kernelsynth-data.arrow"
 probability:
-- 0.9
-- 0.1
+- 1.0
 context_length: 512
 prediction_length: 64
 min_past: 60
-max_steps: 200_000
-save_steps: 100_000
-log_steps: 500
-per_device_train_batch_size: 32
-learning_rate: 0.001
+max_steps: 100
+save_steps: 50
+log_steps: 10
+per_device_train_batch_size: 8
+learning_rate: 0.002
 optim: adamw_torch_fused
 num_samples: 20
-shuffle_buffer_length: 100_000
+shuffle_buffer_length: 10
 gradient_accumulation_steps: 1
 model_id: google/t5-efficient-small
 model_type: seq2seq
@@ -22,7 +20,7 @@ random_init: true
 tie_embeddings: true
 output_dir: ./output/
 tf32: true
-torch_compile: true
+torch_compile: false
 tokenizer_class: "MeanScaleUniformBins"
 tokenizer_kwargs:
   low_limit: -15.0
