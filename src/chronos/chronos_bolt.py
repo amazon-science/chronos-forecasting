@@ -363,7 +363,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
                 )
                 * target_mask.float()
             )
-            loss = loss.mean(dim=-2)  # Mean over prediction horizon
+            loss = loss.mean(dim=-1)  # Mean over prediction horizon
             loss = loss.sum(dim=-1)  # Sum over quantile levels
             loss = loss.mean()  # Mean over batch
 
