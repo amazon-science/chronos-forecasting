@@ -26,11 +26,11 @@ build-backend = "hatchling.build"
 packages = ["src/chronos"]
 
 [project.optional-dependencies]
-test = ["pytest~=8.0", "numpy~=2.0"]
+test = ["pytest~=8.0", "numpy>=1.21,<3"]
 typecheck = ["mypy~=1.9"]
 training = [
   "gluonts[pro]~=0.15",
-  "numpy~=2.0",
+  "numpy>=1.21,<3",
   "datasets~=3.0",
   "typer",
   "typer-config",
@@ -38,7 +38,7 @@ training = [
   "scikit-learn",
   "tensorboard",
 ]
-evaluation = ["gluonts[pro]~=0.15", "numpy~=2.0", "datasets~=3.0", "typer"]
+evaluation = ["gluonts[pro]~=0.15", "numpy>=1.21,<3", "datasets~=3.0", "typer"]
 
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
