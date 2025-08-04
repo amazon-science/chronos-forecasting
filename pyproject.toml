@@ -1,25 +1,21 @@
 [project]
 name = "chronos-forecasting"
-version = "1.5.2"
+version = "1.5.3"
 authors = [
-  { name="Abdul Fatir Ansari", email="ansarnd@amazon.com" },
-  { name="Lorenzo Stella", email="stellalo@amazon.com" },
-  { name="Caner Turkmen", email="atturkm@amazon.com" },
+  { name = "Abdul Fatir Ansari", email = "ansarnd@amazon.com" },
+  { name = "Lorenzo Stella", email = "stellalo@amazon.com" },
+  { name = "Caner Turkmen", email = "atturkm@amazon.com" },
 ]
 description = "Chronos: Pretrained models for time series forecasting"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-dependencies = [
-    "torch>=2.0,<3",         # package was tested on 2.2
-    "transformers>=4.48,<5",
-    "accelerate>=0.32,<2",
-]
+dependencies = ["torch>=2.0,<3", "transformers>=4.48,<5", "accelerate>=0.32,<2"]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 [build-system]
@@ -30,10 +26,19 @@ build-backend = "hatchling.build"
 packages = ["src/chronos"]
 
 [project.optional-dependencies]
-test = ["pytest~=8.0", "numpy~=1.21"]
+test = ["pytest~=8.0", "numpy~=2.0"]
 typecheck = ["mypy~=1.9"]
-training = ["gluonts[pro]~=0.15", "numpy~=1.21", "datasets~=2.18", "typer", "typer-config", "joblib", "scikit-learn", "tensorboard"]
-evaluation = ["gluonts[pro]~=0.15", "numpy~=1.21", "datasets~=2.18", "typer"]
+training = [
+  "gluonts[pro]~=0.15",
+  "numpy~=2.0",
+  "datasets~=3.0",
+  "typer",
+  "typer-config",
+  "joblib",
+  "scikit-learn",
+  "tensorboard",
+]
+evaluation = ["gluonts[pro]~=0.15", "numpy~=2.0", "datasets~=3.0", "typer"]
 
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
@@ -42,3 +47,11 @@ Paper = "https://arxiv.org/abs/2403.07815"
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+lint.ignore = [
+  "E501", # Line too long
+  "E731", # Do not assign a `lambda` expression, use a `def`
+  "E722", # Do not use bare `except`
+]

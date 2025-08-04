@@ -302,9 +302,9 @@ class ChronosModel(nn.Module):
             A tensor of encoder embeddings with shape
             (batch_size, sequence_length, d_model).
         """
-        assert (
-            self.config.model_type == "seq2seq"
-        ), "Encoder embeddings are only supported for encoder-decoder models"
+        assert self.config.model_type == "seq2seq", (
+            "Encoder embeddings are only supported for encoder-decoder models"
+        )
         assert hasattr(self.model, "encoder")
 
         return self.model.encoder(
