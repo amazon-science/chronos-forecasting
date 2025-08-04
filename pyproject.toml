@@ -31,14 +31,19 @@ typecheck = ["mypy~=1.9"]
 training = [
   "gluonts[pro]~=0.15",
   "numpy>=1.21,<3",
-  "datasets~=3.0",
+  "datasets>=2.18,<4",
   "typer",
   "typer-config",
   "joblib",
   "scikit-learn",
   "tensorboard",
 ]
-evaluation = ["gluonts[pro]~=0.15", "numpy>=1.21,<3", "datasets~=3.0", "typer"]
+evaluation = [
+  "gluonts[pro]~=0.15",
+  "numpy>=1.21,<3",
+  "datasets>=2.18,<4",
+  "typer",
+]
 
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
