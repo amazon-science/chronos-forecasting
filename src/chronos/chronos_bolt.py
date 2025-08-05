@@ -179,7 +179,6 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         self._init_decoder(config)
@@ -381,7 +380,6 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
     def _init_decoder(self, config):
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = T5Stack(decoder_config, self.shared)
 
