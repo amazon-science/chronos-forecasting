@@ -1,0 +1,256 @@
+- name: synthetic_datasets/simple_spikes_mult
+  filename: datasets/simple_spikes_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_spikes_add
+  filename: datasets/simple_spikes_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_spikes_mult
+  filename: datasets/diverse_spikes_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_spikes_add
+  filename: datasets/diverse_spikes_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_spikes_mult
+  filename: datasets/noisy_spikes_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_spikes_add
+  filename: datasets/noisy_spikes_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_steps_mult
+  filename: datasets/simple_steps_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_steps_add
+  filename: datasets/simple_steps_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_steps_mult
+  filename: datasets/diverse_steps_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_steps_add
+  filename: datasets/diverse_steps_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_steps_mult
+  filename: datasets/noisy_steps_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_steps_add
+  filename: datasets/noisy_steps_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_bells_mult
+  filename: datasets/simple_bells_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_bells_add
+  filename: datasets/simple_bells_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_bells_mult
+  filename: datasets/diverse_bells_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_bells_add
+  filename: datasets/diverse_bells_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_bells_mult
+  filename: datasets/noisy_bells_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_bells_add
+  filename: datasets/noisy_bells_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_bells_mult
+  filename: datasets/single_bells_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_bells_add
+  filename: datasets/single_bells_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_steps_mult
+  filename: datasets/single_steps_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_steps_add
+  filename: datasets/single_steps_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_spikes_mult
+  filename: datasets/single_spikes_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_spikes_add
+  filename: datasets/single_spikes_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_arp_mult
+  filename: datasets/single_arp_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/single_arp_add
+  filename: datasets/single_arp_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_arp_mult
+  filename: datasets/simple_arp_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/simple_arp_add
+  filename: datasets/simple_arp_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_arp_mult
+  filename: datasets/diverse_arp_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/diverse_arp_add
+  filename: datasets/diverse_arp_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_arp_mult
+  filename: datasets/noisy_arp_mult
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target
+- name: synthetic_datasets/noisy_arp_add
+  filename: datasets/noisy_arp_add
+  offset: -30
+  prediction_length: 30
+  num_rolls: 1
+  covariates_fields:
+  - covariate
+  series_fields: target

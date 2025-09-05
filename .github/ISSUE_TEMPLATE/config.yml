@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Frequently asked questions
-    url: https://github.com/amazon-science/chronos-forecasting/issues?q=is%3Aissue+label%3AFAQ
-    about: Check the frequently asked questions before opening a new one
-  - name: Discussions
-    url: https://github.com/amazon-science/chronos-forecasting/discussions/new
-    about: Use this to ask questions and start discussions

@@ -1,0 +1,196 @@
+- name: ETTh
+  hf_repo: autogluon/chronos_datasets_extra
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["HULL", "MUFL", "MULL", "LUFL", "LULL"]
+  series_fields: "OT"
+- name: ETTm
+  hf_repo: autogluon/chronos_datasets_extra
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["HULL", "MUFL", "MULL", "LUFL", "LULL"]
+  series_fields: "OT"
+- name: epf_electricity_be_paper
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['exogenous1', 'exogenous2']
+  series_fields: "target"
+- name: epf_electricity_de_paper
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['exogenous1', 'exogenous2']
+  series_fields: "target"
+- name: epf_electricity_fr_paper
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['exogenous1', 'exogenous2']
+  series_fields: "target"
+- name: epf_electricity_np_paper
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['exogenous1', 'exogenous2']
+  series_fields: "target"
+- name: epf_electricity_pjm_paper
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['exogenous1', 'exogenous2']
+  series_fields: "target"
+- name: proenfo_bull
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature', 'dewtemperature', 'sealvlpressure']
+  series_fields: "target"
+- name: proenfo_cockatoo
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature', 'dewtemperature', 'sealvlpressure', 'winddirection', 'windspeed']
+  series_fields: "target"
+- name: proenfo_covid19
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['pressure_kpa', 'cloud_cover_perc', 'humidity_perc', 'airtemperature', 'wind_direction_deg', 'wind_speed_kmh']
+  series_fields: "target"
+- name: proenfo_gfc12_load
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature']
+  series_fields: "target"
+- name: proenfo_gfc14_load
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature']
+  series_fields: "target"
+- name: proenfo_gfc17_load
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature']
+  series_fields: "target"
+- name: proenfo_hog
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature', 'dewtemperature', 'sealvlpressure', 'winddirection', 'windspeed']
+  series_fields: "target"
+- name: proenfo_pdb
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ['airtemperature']
+  series_fields: "target"
+- name: proenfo_spain
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: [
+    'generation_biomass', 
+    'generation_fossil_brown_coal_lignite', 
+    'generation_fossil_coal_derived_gas', 
+    'generation_fossil_gas', 
+    'generation_fossil_hard_coal', 
+    'generation_fossil_oil', 
+    'generation_fossil_oil_shale',
+    'generation_fossil_peat',
+    'generation_geothermal',
+    'generation_hydro_pumped_storage_consumption',
+    'generation_hydro_run_of_river_and_poundage',
+    'generation_hydro_water_reservoir',
+    'generation_marine',
+    'generation_nuclear',
+    'generation_other',
+    'generation_other_renewable',
+    'generation_solar',
+    'generation_waste',
+    'generation_wind_offshore',
+    'generation_wind_onshore',
+  ]
+  series_fields: "target"
+- name: monash_rideshare
+  hf_repo: autogluon/chronos_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["price_mean", "distance_mean", "surge_mean", "temp", "rain", "humidity", "clouds", "wind"]
+  series_fields: "api_calls"
+- name: m5_with_covariates
+  hf_repo: autogluon/fev_datasets
+  offset: -28
+  prediction_length: 28
+  num_rolls: 1
+  covariates_fields: [
+    'snap_CA', 
+    'snap_TX', 
+    'snap_WI', 
+    'sell_price', 
+    'event_type_1_Cultural',
+    'event_type_1_National', 
+    'event_type_1_Religious', 
+    'event_type_1_Sporting', 
+    'event_type_1_nan',
+    'event_type_2_Cultural', 
+    'event_type_2_Religious', 
+    'event_type_2_nan',
+   ]
+  series_fields: "target"
+- name: epf_electricity_be
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["Generation forecast", "System load forecast"]
+  series_fields: "target"
+- name: epf_electricity_de
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["Ampirion Load Forecast", "PV+Wind Forecast"]
+  series_fields: "target"
+- name: epf_electricity_fr
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["Generation forecast", "System load forecast"]
+  series_fields: "target"
+- name: epf_electricity_np
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["Grid load forecast", "Wind power forecast"]
+  series_fields: "target"
+- name: epf_electricity_pjm
+  hf_repo: autogluon/fev_datasets
+  offset: -24
+  prediction_length: 24
+  num_rolls: 1
+  covariates_fields: ["System load forecast", "Zonal COMED load foecast"]
+  series_fields: "target"
+
