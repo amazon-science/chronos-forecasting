@@ -76,7 +76,7 @@ def load_and_split_dataset(backtest_config: dict):
 
     else:
         ds = datasets.load_dataset(
-            hf_repo, dataset_name, split="train", trust_remote_code=True
+            hf_repo, dataset_name, split="train", trust_remote_code=True, revision="v0.1.0"
         )
 
     ds.set_format("numpy")
