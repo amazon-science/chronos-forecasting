@@ -1,10 +1,13 @@
 # Usage Examples
 
+> [!NOTE]  
+> The following documentation was originally written for the Chronos models released in Mar 2024 and may be outdated. If something does not work, please open an issue or a pull request.
+
 ## Generating Synthetic Time Series (KernelSynth)
 
-- Install this package with with the `training` extra:
+- Install this package with with the `dev` extra:
     ```
-    pip install "chronos-forecasting[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[dev] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Run `kernel-synth.py`:
     ```sh
@@ -19,9 +22,9 @@
     The generated time series will be saved in a [GluonTS](https://github.com/awslabs/gluonts)-comptabile arrow file `kernelsynth-data.arrow`.
 
 ## Pretraining (and fine-tuning) Chronos models
-- Install this package with with the `training` extra:
+- Install this package with with the `dev` extra:
     ```
-    pip install "chronos-forecasting[training] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[dev] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Convert your time series dataset into a GluonTS-compatible file dataset. We recommend using the arrow format. You may use the `convert_to_arrow` function from the following snippet for that. Optionally, you may use [synthetic data from KernelSynth](#generating-synthetic-time-series-kernelsynth) to follow along.
     ```py
@@ -111,9 +114,9 @@
 
 Follow these steps to compute the WQL and MASE values for the in-domain and zero-shot benchmarks in our paper.
 
-- Install this package with with the `evaluation` extra:
+- Install this package with with the `dev` extra:
     ```
-    pip install "chronos-forecasting[evaluation] @ git+https://github.com/amazon-science/chronos-forecasting.git"
+    pip install "chronos-forecasting[dev] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
 - Run the evaluation script:
     ```sh
