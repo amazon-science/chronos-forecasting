@@ -48,9 +48,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         # for easy access to the inner HF-style model
         self.inner_model = inner_model
 
-    def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ):
+    def _prepare_and_validate_context(self, context: Union[torch.Tensor, List[torch.Tensor]]):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
         assert isinstance(context, torch.Tensor)
@@ -60,19 +58,14 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         return context
 
-    def predict(
-        self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
-        prediction_length: Optional[int] = None,
-        **kwargs,
-    ):
+    def predict(self, inputs: Union[torch.Tensor, List[torch.Tensor]], prediction_length: Optional[int] = None):
         """
         Get forecasts for the given time series. Predictions will be
         returned in fp32 on the cpu.
 
         Parameters
         ----------
-        context
+        inputs
             Input series. This is either a 1D tensor, or a list
             of 1D tensors, or a 2D tensor whose first dimension
             is batch. In the latter case, use left-padding with
@@ -91,7 +84,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
     def predict_quantiles(
         self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
+        inputs: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **kwargs,
@@ -102,7 +95,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         Parameters
         ----------
-        context : Union[torch.Tensor, List[torch.Tensor]]
+        inputs : Union[torch.Tensor, List[torch.Tensor]]
             Input series. This is either a 1D tensor, or a list
             of 1D tensors, or a 2D tensor whose first dimension
             is batch. In the latter case, use left-padding with
@@ -143,21 +136,15 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             kwargs["torch_dtype"] = cls.dtypes[torch_dtype]
 
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(
-            config, "chronos_config"
-        )
+        is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(config, "chronos_config")
 
         if not is_valid_config:
             raise ValueError("Not a Chronos config file")
 
-        pipeline_class_name = getattr(
-            config, "chronos_pipeline_class", "ChronosPipeline"
-        )
+        pipeline_class_name = getattr(config, "chronos_pipeline_class", "ChronosPipeline")
         class_ = PipelineRegistry.REGISTRY.get(pipeline_class_name)
         if class_ is None:
-            raise ValueError(
-                f"Trying to load unknown pipeline class: {pipeline_class_name}"
-            )
+            raise ValueError(f"Trying to load unknown pipeline class: {pipeline_class_name}")
 
         return class_.from_pretrained(  # type: ignore[attr-defined]
             pretrained_model_name_or_path, *model_args, **kwargs

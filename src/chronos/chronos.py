@@ -47,10 +47,9 @@ class ChronosConfig:
     top_p: float
 
     def __post_init__(self):
-        assert (
-            self.pad_token_id < self.n_special_tokens
-            and self.eos_token_id < self.n_special_tokens
-        ), f"Special token id's must be smaller than {self.n_special_tokens=}"
+        assert self.pad_token_id < self.n_special_tokens and self.eos_token_id < self.n_special_tokens, (
+            f"Special token id's must be smaller than {self.n_special_tokens=}"
+        )
 
     def create_tokenizer(self) -> "ChronosTokenizer":
         class_ = getattr(chronos, self.tokenizer_class)
@@ -59,7 +58,7 @@ class ChronosConfig:
 
 class ChronosTokenizer:
     """
-    A ``ChronosTokenizer`` definines how time series are mapped into token IDs
+    A ``ChronosTokenizer`` defines how time series are mapped into token IDs
     and back.
 
     For details, see the ``input_transform`` and ``output_transform`` methods,
@@ -129,9 +128,7 @@ class ChronosTokenizer:
         """
         raise NotImplementedError()
 
-    def output_transform(
-        self, samples: torch.Tensor, tokenizer_state: Any
-    ) -> torch.Tensor:
+    def output_transform(self, samples: torch.Tensor, tokenizer_state: Any) -> torch.Tensor:
         """
         Turn a batch of sample token IDs into real values.
 
@@ -155,9 +152,7 @@ class ChronosTokenizer:
 
 
 class MeanScaleUniformBins(ChronosTokenizer):
-    def __init__(
-        self, low_limit: float, high_limit: float, config: ChronosConfig
-    ) -> None:
+    def __init__(self, low_limit: float, high_limit: float, config: ChronosConfig) -> None:
         self.config = config
         self.centers = torch.linspace(
             low_limit,
@@ -179,9 +174,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
         attention_mask = ~torch.isnan(context)
 
         if scale is None:
-            scale = torch.nansum(
-                torch.abs(context) * attention_mask, dim=-1
-            ) / torch.nansum(attention_mask, dim=-1)
+            scale = torch.nansum(torch.abs(context) * attention_mask, dim=-1) / torch.nansum(attention_mask, dim=-1)
             scale[~(scale > 0)] = 1.0
 
         scaled_context = context / scale.unsqueeze(dim=-1)
@@ -213,9 +206,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
 
         return token_ids, attention_mask
 
-    def context_input_transform(
-        self, context: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def context_input_transform(self, context: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         length = context.shape[-1]
 
         if length > self.config.context_length:
@@ -224,30 +215,22 @@ class MeanScaleUniformBins(ChronosTokenizer):
         token_ids, attention_mask, scale = self._input_transform(context=context)
 
         if self.config.use_eos_token and self.config.model_type == "seq2seq":
-            token_ids, attention_mask = self._append_eos_token(
-                token_ids=token_ids, attention_mask=attention_mask
-            )
+            token_ids, attention_mask = self._append_eos_token(token_ids=token_ids, attention_mask=attention_mask)
 
         return token_ids, attention_mask, scale
 
-    def label_input_transform(
-        self, label: torch.Tensor, scale: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def label_input_transform(self, label: torch.Tensor, scale: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         length = label.shape[-1]
 
         assert length == self.config.prediction_length
         token_ids, attention_mask, _ = self._input_transform(context=label, scale=scale)
 
         if self.config.use_eos_token:
-            token_ids, attention_mask = self._append_eos_token(
-                token_ids=token_ids, attention_mask=attention_mask
-            )
+            token_ids, attention_mask = self._append_eos_token(token_ids=token_ids, attention_mask=attention_mask)
 
         return token_ids, attention_mask
 
-    def output_transform(
-        self, samples: torch.Tensor, scale: torch.Tensor
-    ) -> torch.Tensor:
+    def output_transform(self, samples: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
         scale_unsqueezed = scale.unsqueeze(-1).unsqueeze(-1)
         indices = torch.clamp(
             samples - self.config.n_special_tokens - 1,
@@ -302,16 +285,9 @@ class ChronosModel(nn.Module):
             A tensor of encoder embeddings with shape
             (batch_size, sequence_length, d_model).
         """
-        assert self.config.model_type == "seq2seq", (
-            "Encoder embeddings are only supported for encoder-decoder models"
-        )
-        assert hasattr(self.model, "encoder") and isinstance(
-            self.model.encoder, nn.Module
-        )
-
-        return self.model.encoder(
-            input_ids=input_ids, attention_mask=attention_mask
-        ).last_hidden_state
+        assert self.config.model_type == "seq2seq", "Encoder embeddings are only supported for encoder-decoder models"
+        assert hasattr(self.model, "encoder") and isinstance(self.model.encoder, nn.Module)
+        return self.model.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
 
     def forward(
         self,
@@ -401,9 +377,7 @@ class ChronosPipeline(BaseChronosPipeline):
         self.tokenizer = tokenizer
         self.model = model
 
-    def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ):
+    def _prepare_and_validate_context(self, context: Union[torch.Tensor, List[torch.Tensor]]):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
         assert isinstance(context, torch.Tensor)
@@ -414,9 +388,7 @@ class ChronosPipeline(BaseChronosPipeline):
         return context
 
     @torch.no_grad()
-    def embed(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ) -> Tuple[torch.Tensor, Any]:
+    def embed(self, context: Union[torch.Tensor, List[torch.Tensor]]) -> Tuple[torch.Tensor, Any]:
         """
         Get encoder embeddings for the given time series.
 
@@ -440,18 +412,16 @@ class ChronosPipeline(BaseChronosPipeline):
             provided, and the extra 1 is for EOS.
         """
         context_tensor = self._prepare_and_validate_context(context=context)
-        token_ids, attention_mask, tokenizer_state = (
-            self.tokenizer.context_input_transform(context_tensor)
-        )
+        token_ids, attention_mask, tokenizer_state = self.tokenizer.context_input_transform(context_tensor)
         embeddings = self.model.encode(
             input_ids=token_ids.to(self.model.device),
             attention_mask=attention_mask.to(self.model.device),
         ).cpu()
         return embeddings, tokenizer_state
 
-    def predict(  # type: ignore[override]
+    def predict(
         self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
+        inputs: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
         num_samples: Optional[int] = None,
         temperature: Optional[float] = None,
@@ -491,7 +461,7 @@ class ChronosPipeline(BaseChronosPipeline):
             Tensor of sample forecasts, of shape
             (batch_size, num_samples, prediction_length).
         """
-        context_tensor = self._prepare_and_validate_context(context=context)
+        context_tensor = self._prepare_and_validate_context(context=inputs)
 
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
@@ -510,9 +480,7 @@ class ChronosPipeline(BaseChronosPipeline):
         remaining = prediction_length
 
         while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.context_input_transform(
-                context_tensor
-            )
+            token_ids, attention_mask, scale = self.tokenizer.context_input_transform(context_tensor)
             samples = self.model(
                 token_ids.to(self.model.device),
                 attention_mask.to(self.model.device),
@@ -522,9 +490,7 @@ class ChronosPipeline(BaseChronosPipeline):
                 top_k,
                 top_p,
             )
-            prediction = self.tokenizer.output_transform(
-                samples.to(scale.device), scale
-            )
+            prediction = self.tokenizer.output_transform(samples.to(scale.device), scale)
 
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
@@ -532,15 +498,13 @@ class ChronosPipeline(BaseChronosPipeline):
             if remaining <= 0:
                 break
 
-            context_tensor = torch.cat(
-                [context_tensor, prediction.median(dim=1).values], dim=-1
-            )
+            context_tensor = torch.cat([context_tensor, prediction.median(dim=1).values], dim=-1)
 
         return torch.cat(predictions, dim=-1).to(dtype=torch.float32, device="cpu")
 
     def predict_quantiles(
         self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
+        inputs: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **predict_kwargs,
@@ -549,9 +513,7 @@ class ChronosPipeline(BaseChronosPipeline):
         Refer to the base method (``BaseChronosPipeline.predict_quantiles``).
         """
         prediction_samples = (
-            self.predict(context, prediction_length=prediction_length, **predict_kwargs)
-            .detach()
-            .swapaxes(1, 2)
+            self.predict(inputs, prediction_length=prediction_length, **predict_kwargs).detach().swapaxes(1, 2)
         )
         mean = prediction_samples.mean(dim=-1)
         quantiles = torch.quantile(
