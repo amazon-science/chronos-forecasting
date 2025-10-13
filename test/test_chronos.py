@@ -61,9 +61,7 @@ def test_tokenizer_consistency(n_numerical_tokens: int, n_special_tokens: int):
 @pytest.mark.parametrize("n_numerical_tokens", [5, 10, 27])
 @pytest.mark.parametrize("n_special_tokens", [2, 5, 13])
 @pytest.mark.parametrize("use_eos_token", [False, True])
-def test_tokenizer_fixed_data(
-    n_numerical_tokens: int, n_special_tokens: int, use_eos_token: bool
-):
+def test_tokenizer_fixed_data(n_numerical_tokens: int, n_special_tokens: int, use_eos_token: bool):
     n_tokens = n_numerical_tokens + n_special_tokens
     context_length = 3
 
@@ -183,13 +181,9 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
     validate_tensor(samples, shape=(4, 12, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError):
-        samples = pipeline.predict(
-            context, num_samples=7, prediction_length=65, limit_prediction_length=True
-        )
+        samples = pipeline.predict(context, num_samples=7, prediction_length=65, limit_prediction_length=True)
 
-    samples = pipeline.predict(
-        context, num_samples=7, prediction_length=65, limit_prediction_length=False
-    )
+    samples = pipeline.predict(context, num_samples=7, prediction_length=65, limit_prediction_length=False)
     validate_tensor(samples, shape=(4, 7, 65), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
@@ -237,9 +231,7 @@ def test_pipeline_predict(model_dtype: torch.dtype, input_dtype: torch.dtype):
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 @pytest.mark.parametrize("prediction_length", [3, 65])
-@pytest.mark.parametrize(
-    "quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]]
-)
+@pytest.mark.parametrize("quantile_levels", [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [0.1, 0.5, 0.9]])
 def test_pipeline_predict_quantiles(
     model_dtype: torch.dtype,
     input_dtype: torch.dtype,
@@ -263,9 +255,7 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(
-        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
-    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32)
     validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
@@ -276,9 +266,7 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(
-        quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32
-    )
+    validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32)
     validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
@@ -289,9 +277,7 @@ def test_pipeline_predict_quantiles(
         prediction_length=prediction_length,
         quantile_levels=quantile_levels,
     )
-    validate_tensor(
-        quantiles, (1, prediction_length, num_expected_quantiles), dtype=torch.float32
-    )
+    validate_tensor(quantiles, (1, prediction_length, num_expected_quantiles), dtype=torch.float32)
     validate_tensor(mean, (1, prediction_length), dtype=torch.float32)
 
 
@@ -311,24 +297,18 @@ def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
     # input: tensor of shape (batch_size, context_length)
 
     embedding, scale = pipeline.embed(context)
-    validate_tensor(
-        embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype
-    )
+    validate_tensor(embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype)
     validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
     # input: batch_size-long list of tensors of shape (context_length,)
 
     embedding, scale = pipeline.embed(list(context))
-    validate_tensor(
-        embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype
-    )
+    validate_tensor(embedding, shape=(4, expected_embed_length, d_model), dtype=model_dtype)
     validate_tensor(scale, shape=(4,), dtype=torch.float32)
 
     # input: tensor of shape (context_length,)
     embedding, scale = pipeline.embed(context[0, ...])
-    validate_tensor(
-        embedding, shape=(1, expected_embed_length, d_model), dtype=model_dtype
-    )
+    validate_tensor(embedding, shape=(1, expected_embed_length, d_model), dtype=model_dtype)
     validate_tensor(scale, shape=(1,), dtype=torch.float32)
 
 
@@ -382,7 +362,5 @@ def test_token_clipping(n_tokens):
     tokenizer = config.create_tokenizer()
 
     huge_value = 1e22  # this large value is assigned to the largest bucket
-    token_ids, _, _ = tokenizer._input_transform(
-        context=torch.tensor([[huge_value]]), scale=torch.tensor(([1]))
-    )
+    token_ids, _, _ = tokenizer._input_transform(context=torch.tensor([[huge_value]]), scale=torch.tensor(([1])))
     assert token_ids[0, 0] == config.n_tokens - 1  # and it's clipped to n_tokens - 1
