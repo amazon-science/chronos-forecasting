@@ -840,7 +840,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
         window: "fev.EvaluationWindow",
         quantile_levels: list[float],
         batch_size: int,
-        return_mean_as_point_forecast: bool,
         as_univariate: bool,
         **predict_kwargs,
     ) -> tuple["datasets.DatasetDict", float]:
@@ -863,16 +862,12 @@ class Chronos2Pipeline(BaseChronosPipeline):
             )
             batch_size = num_variates
 
-        model_quantile_levels = list(quantile_levels)
-        if 0.5 not in model_quantile_levels:
-            model_quantile_levels.append(0.5)
-
         start_time = time.monotonic()
 
         quantiles, mean = self.predict_quantiles(
             inputs=inputs,
             prediction_length=window.horizon,
-            quantile_levels=model_quantile_levels,
+            quantile_levels=quantile_levels,
             limit_prediction_length=False,
             batch_size=batch_size,
             **predict_kwargs,
@@ -884,11 +879,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         inference_time_s = time.monotonic() - start_time
 
         multivariate_forecast: dict[str, dict[str, np.ndarray]] = {variate_name: {} for variate_name in target_columns}
-        if return_mean_as_point_forecast:
-            point_forecast = mean_np  # [num_items, n_variates, horizon]
-        else:
-            # use median as the point forecast
-            point_forecast = quantiles_np[..., model_quantile_levels.index(0.5)]  # [num_items, n_variates, horizon]
+        # mean_np is actually the median here
+        point_forecast = mean_np  # [num_items, n_variates, horizon]
 
         for v_idx, variate_name in enumerate(target_columns):
             multivariate_forecast[variate_name]["predictions"] = point_forecast[:, v_idx]
@@ -916,7 +908,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
     def predict_fev(
         self,
         task: "fev.Task",
-        batch_size: int = 32,
+        batch_size: int = 256,
         as_univariate: bool = False,
         finetune_kwargs: dict | None = None,
         **kwargs,
@@ -946,6 +938,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
             Total time that it took to make predictions for all windows (in seconds)
         """
         from chronos.chronos2.dataset import convert_fev_window_to_list_of_dicts_input
+
+        try:
+            import fev
+        except ImportError:
+            raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
 
         pipeline = self
         if finetune_kwargs is not None:
@@ -982,7 +979,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 window,
                 quantile_levels=task.quantile_levels,
                 batch_size=batch_size,
-                return_mean_as_point_forecast=task.eval_metric in ["MSE", "RMSE", "RMSSE"],
                 as_univariate=as_univariate,
                 **kwargs,
             )

@@ -145,7 +145,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             Total time that it took to make predictions for all windows (in seconds).
         """
         import datasets
-        import fev
+
+        try:
+            import fev
+        except ImportError:
+            raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
 
         def batchify(lst: list, batch_size: int = 32):
             """Convert list into batches of desired size."""
