@@ -211,13 +211,21 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         cls,
         pretrained_model_name_or_path: Union[str, Path],
         *model_args,
+        force_s3_download=False,
         **kwargs,
     ):
         """
-        Load the model, either from a local path or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel``
-        from ``transformers``.
+        Load the model, either from a local path, S3 prefix, or from the HuggingFace Hub.
+        Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
+        if str(pretrained_model_name_or_path).startswith("s3://"):
+            from .boto_utils import cache_model_from_s3
+
+            local_model_path = cache_model_from_s3(
+                str(pretrained_model_name_or_path), force_download=force_s3_download
+            )
+            return cls.from_pretrained(local_model_path, *model_args, **kwargs)
+
         from transformers import AutoConfig
 
         torch_dtype = kwargs.get("torch_dtype", "auto")

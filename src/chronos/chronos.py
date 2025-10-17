@@ -525,24 +525,26 @@ class ChronosPipeline(BaseChronosPipeline):
         return quantiles, mean
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         """
-        Load the model, either from a local path or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel``
-        from ``transformers``.
+        Load the model, either from a local path S3 prefix or from the HuggingFace Hub.
+        Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
 
-        config = AutoConfig.from_pretrained(*args, **kwargs)
+        if str(pretrained_model_name_or_path).startswith("s3://"):
+            return BaseChronosPipeline.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
         chronos_config = ChronosConfig(**config.chronos_config)
 
         if chronos_config.model_type == "seq2seq":
-            inner_model = AutoModelForSeq2SeqLM.from_pretrained(*args, **kwargs)
+            inner_model = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         else:
             assert chronos_config.model_type == "causal"
-            inner_model = AutoModelForCausalLM.from_pretrained(*args, **kwargs)
+            inner_model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
         return cls(
             tokenizer=chronos_config.create_tokenizer(),

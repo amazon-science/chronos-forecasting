@@ -988,14 +988,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         return predictions_per_window, inference_time_s
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         """
-        Load the model, either from a local path or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel``
-        from ``transformers``.
+        Load the model, either from a local path, S3 prefix or from the HuggingFace Hub.
+        Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
 
-        config = AutoConfig.from_pretrained(*args, **kwargs)
+        if str(pretrained_model_name_or_path).startswith("s3://"):
+            return BaseChronosPipeline.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
         architecture = config.architectures[0]
@@ -1005,7 +1007,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             logger.warning(f"Unknown architecture: {architecture}, defaulting to Chronos2Model")
             class_ = Chronos2Model
 
-        model = class_.from_pretrained(*args, **kwargs)
+        model = class_.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         return cls(model=model)
 
     def save_pretrained(self, save_directory: str | Path, *args, **kwargs):
