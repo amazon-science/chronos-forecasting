@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Dependencies
-        run: pip install ".[evaluation]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
+        run: pip install ".[dev]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script
         run: python scripts/evaluation/evaluate.py chronos_bolt ci/evaluate/backtest_config.yaml $RESULTS_CSV --chronos-model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
