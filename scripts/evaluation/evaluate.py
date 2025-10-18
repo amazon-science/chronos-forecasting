@@ -248,7 +248,7 @@ def chronos_bolt(
         Path to the evaluation config. See ./configs/.
     metrics_path : Path
         Path to the CSV file where metrics will be saved.
-    model_id : str, optional, default = "amazon/chronos-t5-small"
+    model_id : str, optional, default = "amazon/chronos-bolt-base"
         HuggingFace ID of the Chronos model or local path
         Available model IDs:
             - amazon/chronos-bolt-tiny
@@ -282,7 +282,7 @@ def chronos_bolt(
 
 
 @app.command()
-def chronos2(
+def chronos_2(
     config_path: Path,
     metrics_path: Path,
     model_id: str = "amazon/chronos-2",
@@ -291,7 +291,7 @@ def chronos2(
     batch_size: int = 32,
     predict_batches_jointly: bool = False,
 ):
-    """Evaluate Chronos-Bolt models.
+    """Evaluate Chronos-2 models.
 
     Parameters
     ----------
@@ -299,10 +299,10 @@ def chronos2(
         Path to the evaluation config. See ./configs/.
     metrics_path : Path
         Path to the CSV file where metrics will be saved.
-    model_id : str, optional, default = "amazon/chronos-t5-small"
+    model_id : str, optional, default = "amazon/chronos-2" FIXME
         HuggingFace ID of the Chronos model or local path
         Available model IDs:
-            - amazon/chronos-2
+            - amazon/chronos-2 FIXME
     device : str, optional, default = "cuda"
         Device on which inference will be performed
     torch_dtype : str, optional

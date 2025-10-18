@@ -31,7 +31,7 @@ jobs:
         run: pip install ".[dev]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script
-        run: python scripts/evaluation/evaluate.py chronos_bolt ci/evaluate/backtest_config.yaml $RESULTS_CSV --model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
+        run: python scripts/evaluation/evaluate.py chronos-bolt ci/evaluate/backtest_config.yaml $RESULTS_CSV --model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
       
       - name: Print CSV
         run: cat $RESULTS_CSV
