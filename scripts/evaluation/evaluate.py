@@ -111,7 +111,7 @@ def eval_pipeline_and_save_results(
     pipeline: BaseChronosPipeline,
     config_path: Path,
     metrics_path: Path,
-    chronos_model_id: str,
+    model_id: str,
     batch_size: int,
     **predict_kwargs,
 ):
@@ -150,7 +150,7 @@ def eval_pipeline_and_save_results(
             .reset_index(drop=True)
             .to_dict(orient="records")
         )
-        result_rows.append({"dataset": dataset_name, "model": chronos_model_id, **metrics[0]})
+        result_rows.append({"dataset": dataset_name, "model": model_id, **metrics[0]})
 
     # Save results to a CSV file
     results_df = (
@@ -168,7 +168,7 @@ def eval_pipeline_and_save_results(
 def chronos(
     config_path: Path,
     metrics_path: Path,
-    chronos_model_id: str = "amazon/chronos-t5-small",
+    model_id: str = "amazon/chronos-t5-small",
     device: str = "cuda",
     torch_dtype: str = "bfloat16",
     batch_size: int = 32,
@@ -185,7 +185,7 @@ def chronos(
         Path to the evaluation config. See ./configs/.
     metrics_path : Path
         Path to the CSV file where metrics will be saved.
-    chronos_model_id : str, optional, default = "amazon/chronos-t5-small"
+    model_id : str, optional, default = "amazon/chronos-t5-small"
         HuggingFace ID of the Chronos model or local path
         Available models IDs:
             - amazon/chronos-t5-tiny
@@ -214,7 +214,7 @@ def chronos(
     assert isinstance(torch_dtype, torch.dtype)
 
     # Load Chronos
-    pipeline = BaseChronosPipeline.from_pretrained(chronos_model_id, device_map=device, torch_dtype=torch_dtype)
+    pipeline = BaseChronosPipeline.from_pretrained(model_id, device_map=device, torch_dtype=torch_dtype)
 
     assert isinstance(pipeline, ChronosPipeline)
 
@@ -222,7 +222,7 @@ def chronos(
         pipeline=pipeline,
         config_path=config_path,
         metrics_path=metrics_path,
-        chronos_model_id=chronos_model_id,
+        model_id=model_id,
         batch_size=batch_size,
         num_samples=num_samples,
         temperature=temperature,
@@ -235,7 +235,7 @@ def chronos(
 def chronos_bolt(
     config_path: Path,
     metrics_path: Path,
-    chronos_model_id: str = "amazon/chronos-bolt-base",
+    model_id: str = "amazon/chronos-bolt-base",
     device: str = "cuda",
     torch_dtype: str = "float32",
     batch_size: int = 32,
@@ -248,7 +248,7 @@ def chronos_bolt(
         Path to the evaluation config. See ./configs/.
     metrics_path : Path
         Path to the CSV file where metrics will be saved.
-    chronos_model_id : str, optional, default = "amazon/chronos-t5-small"
+    model_id : str, optional, default = "amazon/chronos-t5-small"
         HuggingFace ID of the Chronos model or local path
         Available model IDs:
             - amazon/chronos-bolt-tiny
@@ -268,7 +268,7 @@ def chronos_bolt(
     assert isinstance(torch_dtype, torch.dtype)
 
     # Load Chronos
-    pipeline = BaseChronosPipeline.from_pretrained(chronos_model_id, device_map=device, torch_dtype=torch_dtype)
+    pipeline = BaseChronosPipeline.from_pretrained(model_id, device_map=device, torch_dtype=torch_dtype)
 
     assert isinstance(pipeline, ChronosBoltPipeline)
 
@@ -276,7 +276,7 @@ def chronos_bolt(
         pipeline=pipeline,
         config_path=config_path,
         metrics_path=metrics_path,
-        chronos_model_id=chronos_model_id,
+        model_id=model_id,
         batch_size=batch_size,
     )
 
@@ -285,7 +285,7 @@ def chronos_bolt(
 def chronos2(
     config_path: Path,
     metrics_path: Path,
-    chronos_model_id: str = "amazon/chronos-2",
+    model_id: str = "amazon/chronos-2",
     device: str = "cuda",
     torch_dtype: str = "float32",
     batch_size: int = 32,
@@ -299,7 +299,7 @@ def chronos2(
         Path to the evaluation config. See ./configs/.
     metrics_path : Path
         Path to the CSV file where metrics will be saved.
-    chronos_model_id : str, optional, default = "amazon/chronos-t5-small"
+    model_id : str, optional, default = "amazon/chronos-t5-small"
         HuggingFace ID of the Chronos model or local path
         Available model IDs:
             - amazon/chronos-2
@@ -319,7 +319,7 @@ def chronos2(
     assert isinstance(torch_dtype, torch.dtype)
 
     # Load Chronos
-    pipeline = BaseChronosPipeline.from_pretrained(chronos_model_id, device_map=device, torch_dtype=torch_dtype)
+    pipeline = BaseChronosPipeline.from_pretrained(model_id, device_map=device, torch_dtype=torch_dtype)
 
     assert isinstance(pipeline, Chronos2Pipeline)
 
@@ -327,7 +327,7 @@ def chronos2(
         pipeline=pipeline,
         config_path=config_path,
         metrics_path=metrics_path,
-        chronos_model_id=chronos_model_id,
+        model_id=model_id,
         batch_size=batch_size,
         predict_batches_jointly=predict_batches_jointly,
     )
