@@ -384,6 +384,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         batch_size: int = 256,
         context_length: int | None = None,
+        predict_batches_jointly: bool = False,
         limit_prediction_length: bool = False,
         **kwargs,
     ) -> list[torch.Tensor]:
@@ -469,6 +470,13 @@ class Chronos2Pipeline(BaseChronosPipeline):
             will be lower than this value, by default 256
         context_length
             The maximum context length used during for inference, by default set to the model's default context length
+        predict_batches_jointly
+            If True, cross-learning is enabled, i.e., all the tasks in `inputs` will be predicted jointly and the model will share information across all inputs, by default False
+            The following must be noted when using cross-learning:
+            - Cross-learning doesn't always improve forecast accuracy and must be tested for individual use cases.
+            - Results become dependent on batch size. Very large batch sizes may not provide benefits as they deviate from the maximum group size used during pretraining.
+            For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
+            - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
         limit_prediction_length
             If True, an error is raised when prediction_length is greater than model's default prediction length, by default False
 
@@ -490,11 +498,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
         # effective batch size increases by a factor of `len(unrolled_quantiles)` when making long-horizon predictions,
         # by default [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
-        # If True, all the tasks in `inputs` will be predicted jointly, i.e., the model will share information across all inputs. This option can
-        # be used to jointly prediction a set of univariate time series which may be helpful in cases when time series have short context. As such,
-        # this option can be view as performing in-context adaptation. Note: Enabling this option when `inputs` contains a mixture of different task
-        # types or contains covariates may lead to unexpected model behavior, by default False
-        predict_batches_jointly = kwargs.pop("predict_batches_jointly", False)
 
         if len(kwargs) > 0:
             raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
