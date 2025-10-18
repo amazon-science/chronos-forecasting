@@ -19,6 +19,8 @@ from chronos import BaseChronosPipeline, Chronos2Pipeline, ChronosBoltPipeline, 
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
+QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
 
 def to_gluonts_univariate(hf_dataset: datasets.Dataset):
     series_fields = [col for col in hf_dataset.features if isinstance(hf_dataset.features[col], datasets.Sequence)]
@@ -79,13 +81,17 @@ def generate_forecasts(
     forecast_outputs = []
     for batch in tqdm(batcher(test_data_input, batch_size=batch_size)):
         context = [torch.tensor(entry["target"]) for entry in batch]
-        forecast_outputs.append(
-            pipeline.predict(
-                context,
-                prediction_length=prediction_length,
-                **predict_kwargs,
-            ).numpy()
+        quantiles, _ = pipeline.predict_quantiles(
+            context,
+            prediction_length=prediction_length,
+            quantile_levels=QUANTILES,
+            **predict_kwargs,
         )
+        if isinstance(quantiles, list):
+            # This is needed for Chronos-2 support which returns a list of tensors
+            preds = np.stack(quantiles).squeeze(axis=1)
+        preds = preds.swapaxes(-1, -2)
+        forecast_outputs.append(preds)
     forecast_outputs = np.concatenate(forecast_outputs)
 
     # Convert forecast samples into gluonts Forecast objects
@@ -99,7 +105,7 @@ def generate_forecasts(
             forecasts.append(
                 QuantileForecast(
                     forecast_arrays=item,
-                    forecast_keys=list(map(str, pipeline.quantiles)),
+                    forecast_keys=list(map(str, QUANTILES)),
                     start_date=forecast_start_date,
                 )
             )
@@ -143,7 +149,7 @@ def eval_pipeline_and_save_results(
                 test_data=test_data,
                 metrics=[
                     MASE(),
-                    MeanWeightedSumQuantileLoss(np.arange(0.1, 1.0, 0.1)),
+                    MeanWeightedSumQuantileLoss(QUANTILES),
                 ],
                 batch_size=5000,
             )
