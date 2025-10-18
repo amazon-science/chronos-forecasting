@@ -89,9 +89,9 @@ def generate_forecasts(
         )
         if isinstance(quantiles, list):
             # This is needed for Chronos-2 support which returns a list of tensors
-            preds = np.stack(quantiles).squeeze(axis=1)
-        preds = preds.swapaxes(-1, -2)
-        forecast_outputs.append(preds)
+            quantiles = np.stack(quantiles).squeeze(axis=1)
+        quantiles = quantiles.swapaxes(-1, -2)
+        forecast_outputs.append(quantiles)
     forecast_outputs = np.concatenate(forecast_outputs)
 
     # Convert forecast samples into gluonts Forecast objects
