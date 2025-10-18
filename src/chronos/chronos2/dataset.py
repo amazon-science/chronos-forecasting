@@ -1,3 +1,8 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
+
 import math
 from enum import Enum
 from typing import TYPE_CHECKING, Iterator, Mapping, Sequence, TypeAlias, cast
