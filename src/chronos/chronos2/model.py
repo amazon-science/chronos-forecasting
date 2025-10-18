@@ -191,7 +191,7 @@ class Chronos2Output(ModelOutput):
 
 
 class Chronos2Model(PreTrainedModel):
-    config_class = Chronos2CoreConfig
+    config_class = Chronos2CoreConfig  # type: ignore[assignment]
     _supports_long_horizon: bool = True
     _supports_future_covariates: bool = True
 

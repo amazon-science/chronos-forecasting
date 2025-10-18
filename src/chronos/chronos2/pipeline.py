@@ -669,7 +669,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return context, future_covariates
 
-    def predict_quantiles(
+    def predict_quantiles(  # type: ignore[override]
         self,
         inputs: TensorOrArray
         | Sequence[TensorOrArray]

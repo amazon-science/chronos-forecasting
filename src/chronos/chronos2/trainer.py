@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, cast
 
-from torch.utils.data import DataLoader
-from transformers import Trainer
+from torch.utils.data import DataLoader, Dataset
+from transformers.trainer import Trainer
 from transformers.trainer_callback import TrainerCallback
 
 if TYPE_CHECKING:
@@ -61,9 +61,9 @@ class Chronos2Trainer(Trainer):
             "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
 
-        return DataLoader(train_dataset, **dataloader_params)
+        return DataLoader(train_dataset, **dataloader_params)  # type: ignore
 
-    def get_eval_dataloader(self, eval_dataset) -> DataLoader:
+    def get_eval_dataloader(self, eval_dataset: str | Dataset | None = None) -> DataLoader:
         if self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
@@ -86,4 +86,4 @@ class Chronos2Trainer(Trainer):
             "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
 
-        return DataLoader(eval_dataset, **dataloader_params)
+        return DataLoader(eval_dataset, **dataloader_params)  # type: ignore

@@ -845,7 +845,7 @@ class Chronos2Dataset(IterableDataset):
             "context": left_pad_and_cat_2D(batch_context_tensor_list),
             "future_target": None
             if self.mode == DatasetMode.TEST
-            else torch.cat(batch_future_target_tensor_list, dim=0),
+            else torch.cat(cast(list[torch.Tensor], batch_future_target_tensor_list), dim=0),
             "future_covariates": torch.cat(batch_future_covariates_tensor_list, dim=0),
             "group_ids": torch.cat(batch_group_ids_list, dim=0),
             "num_output_patches": self.num_output_patches,
