@@ -7,6 +7,7 @@ authors = [
   { name = "Caner Turkmen", email = "atturkm@amazon.com" },
   { name = "Oleksandr Shchur", email = "shchuro@amazon.com" },
   { name = "Jaris Küken", email = "kuekenj@amazon.com" },
+  { name = "Andreas Auer", email = "auerand@amazon.com" },
 ]
 description = "Chronos: Pretrained models for time series forecasting"
 readme = "README.md"
