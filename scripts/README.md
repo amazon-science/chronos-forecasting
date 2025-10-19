@@ -5,7 +5,7 @@
 
 ## Generating Synthetic Time Series (KernelSynth)
 
-- Install this package with with the `dev` extra:
+- Install this package with the `dev` extra:
     ```
     pip install "chronos-forecasting[dev] @ git+https://github.com/amazon-science/chronos-forecasting.git"
     ```
