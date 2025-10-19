@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 import boto3
-import requests
+import requests  # type: ignore
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError, NoCredentialsError
