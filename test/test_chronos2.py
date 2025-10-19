@@ -28,6 +28,10 @@ def pipeline() -> Chronos2Pipeline:
     return BaseChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu")
 
 
+def test_base_chronos2_pipeline_loads_from_s3():
+    BaseChronosPipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cpu")
+
+
 @pytest.mark.parametrize(
     "inputs, prediction_length, expected_output_shapes",
     [
