@@ -9,21 +9,28 @@ import re
 from pathlib import Path
 
 import boto3
+from botocore import UNSIGNED
+from botocore.client import Config
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
 MODEL_FILENAMES = ["config.json", "model.safetensors"]
 
+
 def download_model_files(
     bucket: str,
     prefix: str,
     local_path: Path,
     force_download: bool = False,
-    boto3_session=None,
+    boto3_session: boto3.Session | None = None,
 ) -> None:
-    boto3_session = boto3_session or boto3.Session()
-    s3_client = boto3_session.client("s3")
+    if boto3_session is not None:
+        s3_client = boto3_session.client("s3")
+    else:
+        boto3_session = boto3.Session()
+        # We use UNSIGNED here because we are downloading from a public S3 prefix
+        s3_client = boto3_session.client("s3", config=Config(signature_version=UNSIGNED))
 
     for filename in MODEL_FILENAMES:
         key = f"{prefix.rstrip('/')}/{filename}"
@@ -49,10 +56,16 @@ def download_model_files(
         s3_client.download_file(bucket, key, str(dest))
 
 
-def cache_model_from_s3(s3_uri: str, force_download=False):
+def cache_model_from_s3(
+    s3_uri: str,
+    force_download: bool = False,
+    boto3_session: boto3.Session | None = None,
+):
     assert re.match("^s3://([^/]+)/(.*?([^/]+)/?)$", s3_uri) is not None, f"Not a valid S3 URI: {s3_uri}"
     cache_home = Path(os.environ.get("XGD_CACHE_HOME", os.path.expanduser("~/.cache")))
     cache_dir = cache_home / "chronos-s3"
     bucket, prefix = s3_uri.replace("s3://", "").split("/", 1)
-    download_model_files(bucket=bucket, prefix=prefix, local_path=cache_dir, force_download=force_download)
+    download_model_files(
+        bucket=bucket, prefix=prefix, local_path=cache_dir, force_download=force_download, boto3_session=boto3_session
+    )
     return cache_dir / bucket / prefix
