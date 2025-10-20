@@ -109,6 +109,7 @@ def cache_model_from_s3(
     # Check if S3 URI is in CloudFront mapping
     cloudfront_url = CLOUDFRONT_MAPPING.get(s3_uri)
 
+    # Use CloudFront CDN for faster, cached downloads if available
     if cloudfront_url:
         try:
             download_model_files_from_cloudfront(
