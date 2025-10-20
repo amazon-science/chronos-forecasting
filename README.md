@@ -76,7 +76,7 @@ id_column = "id"  # Column identifying different time series
 timestamp_column = "timestamp"  # Column containing datetime information
 
 # Load historical energy prices and past values of covariates
-context_df = pd.read_parquet("s3://autogluon/datasets/timeseries/electricity_price/train.parquet")
+context_df = pd.read_parquet("https://autogluon.s3.amazonaws.com/datasets/timeseries/electricity_price/train.parquet")
 
 # Load future values of covariates
 test_df = pd.read_parquet("s3://autogluon/datasets/timeseries/electricity_price/test.parquet")
