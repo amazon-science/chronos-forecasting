@@ -35,14 +35,14 @@ def download_model_files_from_cloudfront(
         url = f"{cloudfront_url}/{filename}"
 
         if key not in ALWAYS_DOWNLOAD and not force_download and dest.exists():
-            logger.info(f"skipping (already exists): {key}")
+            logger.debug(f"skipping (already exists): {key}")
             continue
 
         if not dest.parent.exists():
-            logger.info(f"creating directory: {dest.parent}")
+            logger.debug(f"creating directory: {dest.parent}")
             dest.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"downloading from CloudFront: {url} -> {dest}")
+        logger.debug(f"downloading from CloudFront: {url} -> {dest}")
         response = requests.get(url, stream=True)
         response.raise_for_status()
         with open(dest, "wb") as f:
@@ -65,7 +65,7 @@ def download_model_files_from_s3(
         dest = local_path / bucket / key
 
         if key not in ALWAYS_DOWNLOAD and not force_download and dest.exists():
-            logger.info(f"skipping (already exists): {key}")
+            logger.debug(f"skipping (already exists): {key}")
             continue
 
         try:
@@ -83,10 +83,10 @@ def download_model_files_from_s3(
                 raise
 
         if not dest.parent.exists():
-            logger.info(f"creating directory: {dest.parent}")
+            logger.debug(f"creating directory: {dest.parent}")
             dest.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"downloading: s3://{bucket}/{key} -> {dest}")
+        logger.debug(f"downloading: s3://{bucket}/{key} -> {dest}")
         try:
             s3_client.download_file(bucket, key, str(dest))
         except NoCredentialsError:
