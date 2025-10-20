@@ -99,26 +99,14 @@ We can now visualize the forecast:
 ```python
 import matplotlib.pyplot as plt  # requires: pip install matplotlib
 
-timeseries_id = "DE"  # Specific time series to visualize
-history_length = 256  # The number of historical values to plot
+ts_context = context_df.set_index(timestamp_column)[target].tail(256)
+ts_pred = pred_df.set_index(timestamp_column)
+ts_ground_truth = test_df.set_index(timestamp_column)[target]
 
-ts_context = context_df.query(f"{id_column} == @timeseries_id").set_index(timestamp_column)[target]
-ts_pred = pred_df.query(f"{id_column} == @timeseries_id and target_name == @target").set_index(timestamp_column)[
-    ["0.1", "predictions", "0.9"]
-]
-ts_ground_truth = test_df.query(f"{id_column} == @timeseries_id").set_index(timestamp_column)[target]
-
-start_idx = max(0, len(ts_context) - history_length)
-plot_cutoff = ts_context.index[start_idx]
-ts_context = ts_context[ts_context.index >= plot_cutoff]
-ts_ground_truth = ts_ground_truth[ts_ground_truth.index >= plot_cutoff]
-
-fig = plt.figure(figsize=(12, 3))
-ax = fig.gca()
-ts_context.plot(ax=ax, label=f"historical {target}", color="xkcd:azure")
-ts_ground_truth.plot(ax=ax, label=f"future {target} (ground truth)", color="xkcd:grass green")
-ts_pred["predictions"].plot(ax=ax, label="forecast", color="xkcd:violet")
-ax.fill_between(
+ts_context.plot(label="historical data", color="xkcd:azure", figsize=(12, 3))
+ts_ground_truth.plot(label="future data (ground truth)", color="xkcd:grass green")
+ts_pred["predictions"].plot(label="forecast", color="xkcd:violet")
+plt.fill_between(
     ts_pred.index,
     ts_pred["0.1"],
     ts_pred["0.9"],
@@ -126,9 +114,7 @@ ax.fill_between(
     label="prediction interval",
     color="xkcd:light lavender",
 )
-ax.legend(loc="upper left")
-ax.set_title(f"{target} forecast for {timeseries_id}")
-fig.show()
+plt.legend()
 ```
 
 ## Example Notebooks
