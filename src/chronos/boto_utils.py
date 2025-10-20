@@ -102,7 +102,7 @@ def cache_model_from_s3(
 ):
     assert re.match("^s3://([^/]+)/(.*?([^/]+)/?)$", s3_uri) is not None, f"Not a valid S3 URI: {s3_uri}"
     cache_home = Path(os.environ.get("XGD_CACHE_HOME", os.path.expanduser("~/.cache")))
-    cache_dir = cache_home / "chronos-s3"
+    cache_dir = cache_home / "chronos"
     s3_uri = s3_uri.rstrip("/")
     bucket, prefix = s3_uri.replace("s3://", "").split("/", 1)
 
