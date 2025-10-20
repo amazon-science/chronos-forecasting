@@ -79,7 +79,7 @@ timestamp_column = "timestamp"  # Column containing datetime information
 context_df = pd.read_parquet("https://autogluon.s3.amazonaws.com/datasets/timeseries/electricity_price/train.parquet")
 
 # Load future values of covariates
-test_df = pd.read_parquet("s3://autogluon/datasets/timeseries/electricity_price/test.parquet")
+test_df = pd.read_parquet("https://autogluon.s3.amazonaws.com/datasets/timeseries/electricity_price/test.parquet")
 future_df = test_df.drop(columns=target)
 
 # Generate predictions with covariates
