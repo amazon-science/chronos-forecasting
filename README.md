@@ -4,6 +4,8 @@
 
 <div align="center">
 
+🔥 Chronos-2 is coming soon 🔥
+
 # Chronos: Learning the Language of Time Series
 
 [![preprint](https://img.shields.io/static/v1?label=arXiv&message=2403.07815&color=B31B1B&logo=arXiv)](https://arxiv.org/abs/2403.07815)
