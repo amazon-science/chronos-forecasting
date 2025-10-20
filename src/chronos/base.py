@@ -5,13 +5,18 @@
 # Original source:
 # https://github.com/autogluon/autogluon/blob/f57beb26cb769c6e0d484a6af2b89eab8aee73a8/timeseries/src/autogluon/timeseries/models/chronos/pipeline/base.py
 
+
+import time
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 
 if TYPE_CHECKING:
+    import datasets
+    import fev
     from transformers import PreTrainedModel
 
 from .utils import left_pad_and_stack_1D
@@ -48,9 +53,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         # for easy access to the inner HF-style model
         self.inner_model = inner_model
 
-    def _prepare_and_validate_context(
-        self, context: Union[torch.Tensor, List[torch.Tensor]]
-    ):
+    def _prepare_and_validate_context(self, context: Union[torch.Tensor, List[torch.Tensor]]):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)
         assert isinstance(context, torch.Tensor)
@@ -60,19 +63,14 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         return context
 
-    def predict(
-        self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
-        prediction_length: Optional[int] = None,
-        **kwargs,
-    ):
+    def predict(self, inputs: Union[torch.Tensor, List[torch.Tensor]], prediction_length: Optional[int] = None):
         """
         Get forecasts for the given time series. Predictions will be
         returned in fp32 on the cpu.
 
         Parameters
         ----------
-        context
+        inputs
             Input series. This is either a 1D tensor, or a list
             of 1D tensors, or a 2D tensor whose first dimension
             is batch. In the latter case, use left-padding with
@@ -91,7 +89,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
     def predict_quantiles(
         self,
-        context: Union[torch.Tensor, List[torch.Tensor]],
+        inputs: Union[torch.Tensor, List[torch.Tensor]],
         prediction_length: Optional[int] = None,
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **kwargs,
@@ -102,7 +100,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         Parameters
         ----------
-        context : Union[torch.Tensor, List[torch.Tensor]]
+        inputs : Union[torch.Tensor, List[torch.Tensor]]
             Input series. This is either a 1D tensor, or a list
             of 1D tensors, or a 2D tensor whose first dimension
             is batch. In the latter case, use left-padding with
@@ -124,18 +122,110 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         """
         raise NotImplementedError()
 
+    def predict_fev(
+        self, task: "fev.Task", batch_size: int = 32, **kwargs
+    ) -> tuple[list["datasets.DatasetDict"], float]:
+        """
+        Make predictions for evaluation on a fev.Task.
+
+        Parameters
+        ----------
+        task
+            Benchmark task on which the evaluation should be done.
+        batch_size
+            Batch size used during evaluation.
+        **kwargs
+            Additional keyword arguments that will be forwarded to `self.predict_quantiles`.
+
+        Returns
+        -------
+        predictions_per_window
+            Predictions for each window, each stored as a DatasetDict
+        inference_time_s
+            Total time that it took to make predictions for all windows (in seconds).
+        """
+        import datasets
+
+        try:
+            import fev
+        except ImportError:
+            raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
+
+        def batchify(lst: list, batch_size: int = 32):
+            """Convert list into batches of desired size."""
+            for i in range(0, len(lst), batch_size):
+                yield lst[i : i + batch_size]
+
+        quantile_levels = task.quantile_levels.copy()
+        if 0.5 not in quantile_levels:
+            quantile_levels.append(0.5)
+
+        predictions_per_window = []
+        inference_time_s = 0.0
+        for window in task.iter_windows():
+            past_data, _ = fev.convert_input_data(window, adapter="datasets", as_univariate=True)
+            past_data = past_data.with_format("torch").cast_column(
+                "target", datasets.Sequence(datasets.Value("float32"))
+            )
+
+            quantiles_all = []
+            mean_all = []
+
+            start_time = time.monotonic()
+            for batch in batchify(past_data["target"], batch_size=batch_size):
+                quantiles, mean = self.predict_quantiles(
+                    inputs=batch,
+                    prediction_length=task.horizon,
+                    limit_prediction_length=False,
+                    **kwargs,
+                    quantile_levels=quantile_levels,
+                )
+
+                quantiles_all.append(quantiles.numpy())
+                mean_all.append(mean.numpy())
+
+            inference_time_s += time.monotonic() - start_time
+
+            quantiles_np = np.concatenate(quantiles_all, axis=0)  # [num_items, horizon, num_quantiles]
+            mean_np = np.concatenate(mean_all, axis=0)  # [num_items, horizon]
+
+            if task.eval_metric in ["MSE", "RMSE", "RMSSE"]:
+                point_forecast = mean_np  # [num_items, horizon]
+            else:
+                # use median as the point forecast
+                point_forecast = quantiles_np[:, :, quantile_levels.index(0.5)]  # [num_items, horizon]
+            predictions_dict = {"predictions": point_forecast}
+
+            for idx, level in enumerate(task.quantile_levels):
+                predictions_dict[str(level)] = quantiles_np[:, :, idx]
+
+            predictions_per_window.append(
+                fev.utils.combine_univariate_predictions_to_multivariate(
+                    datasets.Dataset.from_dict(predictions_dict), target_columns=task.target_columns
+                )
+            )
+        return predictions_per_window, inference_time_s
+
     @classmethod
     def from_pretrained(
         cls,
         pretrained_model_name_or_path: Union[str, Path],
         *model_args,
+        force_s3_download=False,
         **kwargs,
     ):
         """
-        Load the model, either from a local path or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel``
-        from ``transformers``.
+        Load the model, either from a local path, S3 prefix, or from the HuggingFace Hub.
+        Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
+        if str(pretrained_model_name_or_path).startswith("s3://"):
+            from .boto_utils import cache_model_from_s3
+
+            local_model_path = cache_model_from_s3(
+                str(pretrained_model_name_or_path), force_download=force_s3_download
+            )
+            return cls.from_pretrained(local_model_path, *model_args, **kwargs)
+
         from transformers import AutoConfig
 
         torch_dtype = kwargs.get("torch_dtype", "auto")
@@ -143,21 +233,15 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             kwargs["torch_dtype"] = cls.dtypes[torch_dtype]
 
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(
-            config, "chronos_config"
-        )
+        is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(config, "chronos_config")
 
         if not is_valid_config:
             raise ValueError("Not a Chronos config file")
 
-        pipeline_class_name = getattr(
-            config, "chronos_pipeline_class", "ChronosPipeline"
-        )
+        pipeline_class_name = getattr(config, "chronos_pipeline_class", "ChronosPipeline")
         class_ = PipelineRegistry.REGISTRY.get(pipeline_class_name)
         if class_ is None:
-            raise ValueError(
-                f"Trying to load unknown pipeline class: {pipeline_class_name}"
-            )
+            raise ValueError(f"Trying to load unknown pipeline class: {pipeline_class_name}")
 
         return class_.from_pretrained(  # type: ignore[attr-defined]
             pretrained_model_name_or_path, *model_args, **kwargs
