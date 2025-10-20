@@ -57,7 +57,8 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
 Issues = "https://github.com/amazon-science/chronos-forecasting/issues"
-Paper = "https://arxiv.org/abs/2403.07815"
+Chronos-Paper = "https://arxiv.org/abs/2403.07815"
+Chronos-2-Paper = "https://arxiv.org/abs/2510.15821"
 
 [tool.mypy]
 ignore_missing_imports = true
