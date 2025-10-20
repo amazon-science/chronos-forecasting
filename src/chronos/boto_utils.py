@@ -17,7 +17,6 @@ from botocore.exceptions import ClientError, NoCredentialsError
 logger = logging.getLogger(__name__)
 
 MODEL_FILENAMES = ["config.json", "model.safetensors", "LICENSE.txt"]
-ALWAYS_DOWNLOAD = {"config.json"}
 CLOUDFRONT_MAPPING = {"s3://autogluon/chronos-2": "https://d7057vjasule5.cloudfront.net"}
 CHUNK_SIZE = 1024 * 1024  # 1MB
 
@@ -34,7 +33,7 @@ def download_model_files_from_cloudfront(
         dest = local_path / bucket / key
         url = f"{cloudfront_url}/{filename}"
 
-        if key not in ALWAYS_DOWNLOAD and not force_download and dest.exists():
+        if not force_download and dest.exists():
             logger.debug(f"skipping (already exists): {key}")
             continue
 
@@ -64,7 +63,7 @@ def download_model_files_from_s3(
         key = f"{prefix}/{filename}"
         dest = local_path / bucket / key
 
-        if key not in ALWAYS_DOWNLOAD and not force_download and dest.exists():
+        if not force_download and dest.exists():
             logger.debug(f"skipping (already exists): {key}")
             continue
 
