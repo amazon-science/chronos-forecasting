@@ -96,41 +96,36 @@ cd chronos-forecasting && pip install --editable ".[training]"
 
 ### Forecasting
 
-A minimal example showing how to perform forecasting using Chronos and Chronos-Bolt models:
+A minimal example showing how to perform forecasting using Chronos-2:
 
 ```python
 import pandas as pd  # requires: pip install pandas
-import torch
-from chronos import BaseChronosPipeline
+from chronos import Chronos2Pipeline
 
-pipeline = BaseChronosPipeline.from_pretrained(
-    "amazon/chronos-t5-small",  # use "amazon/chronos-bolt-small" for the corresponding Chronos-Bolt model
-    device_map="cuda",  # use "cpu" for CPU inference
-    torch_dtype=torch.bfloat16,
-)
+pipeline = Chronos2Pipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cuda")
 
-df = pd.read_csv(
-    "https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv"
-)
+target = "target"  # Column name containing the values to forecast
+prediction_length = 24  # Number of steps to forecast ahead
+id_column = "id"  # Column identifying different time series
+timestamp_column = "timestamp"  # Column containing datetime information
 
-# context must be either a 1D tensor, a list of 1D tensors,
-# or a left-padded 2D tensor with batch as the first dimension
-# quantiles is an fp32 tensor with shape [batch_size, prediction_length, num_quantile_levels]
-# mean is an fp32 tensor with shape [batch_size, prediction_length]
-quantiles, mean = pipeline.predict_quantiles(
-    context=torch.tensor(df["#Passengers"]),
-    prediction_length=12,
+# Load historical energy prices and past values of covariates
+context_df = pd.read_parquet("s3://autogluon/datasets/timeseries/electricity_price/train.parquet")
+
+# Load future values of covariates
+test_df = pd.read_parquet("s3://autogluon/datasets/timeseries/electricity_price/test.parquet")
+future_df = test_df.drop(columns=target)
+
+# Generate predictions with covariates
+pred_df = pipeline.predict_df(
+    context_df,
+    future_df=future_df,
+    prediction_length=prediction_length,
     quantile_levels=[0.1, 0.5, 0.9],
+    id_column=id_column,
+    timestamp_column=timestamp_column,
+    target=target,
 )
-```
-
-For the original Chronos models, `pipeline.predict` can be used to draw forecast samples. More options for `predict_kwargs` in `pipeline.predict_quantiles` can be found with:
-
-```python
-from chronos import ChronosPipeline, ChronosBoltPipeline
-
-print(ChronosPipeline.predict.__doc__)  # for Chronos models
-print(ChronosBoltPipeline.predict.__doc__)  # for Chronos-Bolt models
 ```
 
 We can now visualize the forecast:
@@ -138,52 +133,41 @@ We can now visualize the forecast:
 ```python
 import matplotlib.pyplot as plt  # requires: pip install matplotlib
 
-forecast_index = range(len(df), len(df) + 12)
-low, median, high = quantiles[0, :, 0], quantiles[0, :, 1], quantiles[0, :, 2]
+timeseries_id = "DE"  # Specific time series to visualize
+history_length = 256  # The number of historical values to plot
 
-plt.figure(figsize=(8, 4))
-plt.plot(df["#Passengers"], color="royalblue", label="historical data")
-plt.plot(forecast_index, median, color="tomato", label="median forecast")
-plt.fill_between(forecast_index, low, high, color="tomato", alpha=0.3, label="80% prediction interval")
-plt.legend()
-plt.grid()
-plt.show()
-```
+ts_context = context_df.query(f"{id_column} == @timeseries_id").set_index(timestamp_column)[target]
+ts_pred = pred_df.query(f"{id_column} == @timeseries_id and target_name == @target").set_index(timestamp_column)[
+    ["0.1", "predictions", "0.9"]
+]
+ts_ground_truth = test_df.query(f"{id_column} == @timeseries_id").set_index(timestamp_column)[target]
 
-### Extracting Encoder Embeddings
+start_idx = max(0, len(ts_context) - history_length)
+plot_cutoff = ts_context.index[start_idx]
+ts_context = ts_context[ts_context.index >= plot_cutoff]
+ts_ground_truth = ts_ground_truth[ts_ground_truth.index >= plot_cutoff]
 
-A minimal example showing how to extract encoder embeddings from Chronos models:
-
-```python
-import pandas as pd
-import torch
-from chronos import ChronosPipeline
-
-pipeline = ChronosPipeline.from_pretrained(
-    "amazon/chronos-t5-small",
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
+fig = plt.figure(figsize=(12, 3))
+ax = fig.gca()
+ts_context.plot(ax=ax, label=f"historical {target}", color="xkcd:azure")
+ts_ground_truth.plot(ax=ax, label=f"future {target} (ground truth)", color="xkcd:grass green")
+ts_pred["predictions"].plot(ax=ax, label="forecast", color="xkcd:violet")
+ax.fill_between(
+    ts_pred.index,
+    ts_pred["0.1"],
+    ts_pred["0.9"],
+    alpha=0.7,
+    label="prediction interval",
+    color="xkcd:light lavender",
 )
-
-df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
-
-# context must be either a 1D tensor, a list of 1D tensors,
-# or a left-padded 2D tensor with batch as the first dimension
-context = torch.tensor(df["#Passengers"])
-embeddings, tokenizer_state = pipeline.embed(context)
+ax.legend(loc="upper left")
+ax.set_title(f"{target} forecast for {timeseries_id}")
+fig.show()
 ```
-
-### Pretraining, fine-tuning and evaluation
-
-Scripts for pretraining, fine-tuning and evaluating Chronos models can be found in [this folder](./scripts/).
-
-## :floppy_disk: Datasets
-
-Datasets used in the Chronos paper for pretraining and evaluation (both in-domain and zero-shot) are available through the HuggingFace repos: [`autogluon/chronos_datasets`](https://huggingface.co/datasets/autogluon/chronos_datasets) and [`autogluon/chronos_datasets_extra`](https://huggingface.co/datasets/autogluon/chronos_datasets_extra). Check out these repos for instructions on how to download and use the datasets.
 
 ## 📝 Citation
 
-If you find this  models useful for your research, please consider citing the associated papers:
+If you find Chronos models useful for your research, please consider citing the associated papers:
 
 ```
 @article{ansari2024chronos,
