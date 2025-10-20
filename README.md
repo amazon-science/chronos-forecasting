@@ -4,7 +4,7 @@
 
 <div align="center">
 
-# Chronos: Pretrained Models for Forecasting
+# Chronos: Pretrained Models for Time Series Forecasting
 
 [![preprint](https://img.shields.io/static/v1?label=Chronos-Paper&message=2403.07815&color=B31B1B&logo=arXiv)](https://arxiv.org/abs/2403.07815)
 [![preprint](https://img.shields.io/static/v1?label=Chronos-2-Report&message=2510.15821&color=B31B1B&logo=arXiv)](https://arxiv.org/abs/2510.15821)
