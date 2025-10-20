@@ -65,7 +65,7 @@ pip install chronos-forecasting
 A minimal example showing how to perform forecasting using Chronos-2:
 
 ```python
-import pandas as pd  # requires: pip install pandas
+import pandas as pd  # requires: pip install 'pandas[pyarrow]'
 from chronos import Chronos2Pipeline
 
 pipeline = Chronos2Pipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cuda")
