@@ -14,6 +14,9 @@ import torch
 
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.dataset import convert_df_input_to_list_of_dicts_input
+from chronos.chronos2.config import Chronos2CoreConfig
+from chronos.chronos2.layers import MHA
+
 from test.util import validate_tensor
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
@@ -941,8 +944,6 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
 @pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
 def test_pipeline_works_with_different_attention_implementations(attn_implementation):
     """Test that the pipeline works with different attention implementations."""
-    from chronos.chronos2.config import Chronos2CoreConfig
-
     # Load the dummy model
     model_path = Path(__file__).parent / "dummy-chronos2-model"
 
@@ -970,9 +971,6 @@ def test_pipeline_works_with_different_attention_implementations(attn_implementa
 @pytest.mark.parametrize("output_attentions", [False, True])
 def test_attention_implementations_with_output_attentions(attn_implementation, output_attentions):
     """Test that attention implementations handle output_attentions correctly."""
-    from chronos.chronos2.config import Chronos2CoreConfig
-    from chronos.chronos2.layers import MHA
-
     # Create config with specified attention implementation
     config = Chronos2CoreConfig(
         d_model=128,
@@ -1017,9 +1015,6 @@ def test_attention_implementations_with_output_attentions(attn_implementation, o
 @pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
 def test_attention_implementations_produce_consistent_outputs(attn_implementation):
     """Test that different attention implementations produce similar outputs."""
-    from chronos.chronos2.config import Chronos2CoreConfig
-    from chronos.chronos2.layers import MHA
-
     # Create config with specified attention implementation
     config = Chronos2CoreConfig(
         d_model=128,
@@ -1058,9 +1053,6 @@ def test_attention_implementations_produce_consistent_outputs(attn_implementatio
 def test_flash_attention_2_implementation():
     """Test FlashAttention2 implementation if available."""
     pytest.importorskip("flash_attn", reason="flash_attn package not installed")
-
-    from chronos.chronos2.config import Chronos2CoreConfig
-    from chronos.chronos2.layers import MHA
 
     # Create config with flash_attention_2
     config = Chronos2CoreConfig(
