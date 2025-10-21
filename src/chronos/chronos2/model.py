@@ -199,6 +199,8 @@ class Chronos2Model(PreTrainedModel):
     config_class = Chronos2CoreConfig  # type: ignore[assignment]
     _supports_long_horizon: bool = True
     _supports_future_covariates: bool = True
+    _supports_sdpa: bool = True
+    _supports_flash_attn_2: bool = True
 
     def __init__(self, config: Chronos2CoreConfig):
         assert hasattr(config, "chronos_config"), "Not a valid Chronos config"

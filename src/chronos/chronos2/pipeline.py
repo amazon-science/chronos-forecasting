@@ -211,7 +211,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
             lr_scheduler_type="linear",
             warmup_ratio=0.0,
             optim="adamw_torch_fused",
-            logging_dir=str(output_dir / "logs"),
             logging_strategy="steps",
             logging_steps=100,
             disable_tqdm=False,

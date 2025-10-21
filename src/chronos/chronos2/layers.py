@@ -155,6 +155,7 @@ class MHA(nn.Module):
         self.n_heads: int = config.num_heads
         self.dropout: float = config.dropout_rate
         self.inner_dim: int = self.n_heads * self.kv_proj_dim
+        self.config = config
 
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -164,6 +165,123 @@ class MHA(nn.Module):
         self.use_rope = use_rope
         if use_rope:
             self.rope_embed = RoPE(dim=self.kv_proj_dim, base=config.rope_theta)
+
+    def _eager_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Eager attention implementation using manual matmul.
+
+        Args:
+            query_states: [batch, n_heads, seq_len, kv_proj_dim]
+            key_states: [batch, n_heads, seq_len, kv_proj_dim]
+            value_states: [batch, n_heads, seq_len, kv_proj_dim]
+            mask: [batch, n_heads, q_len, kv_len]
+
+        Returns:
+            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
+            attn_weights: [batch, n_heads, q_len, kv_len]
+        """
+        # Compute attention weights (no scaling - this is the original Chronos-2 implementation)
+        scores = torch.matmul(query_states, key_states.transpose(3, 2))  # "bnqd,bnkd->bnqk"
+        scores += mask
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        return attn_output, attn_weights
+
+    def _sdpa_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, None]:
+        """SDPA attention implementation using torch.nn.functional.scaled_dot_product_attention.
+
+        Args:
+            query_states: [batch, n_heads, seq_len, kv_proj_dim]
+            key_states: [batch, n_heads, seq_len, kv_proj_dim]
+            value_states: [batch, n_heads, seq_len, kv_proj_dim]
+            mask: [batch, n_heads, q_len, kv_len] - additive mask (0 for valid, -inf for invalid)
+
+        Returns:
+            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
+            attn_weights: None (SDPA doesn't return weights)
+        """
+        attn_output = nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            scale=1.0,  # Match eager implementation (no scaling)
+        )
+
+        return attn_output, None
+
+    def _flash_attention_2(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, None]:
+        """FlashAttention-2 implementation.
+
+        Args:
+            query_states: [batch, n_heads, seq_len, kv_proj_dim]
+            key_states: [batch, n_heads, seq_len, kv_proj_dim]
+            value_states: [batch, n_heads, seq_len, kv_proj_dim]
+            mask: [batch, n_heads, q_len, kv_len]
+
+        Returns:
+            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
+            attn_weights: None (FlashAttention doesn't return weights)
+        """
+        try:
+            from flash_attn import flash_attn_func
+        except ImportError:
+            raise ImportError(
+                "FlashAttention-2 is not installed. Please install it with: "
+                "pip install flash-attn --no-build-isolation"
+            )
+
+        # FlashAttention expects inputs in shape [batch, seq_len, n_heads, head_dim]
+        # We have [batch, n_heads, seq_len, head_dim], so we need to transpose
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        # FlashAttention only supports fp16 and bf16
+        input_dtype = query_states.dtype
+        if input_dtype not in [torch.float16, torch.bfloat16]:
+            target_dtype = torch.float16 if torch.cuda.is_available() else torch.bfloat16
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = flash_attn_func(
+            query_states,
+            key_states,
+            value_states,
+            dropout_p=self.dropout if self.training else 0.0,
+            softmax_scale=1.0,  # Match eager implementation (no scaling)
+            causal=False,  # Chronos uses bidirectional attention by default
+        )
+
+        # Convert back to original dtype if needed
+        if input_dtype not in [torch.float16, torch.bfloat16]:
+            attn_output = attn_output.to(input_dtype)
+
+        # Transpose back to [batch, n_heads, seq_len, head_dim]
+        attn_output = attn_output.transpose(1, 2)
+
+        return attn_output, None
 
     def forward(
         self,
@@ -190,6 +308,11 @@ class MHA(nn.Module):
         if self.use_rope:
             assert position_ids is not None, "position_ids must be provided when self.use_rope=True"
 
+        # Force eager attention if output_attentions is True (only eager returns weights)
+        attn_implementation = self.config._attn_implementation
+        if output_attentions and attn_implementation != "eager":
+            attn_implementation = "eager"
+
         seq_length = hidden_states.shape[1]
 
         def shape(states: torch.Tensor) -> torch.Tensor:
@@ -215,12 +338,13 @@ class MHA(nn.Module):
                 cos, sin = self.rope_embed(value_states, position_ids)
                 query_states, key_states = RoPE.apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Compute attention weights
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))  # "bnqd,bnkd->bnqk"
-        scores += mask
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        # Dispatch to appropriate attention implementation
+        if attn_implementation == "sdpa":
+            attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)
+        elif attn_implementation == "flash_attention_2":
+            attn_output, attn_weights = self._flash_attention_2(query_states, key_states, value_states, mask)
+        else:  # eager or default
+            attn_output, attn_weights = self._eager_attention(query_states, key_states, value_states, mask)
 
         # Project attention output
         attn_output = unshape(attn_output)

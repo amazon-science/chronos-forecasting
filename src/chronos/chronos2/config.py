@@ -39,6 +39,8 @@ class Chronos2CoreConfig(PretrainedConfig):
         Token ID for padding/missing value token, by default 0
     rope_theta
         The base theta for rotary position embedding (RoPE), by default 10000.0
+    attn_implementation
+        The attention implementation to use. Options: "eager", "sdpa", "flash_attention_2", by default None (uses "sdpa")
     """
 
     model_type = "t5"
@@ -63,6 +65,7 @@ class Chronos2CoreConfig(PretrainedConfig):
         vocab_size: int = 2,
         pad_token_id: int = 0,
         rope_theta: float = 10000.0,
+        attn_implementation: str | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -82,6 +85,9 @@ class Chronos2CoreConfig(PretrainedConfig):
         self.is_gated_act = act_info[0] == "gated"
 
         assert not self.is_gated_act, "gated activation is not supported"
+
+        # Attention implementation - default to "sdpa" if not specified
+        self._attn_implementation = attn_implementation or "sdpa"
 
         # unused
         kwargs.pop("is_encoder_decoder", None)
