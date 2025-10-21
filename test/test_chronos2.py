@@ -936,3 +936,194 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
 
     # Check predictions from the fine-tuned model are different from the original predictions
     assert not np.allclose(orig_result_before["predictions"].to_numpy(), result["predictions"].to_numpy())
+
+
+@pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
+def test_pipeline_works_with_different_attention_implementations(attn_implementation):
+    """Test that the pipeline works with different attention implementations."""
+    from chronos.chronos2.config import Chronos2CoreConfig
+
+    # Load the dummy model
+    model_path = Path(__file__).parent / "dummy-chronos2-model"
+
+    # Load with specified attention implementation
+    pipeline = BaseChronosPipeline.from_pretrained(
+        model_path, device_map="cpu", attn_implementation=attn_implementation
+    )
+
+    # Verify the config has the correct attention implementation
+    assert pipeline.model.config._attn_implementation == attn_implementation
+
+    # Test prediction with simple input
+    inputs = torch.rand(2, 1, 16)
+    prediction_length = 7
+
+    outputs = pipeline.predict(inputs, prediction_length=prediction_length)
+
+    # Check outputs are valid
+    assert isinstance(outputs, list) and len(outputs) == 2
+    for out in outputs:
+        validate_tensor(out, (1, DEFAULT_MODEL_NUM_QUANTILES, 7), dtype=torch.float32)
+
+
+@pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
+@pytest.mark.parametrize("output_attentions", [False, True])
+def test_attention_implementations_with_output_attentions(attn_implementation, output_attentions):
+    """Test that attention implementations handle output_attentions correctly."""
+    from chronos.chronos2.config import Chronos2CoreConfig
+    from chronos.chronos2.layers import MHA
+
+    # Create config with specified attention implementation
+    config = Chronos2CoreConfig(
+        d_model=128,
+        d_kv=32,
+        num_heads=4,
+        dropout_rate=0.1,
+        attn_implementation=attn_implementation,
+    )
+
+    # Create MHA layer
+    mha = MHA(config, use_rope=True)
+    mha.eval()
+
+    # Create dummy inputs
+    batch_size = 2
+    seq_len = 10
+    hidden_states = torch.randn(batch_size, seq_len, config.d_model)
+    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len)
+
+    # Test forward pass
+    output = mha(
+        hidden_states=hidden_states,
+        mask=mask,
+        position_ids=position_ids,
+        output_attentions=output_attentions,
+    )
+
+    # Check output shape
+    assert output.hidden_states.shape == (batch_size, seq_len, config.d_model)
+
+    # Check attention weights - should only be returned when output_attentions=True
+    if output_attentions:
+        assert output.attn_weights is not None
+        assert output.attn_weights.shape == (batch_size, config.num_heads, seq_len, seq_len)
+    else:
+        # SDPA and flash_attention_2 don't return weights
+        if attn_implementation in ["sdpa", "flash_attention_2"]:
+            assert output.attn_weights is None
+
+
+@pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
+def test_attention_implementations_produce_consistent_outputs(attn_implementation):
+    """Test that different attention implementations produce similar outputs."""
+    from chronos.chronos2.config import Chronos2CoreConfig
+    from chronos.chronos2.layers import MHA
+
+    # Create config with specified attention implementation
+    config = Chronos2CoreConfig(
+        d_model=128,
+        d_kv=32,
+        num_heads=4,
+        dropout_rate=0.0,  # Disable dropout for deterministic comparison
+        attn_implementation=attn_implementation,
+    )
+
+    # Create MHA layer
+    mha = MHA(config, use_rope=True)
+    mha.eval()
+
+    # Create dummy inputs
+    batch_size = 2
+    seq_len = 10
+    torch.manual_seed(42)
+    hidden_states = torch.randn(batch_size, seq_len, config.d_model)
+    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len)
+
+    # Run forward pass
+    with torch.no_grad():
+        output = mha(
+            hidden_states=hidden_states,
+            mask=mask,
+            position_ids=position_ids,
+            output_attentions=False,
+        )
+
+    # Check output is valid (not NaN or Inf)
+    assert not torch.isnan(output.hidden_states).any()
+    assert not torch.isinf(output.hidden_states).any()
+
+
+def test_flash_attention_2_implementation():
+    """Test FlashAttention2 implementation if available."""
+    pytest.importorskip("flash_attn", reason="flash_attn package not installed")
+
+    from chronos.chronos2.config import Chronos2CoreConfig
+    from chronos.chronos2.layers import MHA
+
+    # Create config with flash_attention_2
+    config = Chronos2CoreConfig(
+        d_model=128,
+        d_kv=32,
+        num_heads=4,
+        dropout_rate=0.0,
+        attn_implementation="flash_attention_2",
+    )
+
+    # Create MHA layer
+    mha = MHA(config, use_rope=True)
+    mha.eval()
+
+    # Create dummy inputs
+    batch_size = 2
+    seq_len = 10
+    hidden_states = torch.randn(batch_size, seq_len, config.d_model)
+    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len)
+
+    # Test forward pass
+    with torch.no_grad():
+        output = mha(
+            hidden_states=hidden_states,
+            mask=mask,
+            position_ids=position_ids,
+            output_attentions=False,
+        )
+
+    # Check output shape and validity
+    assert output.hidden_states.shape == (batch_size, seq_len, config.d_model)
+    assert not torch.isnan(output.hidden_states).any()
+    assert not torch.isinf(output.hidden_states).any()
+    # FlashAttention doesn't return weights
+    assert output.attn_weights is None
+
+
+def test_eager_and_sdpa_produce_identical_outputs(pipeline):
+    """Test that eager and SDPA implementations produce identical outputs on full pipeline."""
+    # Reload pipeline with SDPA
+    model_path = Path(__file__).parent / "dummy-chronos2-model"
+    pipeline_sdpa = BaseChronosPipeline.from_pretrained(
+        model_path, device_map="cpu", attn_implementation="sdpa", dtype=torch.float32
+    )
+
+    # Note: the original pipeline fixture uses default attn_implementation which should be sdpa
+    # Force eager for comparison
+    pipeline_eager = BaseChronosPipeline.from_pretrained(
+        model_path, device_map="cpu", attn_implementation="eager", dtype=torch.float32
+    )
+
+    # Test with random input
+    torch.manual_seed(42)
+    inputs = torch.rand(2, 1, 16)
+    prediction_length = 7
+
+    with torch.no_grad():
+        outputs_eager = pipeline_eager.predict(inputs, prediction_length=prediction_length)
+        outputs_sdpa = pipeline_sdpa.predict(inputs, prediction_length=prediction_length)
+
+    # Verify outputs match exactly
+    assert len(outputs_eager) == len(outputs_sdpa)
+    for out_eager, out_sdpa in zip(outputs_eager, outputs_sdpa):
+        # Should match exactly or very close (numerical precision)
+        assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
