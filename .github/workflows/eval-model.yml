@@ -11,6 +11,10 @@ on:
       - synchronize # When new commits are pushed to the PR
       - labeled     # When a label is added to the PR
 
+
+permissions:
+  contents: read
+
 jobs:
   evaluate-and-print:
     if: contains(github.event.pull_request.labels.*.name, 'run-eval')  # Only run if 'run-eval' label is added
