@@ -40,7 +40,7 @@ class Chronos2CoreConfig(PretrainedConfig):
     rope_theta
         The base theta for rotary position embedding (RoPE), by default 10000.0
     attn_implementation
-        The attention implementation to use. Options: "eager", "sdpa", "flash_attention_2", by default None (uses "sdpa")
+        The attention implementation to use. Options: "eager" or "sdpa", by default None (uses "sdpa")
     """
 
     model_type = "t5"
@@ -87,13 +87,15 @@ class Chronos2CoreConfig(PretrainedConfig):
         assert not self.is_gated_act, "gated activation is not supported"
 
         # Attention implementation - default to "sdpa" if not specified
-        self._attn_implementation = attn_implementation or "sdpa"
+        attn_implementation = attn_implementation or "sdpa"
 
         # unused
         kwargs.pop("is_encoder_decoder", None)
         kwargs.pop("eos_token_id", None)
 
-        super().__init__(pad_token_id=pad_token_id, is_encoder_decoder=False, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id, is_encoder_decoder=False, attn_implementation=attn_implementation, **kwargs
+        )
 
 
 @dataclass

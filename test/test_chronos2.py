@@ -1050,9 +1050,13 @@ def test_attention_implementations_produce_consistent_outputs(attn_implementatio
     assert not torch.isinf(output.hidden_states).any()
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="FlashAttention-2 requires a CUDA-capable device")
 def test_flash_attention_2_implementation():
     """Test FlashAttention2 implementation if available."""
     pytest.importorskip("flash_attn", reason="flash_attn package not installed")
+
+    device = torch.device("cuda")
+    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
     # Create config with flash_attention_2
     config = Chronos2CoreConfig(
@@ -1064,15 +1068,15 @@ def test_flash_attention_2_implementation():
     )
 
     # Create MHA layer
-    mha = MHA(config, use_rope=True)
+    mha = MHA(config, use_rope=True).to(device=device, dtype=dtype)
     mha.eval()
 
     # Create dummy inputs
     batch_size = 2
     seq_len = 10
-    hidden_states = torch.randn(batch_size, seq_len, config.d_model)
-    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
-    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len)
+    hidden_states = torch.randn(batch_size, seq_len, config.d_model, device=device, dtype=dtype)
+    position_ids = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len, device=device, dtype=torch.float32)
 
     # Test forward pass
     with torch.no_grad():

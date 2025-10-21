@@ -283,6 +283,22 @@ class MHA(nn.Module):
 
         return attn_output, None
 
+    @staticmethod
+    def _mask_supports_flash_attention(mask: torch.Tensor | None) -> bool:
+        """Return True when the additive mask is compatible with FlashAttention-2."""
+        if mask is None:
+            return True
+        if not torch.is_tensor(mask):
+            return mask == 0
+        # FlashAttention-2 does not support low-rank/2D masks and only handles trivial additive masks.
+        if mask.ndim <= 2:
+            return False
+        if mask.numel() == 0:
+            return True
+        if mask.dtype == torch.bool:
+            return not mask.any()
+        return not torch.any(mask)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -338,11 +354,13 @@ class MHA(nn.Module):
                 cos, sin = self.rope_embed(value_states, position_ids)
                 query_states, key_states = RoPE.apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
+        use_flash_attn = attn_implementation == "flash_attention_2" and self._mask_supports_flash_attention(mask)
+
         # Dispatch to appropriate attention implementation
-        if attn_implementation == "sdpa":
-            attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)
-        elif attn_implementation == "flash_attention_2":
+        if use_flash_attn:
             attn_output, attn_weights = self._flash_attention_2(query_states, key_states, value_states, mask)
+        elif attn_implementation == "sdpa" or attn_implementation == "flash_attention_2":
+            attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)
         else:  # eager or default
             attn_output, attn_weights = self._eager_attention(query_states, key_states, value_states, mask)
 
