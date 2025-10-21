@@ -1105,17 +1105,45 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
         model_path, device_map="cpu", attn_implementation="eager", dtype=torch.float32
     )
 
-    # Test with random input
+    # Test 1: Simple univariate input
     torch.manual_seed(42)
-    inputs = torch.rand(2, 1, 16)
+    inputs_simple = torch.rand(2, 1, 16)
     prediction_length = 7
 
     with torch.no_grad():
-        outputs_eager = pipeline_eager.predict(inputs, prediction_length=prediction_length)
-        outputs_sdpa = pipeline_sdpa.predict(inputs, prediction_length=prediction_length)
+        outputs_eager = pipeline_eager.predict(inputs_simple, prediction_length=prediction_length)
+        outputs_sdpa = pipeline_sdpa.predict(inputs_simple, prediction_length=prediction_length)
 
     # Verify outputs match exactly
     assert len(outputs_eager) == len(outputs_sdpa)
     for out_eager, out_sdpa in zip(outputs_eager, outputs_sdpa):
+        # Should match exactly or very close (numerical precision)
+        assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
+
+    # Test 2: Multivariate inputs with covariates to test group attention
+    np.random.seed(42)
+    torch.manual_seed(42)
+    inputs_grouped = [
+        {
+            "target": np.random.randn(2, 36),
+            "past_covariates": {
+                "temperature": np.random.randn(36),
+                "weather_type": np.random.choice(["sunny", "cloudy", "rainy"], size=36),
+            },
+            "future_covariates": {
+                "temperature": np.random.randn(prediction_length),
+                "weather_type": np.random.choice(["sunny", "cloudy", "rainy"], size=prediction_length),
+            },
+        }
+        for _ in range(5)
+    ]
+
+    with torch.no_grad():
+        outputs_eager_grouped = pipeline_eager.predict(inputs_grouped, prediction_length=prediction_length)
+        outputs_sdpa_grouped = pipeline_sdpa.predict(inputs_grouped, prediction_length=prediction_length)
+
+    # Verify outputs match for grouped inputs
+    assert len(outputs_eager_grouped) == len(outputs_sdpa_grouped)
+    for out_eager, out_sdpa in zip(outputs_eager_grouped, outputs_sdpa_grouped):
         # Should match exactly or very close (numerical precision)
         assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
