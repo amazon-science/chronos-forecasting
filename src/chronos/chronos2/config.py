@@ -65,7 +65,7 @@ class Chronos2CoreConfig(PretrainedConfig):
         vocab_size: int = 2,
         pad_token_id: int = 0,
         rope_theta: float = 10000.0,
-        attn_implementation: Optional[Literal["eager", "sdpa"]] = "sdpa",
+        attn_implementation: Optional[Literal["eager", "sdpa"]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
