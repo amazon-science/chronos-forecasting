@@ -251,7 +251,7 @@ class MHA(nn.Module):
 
         # Force eager attention if output_attentions is True (only eager returns weights)
         attn_implementation = self.config._attn_implementation
-        if output_attentions and attn_implementation != "eager":
+        if output_attentions:
             attn_implementation = "eager"
 
         seq_length = hidden_states.shape[1]

@@ -4,7 +4,7 @@
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Literal, Optional
 
 from transformers.configuration_utils import PretrainedConfig
 
@@ -65,7 +65,7 @@ class Chronos2CoreConfig(PretrainedConfig):
         vocab_size: int = 2,
         pad_token_id: int = 0,
         rope_theta: float = 10000.0,
-        attn_implementation: Literal["eager", "sdpa"] = "sdpa",
+        attn_implementation: Optional[Literal["eager", "sdpa"]] = "sdpa",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -88,6 +88,7 @@ class Chronos2CoreConfig(PretrainedConfig):
 
         # Attention implementation - default to "sdpa" if not specified
         attn_implementation = attn_implementation or "sdpa"
+        assert attn_implementation in ["eager", "sdpa"], f"attn_implementation {attn_implementation} not supported"
 
         # unused
         kwargs.pop("is_encoder_decoder", None)
