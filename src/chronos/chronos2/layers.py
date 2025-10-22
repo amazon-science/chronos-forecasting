@@ -224,7 +224,6 @@ class MHA(nn.Module):
 
         return attn_output, None
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,

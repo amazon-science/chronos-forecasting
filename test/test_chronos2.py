@@ -322,9 +322,7 @@ def test_when_input_is_invalid_then_predict_raises_value_error(pipeline, inputs,
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
-def test_pipeline_predict_can_handle_different_model_and_input_dtypes(
-    dtype: torch.dtype, input_dtype: torch.dtype
-):
+def test_pipeline_predict_can_handle_different_model_and_input_dtypes(dtype: torch.dtype, input_dtype: torch.dtype):
     pipeline = BaseChronosPipeline.from_pretrained(
         Path(__file__).parent / "dummy-chronos2-model", device_map="cpu", dtype=dtype
     )
