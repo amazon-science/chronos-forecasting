@@ -155,6 +155,7 @@ class MHA(nn.Module):
         self.n_heads: int = config.num_heads
         self.dropout: float = config.dropout_rate
         self.inner_dim: int = self.n_heads * self.kv_proj_dim
+        self.config = config
 
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -164,6 +165,64 @@ class MHA(nn.Module):
         self.use_rope = use_rope
         if use_rope:
             self.rope_embed = RoPE(dim=self.kv_proj_dim, base=config.rope_theta)
+
+    def _eager_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Eager attention implementation using manual matmul.
+
+        Args:
+            query_states: [batch, n_heads, seq_len, kv_proj_dim]
+            key_states: [batch, n_heads, seq_len, kv_proj_dim]
+            value_states: [batch, n_heads, seq_len, kv_proj_dim]
+            mask: [batch, n_heads, q_len, kv_len]
+
+        Returns:
+            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
+            attn_weights: [batch, n_heads, q_len, kv_len]
+        """
+        # Compute attention weights (no scaling - this is the original Chronos-2 implementation)
+        scores = torch.matmul(query_states, key_states.transpose(3, 2))  # "bnqd,bnkd->bnqk"
+        scores += mask
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        return attn_output, attn_weights
+
+    def _sdpa_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, None]:
+        """SDPA attention implementation using torch.nn.functional.scaled_dot_product_attention.
+
+        Args:
+            query_states: [batch, n_heads, seq_len, kv_proj_dim]
+            key_states: [batch, n_heads, seq_len, kv_proj_dim]
+            value_states: [batch, n_heads, seq_len, kv_proj_dim]
+            mask: [batch, n_heads, q_len, kv_len] - additive mask (0 for valid, -inf for invalid)
+
+        Returns:
+            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
+            attn_weights: None (SDPA doesn't return weights)
+        """
+        attn_output = nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            scale=1.0,  # Match eager implementation (no scaling)
+        )
+
+        return attn_output, None
 
     def forward(
         self,
@@ -190,6 +249,11 @@ class MHA(nn.Module):
         if self.use_rope:
             assert position_ids is not None, "position_ids must be provided when self.use_rope=True"
 
+        # Force eager attention if output_attentions is True (only eager returns weights)
+        attn_implementation = self.config._attn_implementation
+        if output_attentions:
+            attn_implementation = "eager"
+
         seq_length = hidden_states.shape[1]
 
         def shape(states: torch.Tensor) -> torch.Tensor:
@@ -215,12 +279,10 @@ class MHA(nn.Module):
                 cos, sin = self.rope_embed(value_states, position_ids)
                 query_states, key_states = RoPE.apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Compute attention weights
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))  # "bnqd,bnkd->bnqk"
-        scores += mask
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        if attn_implementation == "sdpa":
+            attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)
+        else:  # eager
+            attn_output, attn_weights = self._eager_attention(query_states, key_states, value_states, mask)
 
         # Project attention output
         attn_output = unshape(attn_output)
