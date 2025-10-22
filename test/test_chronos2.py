@@ -320,13 +320,13 @@ def test_when_input_is_invalid_then_predict_raises_value_error(pipeline, inputs,
         _ = pipeline.predict(inputs, prediction_length=10)
 
 
-@pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_predict_can_handle_different_model_and_input_dtypes(
-    torch_dtype: torch.dtype, input_dtype: torch.dtype
+    dtype: torch.dtype, input_dtype: torch.dtype
 ):
     pipeline = BaseChronosPipeline.from_pretrained(
-        Path(__file__).parent / "dummy-chronos2-model", device_map="cpu", torch_dtype=torch_dtype
+        Path(__file__).parent / "dummy-chronos2-model", device_map="cpu", dtype=dtype
     )
     context = 10 * torch.rand(size=(4, 3, 16)) + 10
     context = context.to(dtype=input_dtype)
@@ -1007,92 +1007,9 @@ def test_attention_implementations_with_output_attentions(attn_implementation, o
         assert output.attn_weights is not None
         assert output.attn_weights.shape == (batch_size, config.num_heads, seq_len, seq_len)
     else:
-        # SDPA and flash_attention_2 don't return weights
-        if attn_implementation in ["sdpa", "flash_attention_2"]:
+        # SDPA doesn't return weights
+        if attn_implementation == "sdpa":
             assert output.attn_weights is None
-
-
-@pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])
-def test_attention_implementations_produce_consistent_outputs(attn_implementation):
-    """Test that different attention implementations produce similar outputs."""
-    # Create config with specified attention implementation
-    config = Chronos2CoreConfig(
-        d_model=128,
-        d_kv=32,
-        num_heads=4,
-        dropout_rate=0.0,  # Disable dropout for deterministic comparison
-        attn_implementation=attn_implementation,
-    )
-
-    # Create MHA layer
-    mha = MHA(config, use_rope=True)
-    mha.eval()
-
-    # Create dummy inputs
-    batch_size = 2
-    seq_len = 10
-    torch.manual_seed(42)
-    hidden_states = torch.randn(batch_size, seq_len, config.d_model)
-    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
-    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len)
-
-    # Run forward pass
-    with torch.no_grad():
-        output = mha(
-            hidden_states=hidden_states,
-            mask=mask,
-            position_ids=position_ids,
-            output_attentions=False,
-        )
-
-    # Check output is valid (not NaN or Inf)
-    assert not torch.isnan(output.hidden_states).any()
-    assert not torch.isinf(output.hidden_states).any()
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="FlashAttention-2 requires a CUDA-capable device")
-def test_flash_attention_2_implementation():
-    """Test FlashAttention2 implementation if available."""
-    pytest.importorskip("flash_attn", reason="flash_attn package not installed")
-
-    device = torch.device("cuda")
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-    # Create config with flash_attention_2
-    config = Chronos2CoreConfig(
-        d_model=128,
-        d_kv=32,
-        num_heads=4,
-        dropout_rate=0.0,
-        attn_implementation="flash_attention_2",
-    )
-
-    # Create MHA layer
-    mha = MHA(config, use_rope=True).to(device=device, dtype=dtype)
-    mha.eval()
-
-    # Create dummy inputs
-    batch_size = 2
-    seq_len = 10
-    hidden_states = torch.randn(batch_size, seq_len, config.d_model, device=device, dtype=dtype)
-    position_ids = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
-    mask = torch.zeros(batch_size, config.num_heads, seq_len, seq_len, device=device, dtype=torch.float32)
-
-    # Test forward pass
-    with torch.no_grad():
-        output = mha(
-            hidden_states=hidden_states,
-            mask=mask,
-            position_ids=position_ids,
-            output_attentions=False,
-        )
-
-    # Check output shape and validity
-    assert output.hidden_states.shape == (batch_size, seq_len, config.d_model)
-    assert not torch.isnan(output.hidden_states).any()
-    assert not torch.isinf(output.hidden_states).any()
-    # FlashAttention doesn't return weights
-    assert output.attn_weights is None
 
 
 def test_eager_and_sdpa_produce_identical_outputs(pipeline):
@@ -1110,7 +1027,6 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
     )
 
     # Test 1: Simple univariate input
-    torch.manual_seed(42)
     inputs_simple = torch.rand(2, 1, 16)
     prediction_length = 7
 
@@ -1125,8 +1041,6 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
         assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
 
     # Test 2: Multivariate inputs with covariates to test group attention
-    np.random.seed(42)
-    torch.manual_seed(42)
     inputs_grouped = [
         {
             "target": np.random.randn(2, 36),

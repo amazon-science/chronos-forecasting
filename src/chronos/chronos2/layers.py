@@ -224,80 +224,6 @@ class MHA(nn.Module):
 
         return attn_output, None
 
-    def _flash_attention_2(
-        self,
-        query_states: torch.Tensor,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> tuple[torch.Tensor, None]:
-        """FlashAttention-2 implementation.
-
-        Args:
-            query_states: [batch, n_heads, seq_len, kv_proj_dim]
-            key_states: [batch, n_heads, seq_len, kv_proj_dim]
-            value_states: [batch, n_heads, seq_len, kv_proj_dim]
-            mask: [batch, n_heads, q_len, kv_len]
-
-        Returns:
-            attn_output: [batch, n_heads, seq_len, kv_proj_dim]
-            attn_weights: None (FlashAttention doesn't return weights)
-        """
-        try:
-            from flash_attn import flash_attn_func
-        except ImportError:
-            raise ImportError(
-                "FlashAttention-2 is not installed. Please install it with: "
-                "pip install flash-attn --no-build-isolation"
-            )
-
-        # FlashAttention expects inputs in shape [batch, seq_len, n_heads, head_dim]
-        # We have [batch, n_heads, seq_len, head_dim], so we need to transpose
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        # FlashAttention only supports fp16 and bf16
-        input_dtype = query_states.dtype
-        if input_dtype not in [torch.float16, torch.bfloat16]:
-            target_dtype = torch.float16 if torch.cuda.is_available() else torch.bfloat16
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = flash_attn_func(
-            query_states,
-            key_states,
-            value_states,
-            dropout_p=self.dropout if self.training else 0.0,
-            softmax_scale=1.0,  # Match eager implementation (no scaling)
-            causal=False,  # Chronos uses bidirectional attention by default
-        )
-
-        # Convert back to original dtype if needed
-        if input_dtype not in [torch.float16, torch.bfloat16]:
-            attn_output = attn_output.to(input_dtype)
-
-        # Transpose back to [batch, n_heads, seq_len, head_dim]
-        attn_output = attn_output.transpose(1, 2)
-
-        return attn_output, None
-
-    @staticmethod
-    def _mask_supports_flash_attention(mask: torch.Tensor | None) -> bool:
-        """Return True when the additive mask is compatible with FlashAttention-2."""
-        if mask is None:
-            return True
-        if not torch.is_tensor(mask):
-            return mask == 0
-        # FlashAttention-2 does not support low-rank/2D masks and only handles trivial additive masks.
-        if mask.ndim <= 2:
-            return False
-        if mask.numel() == 0:
-            return True
-        if mask.dtype == torch.bool:
-            return not mask.any()
-        return not torch.any(mask)
 
     def forward(
         self,
@@ -354,14 +280,9 @@ class MHA(nn.Module):
                 cos, sin = self.rope_embed(value_states, position_ids)
                 query_states, key_states = RoPE.apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        use_flash_attn = attn_implementation == "flash_attention_2" and self._mask_supports_flash_attention(mask)
-
-        # Dispatch to appropriate attention implementation
-        if use_flash_attn:
-            attn_output, attn_weights = self._flash_attention_2(query_states, key_states, value_states, mask)
-        elif attn_implementation == "sdpa" or attn_implementation == "flash_attention_2":
+        if attn_implementation == "sdpa":
             attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)
-        else:  # eager or default
+        else:  # eager
             attn_output, attn_weights = self._eager_attention(query_states, key_states, value_states, mask)
 
         # Project attention output
