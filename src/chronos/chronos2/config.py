@@ -4,7 +4,7 @@
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from transformers.configuration_utils import PretrainedConfig
 
