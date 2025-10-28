@@ -910,9 +910,6 @@ class Chronos2Dataset(IterableDataset):
         if self.mode == DatasetMode.TRAIN:
             for batch in self._generate_train_batches():
                 batch.pop("target_idx_ranges")
-
-                # yield makes the function a generator(only made by yield), which intrinsically is an iterator.
-                # While the iterable dataset needs the iterator implementation from __iter__, could returns an generator directly or be the iterator itself.
                 yield batch
         elif self.mode == DatasetMode.VALIDATION:
             for batch in self._generate_sequential_batches():
