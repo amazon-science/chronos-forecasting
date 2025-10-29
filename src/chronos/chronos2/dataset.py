@@ -847,7 +847,7 @@ class Chronos2Dataset(IterableDataset):
         for group_id, task_idx in enumerate(task_indices):
             task_context, task_future_target, task_future_covariates, task_n_targets = self._construct_slice(task_idx)
 
-            group_size = task_context.shape[0] # task_n_targets + task_n_covariates(past-only + known-future)
+            group_size = task_context.shape[0]
             task_group_ids = torch.full((group_size,), fill_value=group_id)
             batch_context_tensor_list.append(task_context)
             batch_future_target_tensor_list.append(task_future_target)
@@ -875,7 +875,7 @@ class Chronos2Dataset(IterableDataset):
             while current_batch_size < self.batch_size:
                 task_idx = np.random.randint(len(self.tasks))
                 task_indices.append(task_idx)
-                current_batch_size += self.tasks[task_idx][0].shape[0] # group size = n_targets + n_covariates 
+                current_batch_size += self.tasks[task_idx][0].shape[0]
 
             yield self._build_batch(task_indices)
 
