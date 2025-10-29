@@ -123,7 +123,7 @@ def validate_and_prepare_single_dict_task(
         )
 
     # create ordered keys: past-only first, then known-future (so known-future are the last rows)
-    task_past_only_keys = [k for k in task_covariates_keys if k not in task_future_covariates_keys] # past_only_keys
+    task_past_only_keys = [k for k in task_covariates_keys if k not in task_future_covariates_keys]  # past_only_keys
     task_ordered_covariate_keys = task_past_only_keys + task_future_covariates_keys
 
     task_past_covariates_list: list[torch.Tensor] = []
