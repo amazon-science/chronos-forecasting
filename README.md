@@ -119,9 +119,11 @@ plt.legend()
 ## Example Notebooks
 
 - [Chronos-2 Quick Start](notebooks/chronos-2-quickstart.ipynb)
+  &nbsp;
   <a href="https://studiolab.sagemaker.aws/import/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
     <img src="https://studiolab.sagemaker.aws/studiolab.svg" alt="Open In SageMaker Studio Lab" height="18" align="absmiddle">
   </a>
+  &nbsp;
   <a href="https://colab.research.google.com/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" height="18" align="absmiddle">
   </a>
