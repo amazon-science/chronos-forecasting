@@ -68,7 +68,7 @@ A minimal example showing how to perform forecasting using Chronos-2:
 import pandas as pd  # requires: pip install 'pandas[pyarrow]'
 from chronos import Chronos2Pipeline
 
-pipeline = Chronos2Pipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cuda")
+pipeline = Chronos2Pipeline.from_pretrained("amazon/chronos-2", device_map="cuda")
 
 # Load historical target values and past values of covariates
 context_df = pd.read_parquet("https://autogluon.s3.amazonaws.com/datasets/timeseries/electricity_price/train.parquet")

@@ -13,10 +13,9 @@ import pytest
 import torch
 
 from chronos import BaseChronosPipeline, Chronos2Pipeline
-from chronos.chronos2.dataset import convert_df_input_to_list_of_dicts_input
 from chronos.chronos2.config import Chronos2CoreConfig
+from chronos.chronos2.dataset import convert_df_input_to_list_of_dicts_input
 from chronos.chronos2.layers import MHA
-
 from test.util import validate_tensor
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
@@ -33,6 +32,10 @@ def pipeline() -> Chronos2Pipeline:
 
 def test_base_chronos2_pipeline_loads_from_s3():
     BaseChronosPipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cpu")
+
+
+def test_base_chronos2_pipeline_loads_from_hf():
+    BaseChronosPipeline.from_pretrained("amazon/chronos-2", device_map="cpu")
 
 
 @pytest.mark.parametrize(
