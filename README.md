@@ -60,6 +60,10 @@ To perform inference with Chronos, the easiest way is to install this package th
 pip install chronos-forecasting
 ```
 
+> [!TIP]
+> For reliable production use, we recommend using Chronos-2 models through [Amazon SageMaker JumpStart](https://aws.amazon.com/sagemaker/ai/jumpstart/). Check out [this tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos-2 inference endpoints to AWS with just a few lines of code.
+
+
 ### Forecasting
 
 A minimal example showing how to perform forecasting using Chronos-2:
@@ -115,8 +119,7 @@ plt.legend()
 ## Example Notebooks
 
 - [Chronos-2 Quick Start](notebooks/chronos-2-quickstart.ipynb)
-- [Deploy Chronos-Bolt on Amazon SageMaker](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb)
-- Deploy Chronos-2 on Amazon SageMaker (coming soon!)
+- [Deploy Chronos-2 on Amazon SageMaker](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
 
 ## 📝 Citation
 
