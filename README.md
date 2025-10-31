@@ -56,6 +56,10 @@ To perform inference with Chronos, the easiest way is to install this package th
 pip install chronos-forecasting
 ```
 
+> [!TIP]
+> For reliable production use, we recommend using Chronos-2 models through [Amazon SageMaker JumpStart](https://aws.amazon.com/sagemaker/ai/jumpstart/). Check out [this tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos-2 inference endpoints to AWS with just a few lines of code.
+
+
 ### Forecasting
 
 A minimal example showing how to perform forecasting using Chronos-2:
@@ -111,8 +115,15 @@ plt.legend()
 ## Example Notebooks
 
 - [Chronos-2 Quick Start](notebooks/chronos-2-quickstart.ipynb)
-- [Deploy Chronos-Bolt on Amazon SageMaker](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb)
-- Deploy Chronos-2 on Amazon SageMaker (coming soon!)
+  &nbsp;
+  <a href="https://studiolab.sagemaker.aws/import/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
+    <img src="https://studiolab.sagemaker.aws/studiolab.svg" alt="Open In SageMaker Studio Lab" height="18" align="absmiddle">
+  </a>
+  &nbsp;
+  <a href="https://colab.research.google.com/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" height="18" align="absmiddle">
+  </a>
+- [Deploy Chronos-2 on Amazon SageMaker](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
 
 ## 📝 Citation
 
