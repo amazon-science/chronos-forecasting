@@ -1,8 +1,4 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/amazon-science/chronos-forecasting/main/figures/chronos-logo.png" width="60%">
-</div>
-
-<div align="center">
 
 # Chronos: Pretrained Models for Time Series Forecasting
 
