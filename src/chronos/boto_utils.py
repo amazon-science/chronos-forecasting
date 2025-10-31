@@ -6,6 +6,7 @@
 import logging
 import os
 import re
+import warnings
 from pathlib import Path
 
 import boto3
@@ -110,6 +111,11 @@ def cache_model_from_s3(
 
     # Use CloudFront CDN for faster, cached downloads if available
     if cloudfront_url:
+        warnings.warn(
+            f"Loading {s3_uri} from CloudFront is deprecated and will be removed in a future version. "
+            f"Please specify a HuggingFace model_id instead.",
+            category=DeprecationWarning,
+        )
         try:
             download_model_files_from_cloudfront(
                 cloudfront_url=cloudfront_url,
