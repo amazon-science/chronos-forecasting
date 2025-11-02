@@ -56,7 +56,7 @@ class ChronosConfig:
         return class_(**self.tokenizer_kwargs, config=self)
 
 
-class ChronosTokenizer:
+class ChronosTokenizer(nn.Module):
     """
     A ``ChronosTokenizer`` defines how time series are mapped into token IDs
     and back.
@@ -64,6 +64,9 @@ class ChronosTokenizer:
     For details, see the ``input_transform`` and ``output_transform`` methods,
     which concrete classes must implement.
     """
+
+    def __init__(self):
+        super().__init__()
 
     def context_input_transform(
         self,
@@ -153,19 +156,22 @@ class ChronosTokenizer:
 
 class MeanScaleUniformBins(ChronosTokenizer):
     def __init__(self, low_limit: float, high_limit: float, config: ChronosConfig) -> None:
+        super().__init__()
         self.config = config
-        self.centers = torch.linspace(
+        centers = torch.linspace(
             low_limit,
             high_limit,
             config.n_tokens - config.n_special_tokens - 1,
         )
-        self.boundaries = torch.concat(
+        boundaries = torch.concat(
             (
-                torch.tensor([-1e20], device=self.centers.device),
-                (self.centers[1:] + self.centers[:-1]) / 2,
-                torch.tensor([1e20], device=self.centers.device),
+                torch.tensor([-1e20]),
+                (centers[1:] + centers[:-1]) / 2,
+                torch.tensor([1e20]),
             )
         )
+        self.register_buffer("centers", centers)
+        self.register_buffer("boundaries", boundaries)
 
     def _input_transform(
         self, context: torch.Tensor, scale: Optional[torch.Tensor] = None
@@ -198,10 +204,11 @@ class MeanScaleUniformBins(ChronosTokenizer):
     def _append_eos_token(
         self, token_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        device = token_ids.device
         batch_size = token_ids.shape[0]
-        eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id)
+        eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id, device=device)
         token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-        eos_mask = torch.full((batch_size, 1), fill_value=True)
+        eos_mask = torch.full((batch_size, 1), fill_value=True, device=device)
         attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
 
         return token_ids, attention_mask
@@ -500,7 +507,7 @@ class ChronosPipeline(BaseChronosPipeline):
 
             context_tensor = torch.cat([context_tensor, prediction.median(dim=1).values], dim=-1)
 
-        return torch.cat(predictions, dim=-1).to(dtype=torch.float32, device="cpu")
+        return torch.cat(predictions, dim=-1).to(dtype=torch.float32)
 
     def predict_quantiles(
         self,
@@ -546,7 +553,10 @@ class ChronosPipeline(BaseChronosPipeline):
             assert chronos_config.model_type == "causal"
             inner_model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
+        tokenizer = chronos_config.create_tokenizer()
+        tokenizer.to(inner_model.device)
+        
         return cls(
-            tokenizer=chronos_config.create_tokenizer(),
+            tokenizer=tokenizer,
             model=ChronosModel(config=chronos_config, model=inner_model),
         )
