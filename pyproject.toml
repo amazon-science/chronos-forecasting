@@ -15,7 +15,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
   "torch>=2.0,<3",
-  "transformers>=4.41,<5",
+  "transformers>=4.49,<5",
   "accelerate>=0.34,<2",
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
