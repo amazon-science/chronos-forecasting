@@ -407,8 +407,14 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     def __init__(self, model: ChronosBoltModelForForecasting):
         super().__init__(inner_model=model)  # type: ignore
         self.model = model
-        self.model_context_length: int = self.model.config.chronos_config["context_length"]
-        self.model_prediction_length: int = self.model.config.chronos_config["prediction_length"]
+
+    @property
+    def model_context_length(self) -> int:
+        return self.model.chronos_config.context_length
+
+    @property
+    def model_prediction_length(self) -> int:
+        return self.model.chronos_config.prediction_length
 
     @property
     def quantiles(self) -> List[float]:
