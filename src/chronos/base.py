@@ -135,7 +135,6 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     def predict_df(
         self,
         df: "pd.DataFrame",
-        future_df: "pd.DataFrame | None" = None,
         id_column: str = "item_id",
         timestamp_column: str = "timestamp",
         target: str = "target",
@@ -152,9 +151,6 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             Time series data in long format with an id column, a timestamp, and at least one target column.
             The remaining columns in df will be treated as past-only covariates unless they are also
             present in future_df
-        future_df
-            Future covariates data with an id column, a timestamp, and any number of covariate columns,
-            all of these columns will be treated as known future covariates
         id_column
             The name of the column which contains the unique time series identifiers, by default "item_id"
         timestamp_column
@@ -195,7 +191,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         inputs, original_order, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
             df=df,
-            future_df=future_df,
+            future_df=None,
             id_column=id_column,
             timestamp_column=timestamp_column,
             target_columns=[target],
