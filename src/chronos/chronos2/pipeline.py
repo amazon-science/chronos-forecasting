@@ -541,9 +541,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             output_patch_size=self.model_output_patch_size,
             mode=DatasetMode.TEST,
         )
-        test_loader = DataLoader(
-            test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False
-        )
+        test_loader = DataLoader(test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False)
 
         all_predictions: list[torch.Tensor] = []
         for batch in test_loader:
@@ -734,7 +732,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return quantiles, mean
 
-    def predict_df(
+    def predict_df(  # type: ignore[override]
         self,
         df: "pd.DataFrame",
         future_df: "pd.DataFrame | None" = None,
