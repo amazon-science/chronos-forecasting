@@ -216,11 +216,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             q_pred = quantiles_np[i]  # (horizon, num_quantiles)
             point_pred = mean_np[i]  # (horizon)
 
-            series_forecast_data: dict[str | tuple[str, str], Any] = {
-                id_column: series_id,
-                timestamp_column: future_ts,
-                "target_name": target,
-            }
+            series_forecast_data = {id_column: series_id, timestamp_column: future_ts, "target_name": target}
             series_forecast_data["predictions"] = point_pred
             for q_idx, q_level in enumerate(quantile_levels):
                 series_forecast_data[str(q_level)] = q_pred[:, q_idx]
