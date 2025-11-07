@@ -5,12 +5,21 @@ from pathlib import Path
 
 import datasets
 import fev
+import numpy as np
+import pandas as pd
 import pytest
 import torch
 
 from chronos import BaseChronosPipeline, ChronosBoltPipeline
 from chronos.chronos_bolt import InstanceNorm, Patch
-from test.util import validate_tensor
+from test.util import create_df, get_forecast_start_times, validate_tensor
+
+DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos-bolt-model"
+
+
+@pytest.fixture
+def pipeline() -> ChronosBoltPipeline:
+    return BaseChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu")
 
 
 def test_base_chronos_pipeline_loads_from_huggingface():
@@ -20,11 +29,7 @@ def test_base_chronos_pipeline_loads_from_huggingface():
 @pytest.mark.parametrize("torch_dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_predict(torch_dtype: torch.dtype, input_dtype: torch.dtype):
-    pipeline = ChronosBoltPipeline.from_pretrained(
-        Path(__file__).parent / "dummy-chronos-bolt-model",
-        device_map="cpu",
-        torch_dtype=torch_dtype,
-    )
+    pipeline = ChronosBoltPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=torch_dtype)
     context = 10 * torch.rand(size=(4, 16)) + 10
     context = context.to(dtype=input_dtype)
     expected_num_quantiles = len(pipeline.quantiles)
@@ -84,11 +89,7 @@ def test_pipeline_predict_quantiles(
     prediction_length: int,
     quantile_levels: list[float],
 ):
-    pipeline = ChronosBoltPipeline.from_pretrained(
-        Path(__file__).parent / "dummy-chronos-bolt-model",
-        device_map="cpu",
-        torch_dtype=torch_dtype,
-    )
+    pipeline = ChronosBoltPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=torch_dtype)
     context = 10 * torch.rand(size=(4, 16)) + 10
     context = context.to(dtype=input_dtype)
 
@@ -127,11 +128,7 @@ def test_pipeline_predict_quantiles(
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
-    pipeline = ChronosBoltPipeline.from_pretrained(
-        Path(__file__).parent / "dummy-chronos-bolt-model",
-        device_map="cpu",
-        torch_dtype=model_dtype,
-    )
+    pipeline = ChronosBoltPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=model_dtype)
     d_model = pipeline.model.config.d_model
     context = 10 * torch.rand(size=(4, 16)) + 10
     context = context.to(dtype=input_dtype)
@@ -158,6 +155,88 @@ def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
     validate_tensor(embedding, shape=(1, expected_embed_length, d_model), dtype=model_dtype)
     validate_tensor(loc_scale[0], shape=(1,), dtype=torch.float32)
     validate_tensor(loc_scale[1], shape=(1,), dtype=torch.float32)
+
+
+@pytest.mark.parametrize(
+    "context_setup, expected_rows",
+    [
+        # Targets only
+        ({}, 6),  # 2 series * 3 predictions
+        # Different context lengths
+        (
+            {"series_ids": ["X", "Y", "Z"], "n_points": [10, 17, 56], "target_cols": ["custom_target"]},
+            9,
+        ),  # 3 series * 3 predictions
+    ],
+)
+@pytest.mark.parametrize("freq", ["s", "min", "30min", "h", "D", "W", "ME", "QE", "YE"])
+def test_predict_df_works_for_valid_inputs(pipeline, context_setup, expected_rows, freq):
+    prediction_length = 3
+    df = create_df(**context_setup, freq=freq)
+    forecast_start_times = get_forecast_start_times(df, freq)
+
+    series_ids = context_setup.get("series_ids", ["A", "B"])
+    target_columns = context_setup.get("target_cols", ["target"])
+    n_series = len(series_ids)
+    n_targets = len(target_columns)
+    result = pipeline.predict_df(df, target=target_columns[0], prediction_length=prediction_length)
+
+    assert len(result) == expected_rows
+    assert "item_id" in result.columns and np.all(
+        result["item_id"].to_numpy() == np.array(series_ids).repeat(n_targets * prediction_length)
+    )
+    assert "target_name" in result.columns and np.all(
+        result["target_name"].to_numpy() == np.tile(np.array(target_columns).repeat(prediction_length), n_series)
+    )
+    assert "timestamp" in result.columns and np.all(
+        result.groupby("item_id")["timestamp"].min().to_numpy() == pd.to_datetime(forecast_start_times).to_numpy()
+    )
+    assert "predictions" in result.columns
+    assert all(str(q) in result.columns for q in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+
+
+def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline):
+    df = create_df()
+    # Make timestamps non-uniform for series A
+    df.loc[df["item_id"] == "A", "timestamp"] = [
+        "2023-01-01",
+        "2023-01-02",
+        "2023-01-04",
+        "2023-01-05",
+        "2023-01-06",
+        "2023-01-07",
+        "2023-01-08",
+        "2023-01-09",
+        "2023-01-10",
+        "2023-01-11",
+    ]
+
+    with pytest.raises(ValueError, match="not infer frequency"):
+        pipeline.predict_df(df)
+
+
+def test_predict_df_with_inconsistent_frequencies_raises_error(pipeline):
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B"],
+            "timestamp": [
+                "2023-01-01",
+                "2023-01-02",
+                "2023-01-03",
+                "2023-01-04",
+                "2023-01-05",
+                "2023-01-01",
+                "2023-02-01",
+                "2023-03-01",
+                "2023-04-01",
+                "2023-05-01",
+            ],
+            "target": [1.0] * 10,
+        }
+    )
+
+    with pytest.raises(ValueError, match="same frequency"):
+        pipeline.predict_df(df)
 
 
 # The following tests have been taken from
