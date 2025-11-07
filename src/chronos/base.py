@@ -197,7 +197,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             prediction_length=prediction_length,
         )
 
-        context = [torch.tensor(item["target"]).squeeze(0) for item in inputs]
+        context = [torch.tensor(item["target"]).squeeze(0) for item in inputs]  # squeeze the extra variate dim
 
         # Generate forecasts
         quantiles, mean = self.predict_quantiles(
