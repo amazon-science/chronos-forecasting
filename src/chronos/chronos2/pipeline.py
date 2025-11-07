@@ -732,7 +732,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return quantiles, mean
 
-    def predict_df(  # type: ignore[override]
+    def predict_df(
         self,
         df: "pd.DataFrame",
         future_df: "pd.DataFrame | None" = None,

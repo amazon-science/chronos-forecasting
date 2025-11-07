@@ -135,6 +135,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     def predict_df(
         self,
         df: "pd.DataFrame",
+        *,
         id_column: str = "item_id",
         timestamp_column: str = "timestamp",
         target: str = "target",
@@ -197,6 +198,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             prediction_length=prediction_length,
         )
 
+        # NOTE: any covariates, if present, are ignored here
         context = [torch.tensor(item["target"]).squeeze(0) for item in inputs]  # squeeze the extra variate dim
 
         # Generate forecasts
