@@ -9,7 +9,7 @@
 import time
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -177,7 +177,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         try:
             import pandas as pd
 
-            from .chronos2.dataset import convert_df_input_to_list_of_dicts_input
+            from .df_utils import convert_df_input_to_list_of_dicts_input
         except ImportError:
             raise ImportError("pandas is required for predict_df. Please install it with `pip install pandas`.")
 
