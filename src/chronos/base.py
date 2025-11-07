@@ -148,9 +148,8 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         Parameters
         ----------
         df
-            Time series data in long format with an id column, a timestamp, and at least one target column.
-            The remaining columns in df will be treated as past-only covariates unless they are also
-            present in future_df
+            Time series data in long format with an id column, a timestamp, and one target column.
+            Any other columns, if present, will be ignored
         id_column
             The name of the column which contains the unique time series identifiers, by default "item_id"
         timestamp_column
