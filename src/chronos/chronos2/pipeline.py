@@ -992,6 +992,32 @@ class Chronos2Pipeline(BaseChronosPipeline):
     def embed(
         self, inputs: TensorOrArray | Sequence[TensorOrArray], batch_size: int = 256, context_length: int | None = None
     ) -> tuple[list[torch.Tensor], list[tuple[torch.Tensor, torch.Tensor]]]:
+        """
+        Get encoder embeddings for the given time series.
+
+        Parameters
+        ----------
+        inputs
+            The time series to get embeddings for, can be one of:
+            - A 3-dimensional `torch.Tensor` or `np.ndarray` of shape (batch, n_variates, history_length). When `n_variates > 1`, information
+            will be shared among the different variates of each time series in the batch.
+            - A list of `torch.Tensor` or `np.ndarray` where each element can either be 1-dimensional of shape (history_length,)
+            or 2-dimensional of shape (n_variates, history_length). The history_lengths may be different across elements; left-padding
+            will be applied, if needed.
+        batch_size
+            The batch size used for generating embeddings. Note that the batch size here means the total number of time series which are input into the model.
+            If your data has multiple variates, the effective number of time series tasks in a batch will be lower than this value, by default 256
+        context_length
+            The maximum context length used during for inference, by default set to the model's default context length
+
+        Returns
+        -------
+        embeddings
+            a list of `torch.Tensor` where each element has shape (n_variates, num_patches + 2, d_model) and the number of elements are equal to the number
+            of target time series (univariate or multivariate) in the `inputs`. The extra +2 is due to embeddings of the [REG] token and a masked output patch token.
+        loc_scale
+            a list of tuples with the mean and standard deviation of each time series.
+        """
         if context_length is None:
             context_length = self.model_context_length
 
