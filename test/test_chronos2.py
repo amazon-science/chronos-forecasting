@@ -14,9 +14,9 @@ import torch
 
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
-from chronos.chronos2.dataset import convert_df_input_to_list_of_dicts_input
 from chronos.chronos2.layers import MHA
-from test.util import validate_tensor
+from chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
 
@@ -385,39 +385,6 @@ def test_pipeline_can_evaluate_on_dummy_fev_task(pipeline, task_kwargs):
 
     eval_summary = task.evaluation_summary(predictions_per_window, model_name="chronos-2")
     assert isinstance(eval_summary["test_error"], float)
-
-
-def create_df(series_ids=["A", "B"], n_points=[10, 10], target_cols=["target"], covariates=None, freq="h"):
-    """Helper to create test context DataFrames."""
-    series_dfs = []
-    for series_id, length in zip(series_ids, n_points):
-        series_data = {"item_id": series_id, "timestamp": pd.date_range(end="2001-10-01", periods=length, freq=freq)}
-        for target_col in target_cols:
-            series_data[target_col] = np.random.randn(length)
-        if covariates:
-            for cov in covariates:
-                series_data[cov] = np.random.randn(length)
-        series_dfs.append(pd.DataFrame(series_data))
-    return pd.concat(series_dfs, ignore_index=True)
-
-
-def create_future_df(forecast_start_times: list, series_ids=["A", "B"], n_points=[5, 5], covariates=None, freq="h"):
-    """Helper to create test future DataFrames."""
-    series_dfs = []
-    for series_id, length, start in zip(series_ids, n_points, forecast_start_times):
-        series_data = {"item_id": series_id, "timestamp": pd.date_range(start=start, periods=length, freq=freq)}
-        if covariates:
-            for cov in covariates:
-                series_data[cov] = np.random.randn(length)
-        series_dfs.append(pd.DataFrame(series_data))
-    return pd.concat(series_dfs, ignore_index=True)
-
-
-def get_forecast_start_times(df, freq="h"):
-    context_end_times = df.groupby("item_id")["timestamp"].max()
-    forecast_start_times = [pd.date_range(end_time, periods=2, freq=freq)[-1] for end_time in context_end_times]
-
-    return forecast_start_times
 
 
 @pytest.mark.parametrize(

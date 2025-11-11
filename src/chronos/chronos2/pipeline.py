@@ -20,12 +20,8 @@ from transformers import AutoConfig
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
-from chronos.chronos2.dataset import (
-    Chronos2Dataset,
-    DatasetMode,
-    TensorOrArray,
-    convert_df_input_to_list_of_dicts_input,
-)
+from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
+from chronos.df_utils import convert_df_input_to_list_of_dicts_input
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
@@ -541,9 +537,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             output_patch_size=self.model_output_patch_size,
             mode=DatasetMode.TEST,
         )
-        test_loader = DataLoader(
-            test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False
-        )
+        test_loader = DataLoader(test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False)
 
         all_predictions: list[torch.Tensor] = []
         for batch in test_loader:
