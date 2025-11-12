@@ -341,6 +341,35 @@ def test_pipeline_predict_can_handle_different_model_and_input_dtypes(dtype: tor
 
 
 @pytest.mark.parametrize(
+    "inputs, expected_output_shapes",
+    [
+        # NOTE: d_model for the dummy model is 6
+        # Homogenous univariate task
+        (torch.rand(4, 1, 16), [(1, 3, 6)] * 4),
+        # Homogenous multivariate task
+        (torch.rand(4, 3, 37), [(3, 5, 6)] * 4),
+        # Heterogenous tasks with different history lengths
+        (
+            [torch.rand(100), torch.rand(2, 150), torch.rand(120)],
+            [(1, 12, 6), (2, 12, 6), (1, 12, 6)],
+        ),
+    ],
+)
+def test_when_input_is_valid_then_pipeline_can_embed(pipeline, inputs, expected_output_shapes):
+    embeds, loc_scales = pipeline.embed(inputs)
+
+    assert (
+        isinstance(embeds, list)
+        and len(embeds) == len(expected_output_shapes)
+        and len(loc_scales) == len(expected_output_shapes)
+    )
+    for embed, loc_scale, expected_shape in zip(embeds, loc_scales, expected_output_shapes):
+        validate_tensor(embed, expected_shape, dtype=torch.float32)
+        validate_tensor(loc_scale[0], (expected_shape[0], 1), dtype=torch.float32)
+        validate_tensor(loc_scale[1], (expected_shape[0], 1), dtype=torch.float32)
+
+
+@pytest.mark.parametrize(
     "task_kwargs",
     [
         {"dataset_path": "autogluon/chronos_datasets", "dataset_config": "monash_m1_yearly", "horizon": 8},
