@@ -503,6 +503,8 @@ class Chronos2Dataset(IterableDataset):
         if self.mode in [DatasetMode.TRAIN, DatasetMode.VALIDATION]:
             # the first task_n_targets elements in task_context_tensor are the targets
             task_future_target = task_past_tensor[:, slice_idx : slice_idx + self.prediction_length]
+            # mask out all rows corresponding to covariates
+            task_future_target[task_n_targets:] = torch.nan
 
             if task_n_future_covariates > 0:
                 # the last task_n_future_covariates elements in task_context_tensor are the known covariates
