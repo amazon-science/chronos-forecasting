@@ -477,6 +477,7 @@ class Chronos2Dataset(IterableDataset):
             task_n_covariates,
             task_n_future_covariates,
         ) = self.tasks[task_idx]
+        task_past_tensor, task_future_tensor = task_past_tensor.clone(), task_future_tensor.clone()
         task_n_past_only_covariates = task_n_covariates - task_n_future_covariates
 
         full_length = task_past_tensor.shape[-1]
