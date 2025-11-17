@@ -100,7 +100,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
         | None = None,
         context_length: int | None = None,
-        learning_rate: float = 1e-5,
+        learning_rate: float = 1e-6,
         num_steps: int = 1000,
         batch_size: int = 256,
         output_dir: Path | str | None = None,
@@ -126,7 +126,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         context_length
             The maximum context length used during fine-tuning, by default set to the model's default context length
         learning_rate
-            The learning rate for the optimizer, by default 1e-5
+            The learning rate for the optimizer, by default 1e-6
         num_steps
             The number of steps to fine-tune for, by default 1000
         batch_size
