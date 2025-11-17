@@ -153,12 +153,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
-        warnings.warn(
-            "Fine-tuning support is experimental and may be changed in future versions.",
-            category=FutureWarning,
-            stacklevel=2,
-        )
-
         # Create a copy of the model to avoid modifying the original
         config = deepcopy(self.model.config)
         model = Chronos2Model(config).to(self.model.device)  # type: ignore
