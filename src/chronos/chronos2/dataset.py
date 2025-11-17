@@ -502,7 +502,7 @@ class Chronos2Dataset(IterableDataset):
         # the task_context_tensor by slicing the appropriate indices which we do below
         if self.mode in [DatasetMode.TRAIN, DatasetMode.VALIDATION]:
             # the first task_n_targets elements in task_context_tensor are the targets
-            task_future_target = task_past_tensor[:, slice_idx : slice_idx + self.prediction_length]
+            task_future_target = task_past_tensor[:, slice_idx : slice_idx + self.prediction_length].clone()
             # mask out all rows corresponding to covariates
             task_future_target[task_n_targets:] = torch.nan
 
