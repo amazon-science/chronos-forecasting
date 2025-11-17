@@ -547,6 +547,74 @@ class Chronos2Model(PreTrainedModel):
 
         return loss
 
+    def encode(
+        self,
+        context: torch.Tensor,
+        context_mask: torch.Tensor | None = None,
+        group_ids: torch.Tensor | None = None,
+        future_covariates: torch.Tensor | None = None,
+        future_covariates_mask: torch.Tensor | None = None,
+        num_output_patches: int = 1,
+        future_target: torch.Tensor | None = None,
+        future_target_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+    ):
+        self._validate_input(
+            context=context,
+            context_mask=context_mask,
+            future_covariates=future_covariates,
+            future_covariates_mask=future_covariates_mask,
+            group_ids=group_ids,
+            num_output_patches=num_output_patches,
+            future_target=future_target,
+            future_target_mask=future_target_mask,
+        )
+
+        batch_size = context.shape[0]
+        patched_context, attention_mask, loc_scale = self._prepare_patched_context(
+            context=context, context_mask=context_mask
+        )
+        num_context_patches = attention_mask.shape[-1]
+
+        # get input embeddings of shape (batch, num_context_patches, d_model)
+        input_embeds: torch.Tensor = self.input_patch_embedding(patched_context)
+        # append [REG] special token embedding, if needed
+        if self.chronos_config.use_reg_token:
+            reg_input_ids = torch.full((batch_size, 1), self.config.reg_token_id, device=input_embeds.device)
+            reg_embeds = self.shared(reg_input_ids)
+            input_embeds = torch.cat([input_embeds, reg_embeds], dim=-2)
+            attention_mask = torch.cat(
+                [attention_mask.to(self.dtype), torch.ones_like(reg_input_ids).to(self.dtype)], dim=-1
+            )
+
+        patched_future, patched_future_covariates_mask = self._prepare_patched_future(
+            future_covariates=future_covariates,
+            future_covariates_mask=future_covariates_mask,
+            loc_scale=loc_scale,
+            num_output_patches=num_output_patches,
+            batch_size=batch_size,
+        )
+        future_attention_mask = torch.ones(batch_size, num_output_patches, dtype=self.dtype, device=self.device)
+
+        # get future embeddings of shape (batch, num_output_patches, d_model)
+        future_embeds: torch.Tensor = self.input_patch_embedding(patched_future)
+
+        # concatenate context and future embeddings and masks
+        input_embeds = torch.cat([input_embeds, future_embeds], dim=-2)
+        attention_mask = torch.cat([attention_mask, future_attention_mask], dim=-1)
+
+        if group_ids is None:
+            # by default, each time series is treated independently, i.e., no mixing across the batch
+            group_ids = torch.arange(batch_size, dtype=torch.long, device=self.device)
+
+        encoder_outputs: Chronos2EncoderOutput = self.encoder(
+            attention_mask=attention_mask,
+            inputs_embeds=input_embeds,
+            group_ids=group_ids,
+            output_attentions=output_attentions,
+        )
+        return encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches
+
     def forward(
         self,
         context: torch.Tensor,
@@ -625,63 +693,19 @@ class Chronos2Model(PreTrainedModel):
         - enc_time_self_attn_weights: Time self attention weights, if output_attentions=True
         - enc_group_self_attn_weights: Group self attention weights, if output_attentions=True
         """
-
-        self._validate_input(
+        batch_size = context.shape[0]
+        encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches = self.encode(
             context=context,
             context_mask=context_mask,
+            group_ids=group_ids,
             future_covariates=future_covariates,
             future_covariates_mask=future_covariates_mask,
-            group_ids=group_ids,
             num_output_patches=num_output_patches,
             future_target=future_target,
             future_target_mask=future_target_mask,
-        )
-
-        batch_size = context.shape[0]
-        patched_context, attention_mask, loc_scale = self._prepare_patched_context(
-            context=context, context_mask=context_mask
-        )
-        num_context_patches = attention_mask.shape[-1]
-
-        # get input embeddings of shape (batch, num_context_patches, d_model)
-        input_embeds: torch.Tensor = self.input_patch_embedding(patched_context)
-        # append [REG] special token embedding, if needed
-        if self.chronos_config.use_reg_token:
-            reg_input_ids = torch.full((batch_size, 1), self.config.reg_token_id, device=input_embeds.device)
-            reg_embeds = self.shared(reg_input_ids)
-            input_embeds = torch.cat([input_embeds, reg_embeds], dim=-2)
-            attention_mask = torch.cat(
-                [attention_mask.to(self.dtype), torch.ones_like(reg_input_ids).to(self.dtype)], dim=-1
-            )
-
-        patched_future, patched_future_covariates_mask = self._prepare_patched_future(
-            future_covariates=future_covariates,
-            future_covariates_mask=future_covariates_mask,
-            loc_scale=loc_scale,
-            num_output_patches=num_output_patches,
-            batch_size=batch_size,
-        )
-        future_attention_mask = torch.ones(batch_size, num_output_patches, dtype=self.dtype, device=self.device)
-
-        # get future embeddings of shape (batch, num_output_patches, d_model)
-        future_embeds: torch.Tensor = self.input_patch_embedding(patched_future)
-
-        # concatenate context and future embeddings and masks
-        input_embeds = torch.cat([input_embeds, future_embeds], dim=-2)
-        attention_mask = torch.cat([attention_mask, future_attention_mask], dim=-1)
-
-        if group_ids is None:
-            # by default, each time series is treated independently, i.e., no mixing across the batch
-            group_ids = torch.arange(batch_size, dtype=torch.long, device=self.device)
-
-        encoder_outputs: Chronos2EncoderOutput = self.encoder(
-            attention_mask=attention_mask,
-            inputs_embeds=input_embeds,
-            group_ids=group_ids,
             output_attentions=output_attentions,
         )
         hidden_states: torch.Tensor = encoder_outputs[0]
-
         assert hidden_states.shape == (batch_size, num_context_patches + 1 + num_output_patches, self.model_dim)
 
         # slice the last num_output_patches hidden states to be input into the output_patch_embedding
