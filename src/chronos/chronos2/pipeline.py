@@ -9,7 +9,7 @@ import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     import datasets
     import fev
     import pandas as pd
+    from peft import LoraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         | Sequence[TensorOrArray]
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
         | None = None,
+        finetune_mode: Literal["full", "lora"] = "lora",
+        lora_config: "LoraConfig | dict | None" = None,
         context_length: int | None = None,
         learning_rate: float = 1e-6,
         num_steps: int = 1000,
@@ -149,14 +152,43 @@ class Chronos2Pipeline(BaseChronosPipeline):
         """
 
         import torch.cuda
+        from peft import LoraConfig, get_peft_model
         from transformers.training_args import TrainingArguments
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
+
+        assert finetune_mode in ["full", "lora"], f"finetune_mode must be one of ['full', 'lora'], got {finetune_mode}"
+
+        if finetune_mode == "full" and lora_config is not None:
+            raise ValueError(
+                "lora_config should not be specified when finetune_mode is 'full'. To enable LoRA, set finetune_mode to 'lora'."
+            )
 
         # Create a copy of the model to avoid modifying the original
         config = deepcopy(self.model.config)
         model = Chronos2Model(config).to(self.model.device)  # type: ignore
         model.load_state_dict(self.model.state_dict())
+
+        if finetune_mode == "lora":
+            if lora_config is None:
+                lora_config = LoraConfig(
+                    r=8,
+                    lora_alpha=16,
+                    target_modules=["self_attention.q", "self_attention.v"],
+                    modules_to_save=["output_patch_embedding.output_layer"],
+                )
+            elif isinstance(lora_config, dict):
+                lora_config = LoraConfig(**lora_config)
+            else:
+                assert isinstance(lora_config, LoraConfig), (
+                    f"lora_config must be an instance of LoraConfig or a dict, got {type(lora_config)}"
+                )
+
+            model = get_peft_model(model, lora_config)
+            n_trainable_params, n_params = model.get_nb_trainable_parameters()
+            logger.info(
+                f"Using LoRA. Number of trainable parameters: {n_trainable_params}, total parameters: {n_params}."
+            )
 
         if context_length is None:
             context_length = self.model_context_length
