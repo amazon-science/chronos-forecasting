@@ -8,7 +8,7 @@
 </div>
 
 > [!NOTE]  
-> Code coming soon.
+> ~~Code coming soon~~. Code release for WaveToken has been deprioritized due to other engagements. If you are interested in a reference implementation of WaveToken, please open a discussion in this repo.
 
 ## 📝 Citation
 
