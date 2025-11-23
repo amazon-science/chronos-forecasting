@@ -17,6 +17,7 @@ dependencies = [
   "torch>=2.2,<3",
   "transformers>=4.41,<5",
   "accelerate>=0.34,<2",
+  "peft>=0.13.0,<1",
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
   "scikit-learn>=1.6.0,<2",
