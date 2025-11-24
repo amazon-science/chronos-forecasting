@@ -17,11 +17,9 @@ dependencies = [
   "torch>=2.2,<3",
   "transformers>=4.41,<5",
   "accelerate>=0.34,<2",
-  "peft>=0.13.0,<1",
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
   "scikit-learn>=1.6.0,<2",
-  "boto3",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -41,6 +39,12 @@ packages = ["src/chronos"]
 path = "src/chronos/__about__.py"
 
 [project.optional-dependencies]
+extras = [
+  "boto3>=1.10,<2",
+  "peft>=0.13.0,<1",
+  "fev>=0.6.1",
+  "pandas[pyarrow]>=2.0,<2.4",
+]
 test = ["pytest~=8.0", "numpy>=1.21,<3", "fev>=0.6.1", "pandas>=2.0,<2.4"]
 typecheck = ["mypy~=1.9"]
 dev = [
