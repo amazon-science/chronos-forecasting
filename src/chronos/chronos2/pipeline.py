@@ -100,7 +100,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         | Sequence[TensorOrArray]
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
         | None = None,
-        finetune_mode: Literal["full", "lora"] = "lora",
+        finetune_mode: Literal["full", "lora"] = "full",
         lora_config: "LoraConfig | dict | None" = None,
         context_length: int | None = None,
         learning_rate: float = 1e-6,
