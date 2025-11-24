@@ -174,8 +174,13 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 lora_config = LoraConfig(
                     r=8,
                     lora_alpha=16,
-                    target_modules=["self_attention.q", "self_attention.v"],
-                    modules_to_save=["output_patch_embedding.output_layer"],
+                    target_modules=[
+                        "self_attention.q",
+                        "self_attention.v",
+                        "self_attention.k",
+                        "self_attention.o",
+                        "output_patch_embedding.output_layer",
+                    ],
                 )
             elif isinstance(lora_config, dict):
                 lora_config = LoraConfig(**lora_config)
