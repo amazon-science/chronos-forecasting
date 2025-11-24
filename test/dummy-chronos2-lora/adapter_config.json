@@ -4,7 +4,7 @@
     "base_model_class": "Chronos2Model",
     "parent_library": "chronos.chronos2.model"
   },
-  "base_model_name_or_path": "/fsx/ansarnd/repos/chronos-forecasting/test/dummy-chronos2-model",
+  "base_model_name_or_path": "test/dummy-chronos2-model",
   "bias": "none",
   "fan_in_fan_out": false,
   "inference_mode": true,
