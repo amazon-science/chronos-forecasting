@@ -16,6 +16,8 @@ import torch
 from einops import rearrange, repeat
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
+from transformers.utils.import_utils import is_peft_available
+from transformers.utils.peft_utils import find_adapter_config_file
 
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
@@ -1115,9 +1117,25 @@ class Chronos2Pipeline(BaseChronosPipeline):
         Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
 
+        # Check if the model is on S3 and cache it locally first
+        # NOTE: Only base models (not LoRA adapters) are supported via S3
         if str(pretrained_model_name_or_path).startswith("s3://"):
             return BaseChronosPipeline.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
+        # Check if the hub model_id or local path is a LoRA adapter
+        if find_adapter_config_file(pretrained_model_name_or_path) is not None:
+            if not is_peft_available():
+                raise ImportError(
+                    f"The model at {pretrained_model_name_or_path} is a `peft` adaptor, but `peft` is not available. "
+                    f"Please install `peft` with `pip install peft` to use this model. "
+                )
+            from peft import AutoPeftModel
+
+            model = AutoPeftModel.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+            model = model.merge_and_unload()
+            return cls(model=model)
+
+        # Handle the case for the base model
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
