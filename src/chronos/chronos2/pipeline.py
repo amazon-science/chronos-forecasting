@@ -175,7 +175,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         if finetune_mode == "full" and lora_config is not None:
             raise ValueError(
-                "lora_config should not be specified when finetune_mode is 'full'. To enable LoRA, set finetune_mode to 'lora'."
+                "lora_config should not be specified when `finetune_mode='full'`. To enable LoRA, set `finetune_mode='lora'`."
             )
 
         # Create a copy of the model to avoid modifying the original
