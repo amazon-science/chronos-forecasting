@@ -45,7 +45,13 @@ extras = [
   "fev>=0.6.1",
   "pandas[pyarrow]>=2.0,<2.4",
 ]
-test = ["pytest~=8.0", "numpy>=1.21,<3", "fev>=0.6.1", "pandas>=2.0,<2.4"]
+test = [
+  "pytest~=8.0",
+  "boto3>=1.10,<2",
+  "peft>=0.13.0,<1",
+  "fev>=0.6.1",
+  "pandas[pyarrow]>=2.0,<2.4",
+]
 typecheck = ["mypy~=1.9"]
 dev = [
   "gluonts[pro]~=0.16",
