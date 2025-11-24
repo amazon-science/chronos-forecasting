@@ -270,6 +270,7 @@ def convert_df_input_to_list_of_dicts_input(
     offset = pd.tseries.frequencies.to_offset(freq)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+        # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
         prediction_timestamps_array = pd.DatetimeIndex(
             np.dstack([last_ts + step * offset for step in range(1, prediction_length + 1)]).ravel()
         )
@@ -291,7 +292,7 @@ def convert_df_input_to_list_of_dicts_input(
         task: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_array[:, start_idx:end_idx]}
 
         # Handle covariates if present
-        if past_covariates_dict:
+        if len(past_covariates_dict) > 0:
             task["past_covariates"] = {col: values[start_idx:end_idx] for col, values in past_covariates_dict.items()}
 
             # Handle future covariates
@@ -302,7 +303,7 @@ def convert_df_input_to_list_of_dicts_input(
                     f"({first_future_timestamp} != {prediction_timestamps[series_id][0]}) in series {series_id}"
                 )
 
-                if future_covariates_dict:
+                if len(future_covariates_dict) > 0:
                     task["future_covariates"] = {
                         col: values[future_start_idx:future_end_idx] for col, values in future_covariates_dict.items()
                     }
