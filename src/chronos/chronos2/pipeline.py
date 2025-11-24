@@ -126,10 +126,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         validation_inputs
             The time series used for validation and model selection. The format of `validation_inputs` is exactly the same as `inputs`, by default None which
             means that no validation is performed. Note that enabling validation may slow down fine-tuning for large datasets.
+        finetune_mode
+            One of "full" (performs full fine-tuning) or "lora" (performs Low Rank Adaptation (LoRA) fine-tuning), by default "full"
+        lora_config
+            The configuration to use for LoRA fine-tuning when finetune_mode="lora". Can be a `LoraConfig` object or a dict which is used to initialize `LoraConfig`.
+            When unspecified and finetune_mode="lora", a default configuration is used
         context_length
             The maximum context length used during fine-tuning, by default set to the model's default context length
         learning_rate
             The learning rate for the optimizer, by default 1e-6
+            When finetune_mode="lora", we recommend using a higher value of the learning rate, such as 1e-5
         num_steps
             The number of steps to fine-tune for, by default 1000
         batch_size
@@ -152,8 +158,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         """
 
         import torch.cuda
-        from peft import LoraConfig, get_peft_model
         from transformers.training_args import TrainingArguments
+
+        try:
+            from peft import LoraConfig, get_peft_model
+        except:
+            if finetune_mode == "lora":
+                warnings.warn(
+                    "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
+                )
+                finetune_mode = "full"
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
