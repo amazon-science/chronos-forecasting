@@ -162,10 +162,10 @@ class Chronos2Pipeline(BaseChronosPipeline):
         import torch.cuda
         from transformers.training_args import TrainingArguments
 
-        try:
-            from peft import LoraConfig, get_peft_model
-        except:
-            if finetune_mode == "lora":
+        if finetune_mode == "lora":
+            if is_peft_available():
+                from peft import LoraConfig, get_peft_model
+            else:
                 warnings.warn(
                     "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
                 )
