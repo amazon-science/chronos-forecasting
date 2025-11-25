@@ -9,13 +9,15 @@ import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 import numpy as np
 import torch
 from einops import rearrange, repeat
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
+from transformers.utils.import_utils import is_peft_available
+from transformers.utils.peft_utils import find_adapter_config_file
 
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
     import datasets
     import fev
     import pandas as pd
+    from peft import LoraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         | Sequence[TensorOrArray]
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
         | None = None,
+        finetune_mode: Literal["full", "lora"] = "full",
+        lora_config: "LoraConfig | dict | None" = None,
         context_length: int | None = None,
         learning_rate: float = 1e-6,
         num_steps: int = 1000,
@@ -123,10 +128,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         validation_inputs
             The time series used for validation and model selection. The format of `validation_inputs` is exactly the same as `inputs`, by default None which
             means that no validation is performed. Note that enabling validation may slow down fine-tuning for large datasets.
+        finetune_mode
+            One of "full" (performs full fine-tuning) or "lora" (performs Low Rank Adaptation (LoRA) fine-tuning), by default "full"
+        lora_config
+            The configuration to use for LoRA fine-tuning when finetune_mode="lora". Can be a `LoraConfig` object or a dict which is used to initialize `LoraConfig`.
+            When unspecified and finetune_mode="lora", a default configuration is used
         context_length
             The maximum context length used during fine-tuning, by default set to the model's default context length
         learning_rate
             The learning rate for the optimizer, by default 1e-6
+            When finetune_mode="lora", we recommend using a higher value of the learning rate, such as 1e-5
         num_steps
             The number of steps to fine-tune for, by default 1000
         batch_size
@@ -151,12 +162,54 @@ class Chronos2Pipeline(BaseChronosPipeline):
         import torch.cuda
         from transformers.training_args import TrainingArguments
 
+        if finetune_mode == "lora":
+            if is_peft_available():
+                from peft import LoraConfig, get_peft_model
+            else:
+                warnings.warn(
+                    "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
+                )
+                finetune_mode = "full"
+
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
+
+        assert finetune_mode in ["full", "lora"], f"finetune_mode must be one of ['full', 'lora'], got {finetune_mode}"
+
+        if finetune_mode == "full" and lora_config is not None:
+            raise ValueError(
+                "lora_config should not be specified when `finetune_mode='full'`. To enable LoRA, set `finetune_mode='lora'`."
+            )
 
         # Create a copy of the model to avoid modifying the original
         config = deepcopy(self.model.config)
         model = Chronos2Model(config).to(self.model.device)  # type: ignore
         model.load_state_dict(self.model.state_dict())
+
+        if finetune_mode == "lora":
+            if lora_config is None:
+                lora_config = LoraConfig(
+                    r=8,
+                    lora_alpha=16,
+                    target_modules=[
+                        "self_attention.q",
+                        "self_attention.v",
+                        "self_attention.k",
+                        "self_attention.o",
+                        "output_patch_embedding.output_layer",
+                    ],
+                )
+            elif isinstance(lora_config, dict):
+                lora_config = LoraConfig(**lora_config)
+            else:
+                assert isinstance(lora_config, LoraConfig), (
+                    f"lora_config must be an instance of LoraConfig or a dict, got {type(lora_config)}"
+                )
+
+            model = get_peft_model(model, lora_config)
+            n_trainable_params, n_params = model.get_nb_trainable_parameters()
+            logger.info(
+                f"Using LoRA. Number of trainable parameters: {n_trainable_params}, total parameters: {n_params}."
+            )
 
         if context_length is None:
             context_length = self.model_context_length
@@ -1064,9 +1117,25 @@ class Chronos2Pipeline(BaseChronosPipeline):
         Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
 
+        # Check if the model is on S3 and cache it locally first
+        # NOTE: Only base models (not LoRA adapters) are supported via S3
         if str(pretrained_model_name_or_path).startswith("s3://"):
             return BaseChronosPipeline.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
+        # Check if the hub model_id or local path is a LoRA adapter
+        if find_adapter_config_file(pretrained_model_name_or_path) is not None:
+            if not is_peft_available():
+                raise ImportError(
+                    f"The model at {pretrained_model_name_or_path} is a `peft` adaptor, but `peft` is not available. "
+                    f"Please install `peft` with `pip install peft` to use this model. "
+                )
+            from peft import AutoPeftModel
+
+            model = AutoPeftModel.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+            model = model.merge_and_unload()
+            return cls(model=model)
+
+        # Handle the case for the base model
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 

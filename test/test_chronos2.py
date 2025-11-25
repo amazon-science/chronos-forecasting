@@ -38,6 +38,10 @@ def test_base_chronos2_pipeline_loads_from_hf():
     BaseChronosPipeline.from_pretrained("amazon/chronos-2", device_map="cpu")
 
 
+def test_chronos2_lora_pipeline_loads_from_disk():
+    Chronos2Pipeline.from_pretrained(Path(__file__).parent / "dummy-chronos2-lora", device_map="cpu")
+
+
 @pytest.mark.parametrize(
     "inputs, prediction_length, expected_output_shapes",
     [
@@ -671,12 +675,20 @@ def test_predict_df_with_future_df_with_different_freq_raises_error(pipeline):
         ),
     ],
 )
+@pytest.mark.parametrize("finetune_mode", ["full", "lora"])
 def test_when_input_is_valid_then_pipeline_can_be_finetuned(
-    pipeline, inputs, prediction_length, expected_output_shapes
+    pipeline, inputs, prediction_length, expected_output_shapes, finetune_mode
 ):
     # Get outputs before fine-tuning
     orig_outputs_before = pipeline.predict(inputs, prediction_length=prediction_length)
-    ft_pipeline = pipeline.fit(inputs, prediction_length=prediction_length, num_steps=5, min_past=1, batch_size=32)
+    ft_pipeline = pipeline.fit(
+        inputs,
+        prediction_length=prediction_length,
+        num_steps=5,
+        min_past=1,
+        batch_size=32,
+        finetune_mode=finetune_mode,
+    )
     # Get outputs from fine-tuned pipeline
     ft_outputs = ft_pipeline.predict(inputs, prediction_length=prediction_length)
     # Get outputs from original pipeline after fine-tuning
