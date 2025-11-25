@@ -269,7 +269,7 @@ def convert_df_input_to_list_of_dicts_input(
     last_ts = pd.DatetimeIndex(df[timestamp_column].iloc[indptr[1:] - 1])  # Shape: (n_series,)
     offset = pd.tseries.frequencies.to_offset(freq)
     with warnings.catch_warnings():
-        # Silce PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
+        # Silence PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
         warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
         # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
         prediction_timestamps_array = pd.DatetimeIndex(
