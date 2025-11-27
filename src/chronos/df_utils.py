@@ -215,6 +215,7 @@ def convert_df_input_to_list_of_dicts_input(
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
+    validate_inputs: bool = True,
 ) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
     """
     Convert from dataframe input format to a list of dictionaries input format.
@@ -240,6 +241,8 @@ def convert_df_input_to_list_of_dicts_input(
         Name of column containing time series identifiers
     timestamp_column
         Name of column containing timestamps
+    validate_inputs
+        When True, the dataframe(s) will be validated be conversion
 
     Returns
     -------
@@ -251,14 +254,34 @@ def convert_df_input_to_list_of_dicts_input(
 
     import pandas as pd
 
-    df, future_df, freq, series_lengths, original_order = validate_df_inputs(
-        df,
-        future_df=future_df,
-        id_column=id_column,
-        timestamp_column=timestamp_column,
-        target_columns=target_columns,
-        prediction_length=prediction_length,
-    )
+    if validate_inputs:
+        df, future_df, freq, series_lengths, original_order = validate_df_inputs(
+            df,
+            future_df=future_df,
+            id_column=id_column,
+            timestamp_column=timestamp_column,
+            target_columns=target_columns,
+            prediction_length=prediction_length,
+        )
+    else:
+        # Get the original order of time series IDs
+        original_order = df[id_column].unique()
+
+        # Get series lengths
+        series_lengths = df[id_column].value_counts(sort=False).to_list()
+
+        # If validation is skipped, the first freq in the dataframe is used
+        timestamp_index = pd.DatetimeIndex(df[timestamp_column])
+        start_idx = 0
+        for length in series_lengths:
+            if length < 3:
+                start_idx += length
+                continue
+            timestamps = timestamp_index[start_idx : start_idx + length]
+            freq = pd.infer_freq(timestamps)
+            break
+
+        assert freq is not None, "validate is False, but could not infer frequency from the dataframe"
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
