@@ -215,7 +215,7 @@ def convert_df_input_to_list_of_dicts_input(
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-    validate: bool = True,
+    validate_inputs: bool = True,
 ) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
     """
     Convert from dataframe input format to a list of dictionaries input format.
@@ -241,7 +241,7 @@ def convert_df_input_to_list_of_dicts_input(
         Name of column containing time series identifiers
     timestamp_column
         Name of column containing timestamps
-    validate
+    validate_inputs
         When True, the dataframe(s) will be validated be conversion
 
     Returns
@@ -254,7 +254,7 @@ def convert_df_input_to_list_of_dicts_input(
 
     import pandas as pd
 
-    if validate:
+    if validate_inputs:
         df, future_df, freq, series_lengths, original_order = validate_df_inputs(
             df,
             future_df=future_df,

@@ -450,8 +450,10 @@ def test_pipeline_can_evaluate_on_dummy_fev_task(pipeline, task_kwargs):
     ],
 )
 @pytest.mark.parametrize("freq", ["s", "min", "30min", "h", "D", "W", "ME", "QE", "YE"])
-@pytest.mark.parametrize("validate", [True, False])
-def test_predict_df_works_for_valid_inputs(pipeline, context_setup, future_setup, expected_rows, freq, validate):
+@pytest.mark.parametrize("validate_inputs", [True, False])
+def test_predict_df_works_for_valid_inputs(
+    pipeline, context_setup, future_setup, expected_rows, freq, validate_inputs
+):
     prediction_length = 3
     df = create_df(**context_setup, freq=freq)
     forecast_start_times = get_forecast_start_times(df, freq)
@@ -462,7 +464,11 @@ def test_predict_df_works_for_valid_inputs(pipeline, context_setup, future_setup
     n_series = len(series_ids)
     n_targets = len(target_columns)
     result = pipeline.predict_df(
-        df, future_df=future_df, target=target_columns, prediction_length=prediction_length, validate=validate
+        df,
+        future_df=future_df,
+        target=target_columns,
+        prediction_length=prediction_length,
+        validate_inputs=validate_inputs,
     )
 
     assert len(result) == expected_rows
@@ -519,8 +525,8 @@ def test_predict_df_future_df_validation_errors(pipeline, future_data, error_mat
         pipeline.predict_df(df, future_df=future_df)
 
 
-@pytest.mark.parametrize("validate", [True, False])
-def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline, validate):
+@pytest.mark.parametrize("validate_inputs", [True, False])
+def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline, validate_inputs):
     df = create_df()
     # Make timestamps non-uniform for series A (first series)
     df.loc[df["item_id"] == "A", "timestamp"] = [
@@ -537,7 +543,7 @@ def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline, validate)
     ]
 
     with pytest.raises((ValueError, AssertionError), match="not infer frequency"):
-        pipeline.predict_df(df, validate=validate)
+        pipeline.predict_df(df, validate_inputs=validate_inputs)
 
 
 def test_predict_df_with_inconsistent_frequencies_raises_error(pipeline):
