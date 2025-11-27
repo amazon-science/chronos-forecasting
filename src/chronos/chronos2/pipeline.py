@@ -785,6 +785,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         batch_size: int = 256,
+        validate: bool = True,
         **predict_kwargs,
     ) -> "pd.DataFrame":
         """
@@ -814,6 +815,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             The batch size used for prediction. Note that the batch size here means the number of time series, including target(s) and covariates,
             which are input into the model. If your data has multiple target and/or covariates, the effective number of time series tasks in a batch
             will be lower than this value, by default 256
+        validate
+            When True, the dataframe(s) will be validated before prediction
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
@@ -844,6 +847,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             timestamp_column=timestamp_column,
             target_columns=target,
             prediction_length=prediction_length,
+            validate=validate,
         )
 
         # Generate forecasts

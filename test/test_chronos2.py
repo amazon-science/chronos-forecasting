@@ -450,7 +450,8 @@ def test_pipeline_can_evaluate_on_dummy_fev_task(pipeline, task_kwargs):
     ],
 )
 @pytest.mark.parametrize("freq", ["s", "min", "30min", "h", "D", "W", "ME", "QE", "YE"])
-def test_predict_df_works_for_valid_inputs(pipeline, context_setup, future_setup, expected_rows, freq):
+@pytest.mark.parametrize("validate", [True, False])
+def test_predict_df_works_for_valid_inputs(pipeline, context_setup, future_setup, expected_rows, freq, validate):
     prediction_length = 3
     df = create_df(**context_setup, freq=freq)
     forecast_start_times = get_forecast_start_times(df, freq)
@@ -460,7 +461,9 @@ def test_predict_df_works_for_valid_inputs(pipeline, context_setup, future_setup
     target_columns = context_setup.get("target_cols", ["target"])
     n_series = len(series_ids)
     n_targets = len(target_columns)
-    result = pipeline.predict_df(df, future_df=future_df, target=target_columns, prediction_length=prediction_length)
+    result = pipeline.predict_df(
+        df, future_df=future_df, target=target_columns, prediction_length=prediction_length, validate=validate
+    )
 
     assert len(result) == expected_rows
     assert "item_id" in result.columns and np.all(
@@ -516,9 +519,10 @@ def test_predict_df_future_df_validation_errors(pipeline, future_data, error_mat
         pipeline.predict_df(df, future_df=future_df)
 
 
-def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline):
+@pytest.mark.parametrize("validate", [True, False])
+def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline, validate):
     df = create_df()
-    # Make timestamps non-uniform for series A
+    # Make timestamps non-uniform for series A (first series)
     df.loc[df["item_id"] == "A", "timestamp"] = [
         "2023-01-01",
         "2023-01-02",
@@ -532,8 +536,8 @@ def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline):
         "2023-01-11",
     ]
 
-    with pytest.raises(ValueError, match="not infer frequency"):
-        pipeline.predict_df(df)
+    with pytest.raises((ValueError, AssertionError), match="not infer frequency"):
+        pipeline.predict_df(df, validate=validate)
 
 
 def test_predict_df_with_inconsistent_frequencies_raises_error(pipeline):
