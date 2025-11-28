@@ -273,6 +273,7 @@ def convert_df_input_to_list_of_dicts_input(
         # If validation is skipped, the first freq in the dataframe is used
         timestamp_index = pd.DatetimeIndex(df[timestamp_column])
         start_idx = 0
+        freq = None
         for length in series_lengths:
             if length < 3:
                 start_idx += length
