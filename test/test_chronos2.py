@@ -421,43 +421,39 @@ def test_pipeline_can_evaluate_on_dummy_fev_task(pipeline, task_kwargs):
 
 
 @pytest.mark.parametrize(
-    "context_setup, future_setup, expected_rows",
+    "context_setup, future_setup",
     [
         # Targets only
-        ({}, None, 6),  # 2 series * 3 predictions
+        ({}, None),
         # Multiple targets with different context lengths
-        (
-            {"target_cols": ["sales", "revenue", "profit"], "n_points": [10, 17]},
-            None,
-            18,
-        ),  # 2 series * 3 targets * 3 predictions
+        ({"target_cols": ["sales", "revenue", "profit"], "n_points": [10, 17]}, None),
         # With past covariates
-        ({"covariates": ["cov1"]}, None, 6),
+        ({"covariates": ["cov1"]}, None),
         # With future covariates
-        ({"covariates": ["cov1"]}, {"covariates": ["cov1"], "n_points": [3, 3]}, 6),
+        ({"covariates": ["cov1"]}, {"covariates": ["cov1"]}),
         # With past-only and future covariates
-        ({"covariates": ["cov1", "cov2"]}, {"covariates": ["cov1"], "n_points": [3, 3]}, 6),
+        ({"covariates": ["cov1", "cov2"]}, {"covariates": ["cov1"]}),
         # With past-only and future covariates and different series order
         (
             {"series_ids": ["B", "C", "A", "Z"], "n_points": [10, 20, 100, 256], "covariates": ["cov1", "cov2"]},
-            {
-                "series_ids": ["B", "C", "A", "Z"],
-                "covariates": ["cov1"],
-                "n_points": [3, 3, 3, 3],
-            },
-            12,
+            {"series_ids": ["B", "C", "A", "Z"], "covariates": ["cov1"]},
         ),
     ],
 )
 @pytest.mark.parametrize("freq", ["s", "min", "30min", "h", "D", "W", "ME", "QE", "YE"])
+@pytest.mark.parametrize("prediction_length", [1, 4])
 @pytest.mark.parametrize("validate_inputs", [True, False])
 def test_predict_df_works_for_valid_inputs(
-    pipeline, context_setup, future_setup, expected_rows, freq, validate_inputs
+    pipeline, context_setup, future_setup, freq, validate_inputs, prediction_length
 ):
-    prediction_length = 3
     df = create_df(**context_setup, freq=freq)
     forecast_start_times = get_forecast_start_times(df, freq)
-    future_df = create_future_df(forecast_start_times, **future_setup, freq=freq) if future_setup else None
+    if future_setup:
+        series_ids = future_setup.get("series_ids", ["A", "B"])
+        future_setup_with_n_points = {**future_setup, "n_points": [prediction_length] * len(series_ids)}
+        future_df = create_future_df(forecast_start_times, **future_setup_with_n_points, freq=freq)
+    else:
+        future_df = None
 
     series_ids = context_setup.get("series_ids", ["A", "B"])
     target_columns = context_setup.get("target_cols", ["target"])
@@ -471,6 +467,7 @@ def test_predict_df_works_for_valid_inputs(
         validate_inputs=validate_inputs,
     )
 
+    expected_rows = n_series * n_targets * prediction_length
     assert len(result) == expected_rows
     assert "item_id" in result.columns and np.all(
         result["item_id"].to_numpy() == np.array(series_ids).repeat(n_targets * prediction_length)
@@ -874,40 +871,36 @@ def test_when_input_time_series_are_too_short_then_finetuning_raises_error(pipel
 
 
 @pytest.mark.parametrize(
-    "context_setup, future_setup, expected_rows",
+    "context_setup, future_setup",
     [
         # Targets only
-        ({}, None, 6),  # 2 series * 3 predictions
+        ({}, None),
         # Multiple targets with different context lengths
-        (
-            {"target_cols": ["sales", "revenue", "profit"], "n_points": [10, 17]},
-            None,
-            18,
-        ),  # 2 series * 3 targets * 3 predictions
+        ({"target_cols": ["sales", "revenue", "profit"], "n_points": [10, 17]}, None),
         # With past covariates
-        ({"covariates": ["cov1"]}, None, 6),
+        ({"covariates": ["cov1"]}, None),
         # With future covariates
-        ({"covariates": ["cov1"]}, {"covariates": ["cov1"], "n_points": [3, 3]}, 6),
+        ({"covariates": ["cov1"]}, {"covariates": ["cov1"]}),
         # With past-only and future covariates
-        ({"covariates": ["cov1", "cov2"]}, {"covariates": ["cov1"], "n_points": [3, 3]}, 6),
+        ({"covariates": ["cov1", "cov2"]}, {"covariates": ["cov1"]}),
         # With past-only and future covariates and different series order
         (
             {"series_ids": ["B", "C", "A", "Z"], "n_points": [10, 20, 100, 256], "covariates": ["cov1", "cov2"]},
-            {
-                "series_ids": ["B", "C", "A", "Z"],
-                "covariates": ["cov1"],
-                "n_points": [3, 3, 3, 3],
-            },
-            12,
+            {"series_ids": ["B", "C", "A", "Z"], "covariates": ["cov1"]},
         ),
     ],
 )
 @pytest.mark.parametrize("freq", ["h", "D", "ME"])
-def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future_setup, expected_rows, freq):
+def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future_setup, freq):
     prediction_length = 3
     df = create_df(**context_setup, freq=freq)
     forecast_start_times = get_forecast_start_times(df, freq)
-    future_df = create_future_df(forecast_start_times, **future_setup, freq=freq) if future_setup else None
+    if future_setup:
+        series_ids = future_setup.get("series_ids", ["A", "B"])
+        future_setup_with_n_points = {**future_setup, "n_points": [prediction_length] * len(series_ids)}
+        future_df = create_future_df(forecast_start_times, **future_setup_with_n_points, freq=freq)
+    else:
+        future_df = None
 
     series_ids = context_setup.get("series_ids", ["A", "B"])
     target_columns = context_setup.get("target_cols", ["target"])
@@ -940,6 +933,7 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
     )
 
     # Check predictions from the fine-tuned model are valid
+    expected_rows = n_series * n_targets * prediction_length
     assert len(result) == expected_rows
     assert "item_id" in result.columns and np.all(
         result["item_id"].to_numpy() == np.array(series_ids).repeat(n_targets * prediction_length)

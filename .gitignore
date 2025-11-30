@@ -161,3 +161,5 @@ cython_debug/
 
 # macOS stuff
 .DS_store
+
+chronos-2-finetuned
