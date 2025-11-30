@@ -197,7 +197,7 @@ def validate_df_inputs(
                 raise ValueError(
                     f"Future covariates all time series must have length {prediction_length}, got {future_length} for series {future_series_id}"
                 )
-            if future_length < 3 or inferred_freq != validate_freq(future_timestamps, future_series_id):
+            if future_length >= 3 and inferred_freq != validate_freq(future_timestamps, future_series_id):
                 raise ValueError(
                     f"Future covariates must have the same frequency as context, found series {future_series_id} with a different frequency"
                 )
