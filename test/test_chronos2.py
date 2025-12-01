@@ -577,6 +577,16 @@ def test_predict_df_with_future_df_missing_series_raises_error(pipeline):
         pipeline.predict_df(df, future_df=future_df)
 
 
+def test_predict_df_with_future_df_with_different_freq_raises_error(pipeline):
+    df = create_df(series_ids=["A", "B"], covariates=["cov1"], freq="h")
+    future_df = create_future_df(
+        get_forecast_start_times(df), series_ids=["A", "B"], n_points=[3, 3], covariates=["cov1"], freq="D"
+    )
+
+    with pytest.raises(ValueError, match="future_df timestamps do not match"):
+        pipeline.predict_df(df, future_df=future_df, prediction_length=3)
+
+
 def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline):
     df = create_df(series_ids=["A", "B"], covariates=["cov1"])
     future_df = create_future_df(
