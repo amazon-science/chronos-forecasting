@@ -295,11 +295,11 @@ def convert_df_input_to_list_of_dicts_input(
     if future_df is not None:
         for col in future_df.columns.drop([id_column, timestamp_column]):
             future_covariates_dict[col] = future_df[col].to_numpy()
-        if validate_df_inputs:
+        if validate_inputs:
             if (pd.DatetimeIndex(future_df[timestamp_column]) != pd.DatetimeIndex(prediction_timestamps_array)).any():
                 raise ValueError(
                     "future_df timestamps do not match the expected prediction timestamps. "
-                    "You can disable this check by setting `validate_df_inputs=False`"
+                    "You can disable this check by setting `validate_inputs=False`"
                 )
 
     for i in range(len(series_lengths)):
