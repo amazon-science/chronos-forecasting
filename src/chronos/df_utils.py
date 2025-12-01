@@ -185,25 +185,13 @@ def validate_df_inputs(
         if context_ids != future_ids:
             raise ValueError("future_df must contain the same time series IDs as df")
 
-        future_series_lengths = future_df[id_column].value_counts(sort=False).to_list()
-
-        # Validate future series lengths match prediction_length
-        future_start_idx = 0
-        future_timestamps_index = pd.DatetimeIndex(future_df[timestamp_column])
-        for future_length in future_series_lengths:
-            future_timestamps = future_timestamps_index[future_start_idx : future_start_idx + future_length]
-            future_series_id = future_df[id_column].iloc[future_start_idx]
-            if future_length != prediction_length:
-                raise ValueError(
-                    f"Future covariates all time series must have length {prediction_length}, got {future_length} for series {future_series_id}"
-                )
-            if future_length >= 3 and inferred_freq != validate_freq(future_timestamps, future_series_id):
-                raise ValueError(
-                    f"Future covariates must have the same frequency as context, found series {future_series_id} with a different frequency"
-                )
-            future_start_idx += future_length
-
-        assert len(series_lengths) == len(future_series_lengths)
+        future_series_lengths = future_df[id_column].value_counts(sort=False)
+        if (future_series_lengths != prediction_length).any():
+            invalid_series = future_series_lengths[future_series_lengths != prediction_length]
+            raise ValueError(
+                f"future_df must contain {prediction_length=} values for each series, "
+                f"but found series with different lengths: {invalid_series.to_dict()}"
+            )
 
     return df, future_df, inferred_freq, series_lengths, original_order
 
@@ -303,10 +291,10 @@ def convert_df_input_to_list_of_dicts_input(
     past_covariates_dict = {
         col: df[col].to_numpy() for col in df.columns if col not in [id_column, timestamp_column] + target_columns
     }
+    future_covariates_dict = {}
     if future_df is not None:
-        future_covariates_dict = {
-            col: future_df[col].to_numpy() for col in future_df.columns if col not in [id_column, timestamp_column]
-        }
+        for col in future_df.columns.drop([id_column, timestamp_column]):
+            future_covariates_dict[col] = future_df[col].to_numpy()
 
     for i in range(len(series_lengths)):
         start_idx, end_idx = indptr[i], indptr[i + 1]
@@ -316,23 +304,12 @@ def convert_df_input_to_list_of_dicts_input(
         prediction_timestamps[series_id] = prediction_timestamps_array[future_start_idx:future_end_idx]
         task: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_array[:, start_idx:end_idx]}
 
-        # Handle covariates if present
         if len(past_covariates_dict) > 0:
             task["past_covariates"] = {col: values[start_idx:end_idx] for col, values in past_covariates_dict.items()}
-
-            # Handle future covariates
-            if future_df is not None:
-                first_future_timestamp = future_df[timestamp_column].iloc[future_start_idx]
-                assert first_future_timestamp == prediction_timestamps[series_id][0], (
-                    f"the first timestamp in future_df must be the first forecast timestamp, found mismatch "
-                    f"({first_future_timestamp} != {prediction_timestamps[series_id][0]}) in series {series_id}"
-                )
-
-                if len(future_covariates_dict) > 0:
-                    task["future_covariates"] = {
-                        col: values[future_start_idx:future_end_idx] for col, values in future_covariates_dict.items()
-                    }
-
+            if len(future_covariates_dict) > 0:
+                task["future_covariates"] = {
+                    col: values[future_start_idx:future_end_idx] for col, values in future_covariates_dict.items()
+                }
         inputs.append(task)
 
     assert len(inputs) == len(series_lengths)

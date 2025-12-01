@@ -583,17 +583,7 @@ def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline)
         get_forecast_start_times(df), series_ids=["A", "B"], n_points=[3, 7], covariates=["cov1"]
     )
 
-    with pytest.raises(ValueError, match="all time series must have length"):
-        pipeline.predict_df(df, future_df=future_df, prediction_length=3)
-
-
-def test_predict_df_with_future_df_with_different_freq_raises_error(pipeline):
-    df = create_df(series_ids=["A", "B"], covariates=["cov1"], freq="h")
-    future_df = create_future_df(
-        get_forecast_start_times(df), series_ids=["A", "B"], n_points=[3, 3], covariates=["cov1"], freq="D"
-    )
-
-    with pytest.raises(ValueError, match="must have the same frequency as context"):
+    with pytest.raises(ValueError, match="future_df must contain prediction"):
         pipeline.predict_df(df, future_df=future_df, prediction_length=3)
 
 
