@@ -265,7 +265,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             report_to="none",
             max_steps=num_steps,
             gradient_accumulation_steps=1,
-            dataloader_num_workers=1,
+            dataloader_num_workers=0,
             tf32=has_sm80 and not use_cpu,
             bf16=has_sm80 and not use_cpu,
             save_only_model=True,
