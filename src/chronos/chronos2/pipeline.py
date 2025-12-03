@@ -1030,11 +1030,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             finetune_kwargs["prediction_length"] = first_window.horizon
             finetune_kwargs["batch_size"] = finetune_kwargs.get("batch_size", batch_size)
 
-            try:
-                pipeline = self.fit(inputs=inputs, **finetune_kwargs)
-            except Exception as e:
-                msg = f"Finetuning failed with error: {e}. Continuing with the pretrained model."
-                warnings.warn(msg, category=UserWarning, stacklevel=2)
+            pipeline = self.fit(inputs=inputs, **finetune_kwargs)
 
         predictions_per_window = []
         inference_time_s = 0.0
