@@ -336,6 +336,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         model.chronos_config.max_output_patches = max(
             model.chronos_config.max_output_patches, math.ceil(prediction_length / self.model_output_patch_size)
         )
+        # update chronos_config in model's config, so it is saved correctly
+        model.config.chronos_config = model.chronos_config.__dict__
 
         # Create a new pipeline with the fine-tuned model
         finetuned_pipeline = Chronos2Pipeline(model=model)
