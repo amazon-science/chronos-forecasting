@@ -805,6 +805,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         batch_size: int = 256,
+        context_length: int | None = None,
+        cross_learning: bool = False,
         validate_inputs: bool = True,
         **predict_kwargs,
     ) -> "pd.DataFrame":
@@ -886,6 +888,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             quantile_levels=quantile_levels,
             limit_prediction_length=False,
             batch_size=batch_size,
+            context_length=context_length,
+            cross_learning=cross_learning,
             **predict_kwargs,
         )
         # since predict_df tasks are homogenous by input design, we can safely stack the list of tensors into a single tensor
