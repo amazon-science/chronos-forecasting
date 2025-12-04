@@ -178,6 +178,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                     "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
                 )
                 finetune_mode = "full"
+                lora_config = None
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
