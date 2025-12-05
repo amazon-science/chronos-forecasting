@@ -272,8 +272,7 @@ class Chronos2Model(PreTrainedModel):
         self.post_init()
 
     def _init_weights(self, module):
-        """Initialize the weights.
-        """
+        """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, Chronos2LayerNorm):
             init.constant_(module.weight, factor * 1.0)
