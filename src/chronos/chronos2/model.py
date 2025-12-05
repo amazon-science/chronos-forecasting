@@ -15,8 +15,7 @@ from transformers import __version__ as transformers_version
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
-# In transformers v5, use guarded init functions that check _is_hf_initialized
-# to avoid re-initializing weights loaded from checkpoint
+
 if version.parse(transformers_version) >= version.parse("5.0.0.dev0"):
     from transformers import initialization as init
 else:
@@ -274,10 +273,6 @@ class Chronos2Model(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights.
-
-        Uses transformers.initialization functions which are guarded against
-        re-initializing weights that have already been loaded from checkpoint
-        (they check the _is_hf_initialized flag on each parameter).
         """
         factor = self.config.initializer_factor
         if isinstance(module, Chronos2LayerNorm):
