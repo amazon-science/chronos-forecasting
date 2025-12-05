@@ -178,6 +178,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                     "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
                 )
                 finetune_mode = "full"
+                lora_config = None
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
@@ -331,10 +332,13 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         trainer.train()
 
-        # update max_output_patches, if the model was fine-tuned with longer prediction_length
+        # update context_length and max_output_patches, if the model was fine-tuned with larger values
+        model.chronos_config.context_length = max(model.chronos_config.context_length, context_length)
         model.chronos_config.max_output_patches = max(
             model.chronos_config.max_output_patches, math.ceil(prediction_length / self.model_output_patch_size)
         )
+        # update chronos_config in model's config, so it is saved correctly
+        model.config.chronos_config = model.chronos_config.__dict__
 
         # Create a new pipeline with the fine-tuned model
         finetuned_pipeline = Chronos2Pipeline(model=model)
@@ -443,7 +447,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         batch_size: int = 256,
         context_length: int | None = None,
-        predict_batches_jointly: bool = False,
+        cross_learning: bool = False,
         limit_prediction_length: bool = False,
         **kwargs,
     ) -> list[torch.Tensor]:
@@ -529,7 +533,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             will be lower than this value, by default 256
         context_length
             The maximum context length used during for inference, by default set to the model's default context length
-        predict_batches_jointly
+        cross_learning
             If True, cross-learning is enabled, i.e., all the tasks in `inputs` will be predicted jointly and the model will share information across all inputs, by default False
             The following must be noted when using cross-learning:
             - Cross-learning doesn't always improve forecast accuracy and must be tested for individual use cases.
@@ -549,6 +553,14 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if prediction_length is None:
             prediction_length = model_prediction_length
 
+        if kwargs.get("predict_batches_jointly") is not None:
+            warnings.warn(
+                "The `predict_batches_jointly` argument is deprecated and will be removed in a future version. "
+                "Please use `cross_learning=True` to enable the cross-learning mode.",
+                category=FutureWarning,
+                stacklevel=2,
+            )
+            cross_learning = kwargs.pop("predict_batches_jointly")
         # The maximum number of output patches to generate in a single forward pass before the long-horizon heuristic kicks in. Note: A value larger
         # than the model's default max_output_patches may lead to degradation in forecast accuracy, defaults to a model-specific value
         max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
@@ -606,7 +618,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             batch_future_covariates = batch["future_covariates"]
             batch_target_idx_ranges = batch["target_idx_ranges"]
 
-            if predict_batches_jointly:
+            if cross_learning:
                 batch_group_ids = torch.zeros_like(batch_group_ids)
 
             batch_prediction = self._predict_batch(
@@ -797,6 +809,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         batch_size: int = 256,
+        context_length: int | None = None,
+        cross_learning: bool = False,
         validate_inputs: bool = True,
         **predict_kwargs,
     ) -> "pd.DataFrame":
@@ -827,6 +841,15 @@ class Chronos2Pipeline(BaseChronosPipeline):
             The batch size used for prediction. Note that the batch size here means the number of time series, including target(s) and covariates,
             which are input into the model. If your data has multiple target and/or covariates, the effective number of time series tasks in a batch
             will be lower than this value, by default 256
+        context_length
+            The maximum context length used during for inference, by default set to the model's default context length
+        cross_learning
+            If True, cross-learning is enabled, i.e., all the tasks in `inputs` will be predicted jointly and the model will share information across all inputs, by default False
+            The following must be noted when using cross-learning:
+            - Cross-learning doesn't always improve forecast accuracy and must be tested for individual use cases.
+            - Results become dependent on batch size. Very large batch sizes may not provide benefits as they deviate from the maximum group size used during pretraining.
+            For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
+            - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
         validate_inputs
             When True, the dataframe(s) will be validated before prediction
         **predict_kwargs
@@ -869,6 +892,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             quantile_levels=quantile_levels,
             limit_prediction_length=False,
             batch_size=batch_size,
+            context_length=context_length,
+            cross_learning=cross_learning,
             **predict_kwargs,
         )
         # since predict_df tasks are homogenous by input design, we can safely stack the list of tensors into a single tensor
@@ -1030,11 +1055,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             finetune_kwargs["prediction_length"] = first_window.horizon
             finetune_kwargs["batch_size"] = finetune_kwargs.get("batch_size", batch_size)
 
-            try:
-                pipeline = self.fit(inputs=inputs, **finetune_kwargs)
-            except Exception as e:
-                msg = f"Finetuning failed with error: {e}. Continuing with the pretrained model."
-                warnings.warn(msg, category=UserWarning, stacklevel=2)
+            pipeline = self.fit(inputs=inputs, **finetune_kwargs)
 
         predictions_per_window = []
         inference_time_s = 0.0

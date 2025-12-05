@@ -598,6 +598,60 @@ def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline)
 
 
 @pytest.mark.parametrize(
+    "context_setup, future_setup",
+    [
+        # Targets only
+        ({}, None),
+        # Multiple targets with different context lengths
+        ({"target_cols": ["sales", "revenue", "profit"], "n_points": [10, 17]}, None),
+        # With past covariates
+        ({"covariates": ["cov1"]}, None),
+        # With future covariates
+        ({"covariates": ["cov1"]}, {"covariates": ["cov1"]}),
+        # With past-only and future covariates
+        ({"covariates": ["cov1", "cov2"]}, {"covariates": ["cov1"]}),
+        # With past-only and future covariates and different series order
+        (
+            {"series_ids": ["B", "C", "A", "Z"], "n_points": [10, 20, 100, 256], "covariates": ["cov1", "cov2"]},
+            {"series_ids": ["B", "C", "A", "Z"], "covariates": ["cov1"]},
+        ),
+    ],
+)
+@pytest.mark.parametrize("prediction_length", [1, 4])
+def test_predict_df_outputs_different_results_with_cross_learning_enabled(
+    pipeline, context_setup, future_setup, prediction_length
+):
+    freq = "h"
+    df = create_df(**context_setup, freq=freq)
+    forecast_start_times = get_forecast_start_times(df, freq)
+    if future_setup:
+        series_ids = future_setup.get("series_ids", ["A", "B"])
+        future_setup_with_n_points = {**future_setup, "n_points": [prediction_length] * len(series_ids)}
+        future_df = create_future_df(forecast_start_times, **future_setup_with_n_points, freq=freq)
+    else:
+        future_df = None
+
+    series_ids = context_setup.get("series_ids", ["A", "B"])
+    target_columns = context_setup.get("target_cols", ["target"])
+    result_with_cross_learning = pipeline.predict_df(
+        df,
+        future_df=future_df,
+        target=target_columns,
+        prediction_length=prediction_length,
+        cross_learning=True,
+    )
+    result_without_cross_learning = pipeline.predict_df(
+        df,
+        future_df=future_df,
+        target=target_columns,
+        prediction_length=prediction_length,
+        cross_learning=False,
+    )
+
+    assert not np.array_equal(result_with_cross_learning["predictions"], result_without_cross_learning["predictions"])
+
+
+@pytest.mark.parametrize(
     "inputs, prediction_length, expected_output_shapes",
     [
         # Homogenous univariate task
