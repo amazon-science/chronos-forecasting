@@ -247,6 +247,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         self.device_map = None
 
     def _init_weights(self, module):
+        super()._init_weights(module)
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, (self.__class__)):
