@@ -29,10 +29,6 @@ from .base import BaseChronosPipeline, ForecastType
 
 logger = logging.getLogger(__file__)
 
-# Transformers v5 introduced breaking changes:
-# - T5Stack.__init__ no longer accepts embed_tokens argument
-# - _tied_weights_keys changed from list to dict format
-# - _init_weights needs guarded init functions to avoid re-initializing loaded weights
 _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0.dev0")
 
 # In transformers v5, use guarded init functions that check _is_hf_initialized
@@ -252,10 +248,6 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights.
-
-        Uses transformers.initialization functions which are guarded against
-        re-initializing weights that have already been loaded from checkpoint
-        (they check the _is_hf_initialized flag on each parameter).
         """
         factor = self.config.initializer_factor
         if isinstance(module, (self.__class__)):
