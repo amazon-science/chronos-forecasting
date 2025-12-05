@@ -32,7 +32,15 @@ logger = logging.getLogger(__file__)
 # Transformers v5 introduced breaking changes:
 # - T5Stack.__init__ no longer accepts embed_tokens argument
 # - _tied_weights_keys changed from list to dict format
+# - _init_weights needs guarded init functions to avoid re-initializing loaded weights
 _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0.dev0")
+
+# In transformers v5, use guarded init functions that check _is_hf_initialized
+# to avoid re-initializing weights loaded from checkpoint
+if _TRANSFORMERS_V5:
+    from transformers import initialization as init
+else:
+    from torch.nn import init
 
 
 def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
@@ -243,29 +251,35 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         self.device_map = None
 
     def _init_weights(self, module):
-        super()._init_weights(module)
-        """Initialize the weights"""
+        """Initialize the weights.
+
+        Uses transformers.initialization functions which are guarded against
+        re-initializing weights that have already been loaded from checkpoint
+        (they check the _is_hf_initialized flag on each parameter).
+        """
         factor = self.config.initializer_factor
         if isinstance(module, (self.__class__)):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, ResidualBlock):
-            module.hidden_layer.weight.data.normal_(
+            init.normal_(
+                module.hidden_layer.weight,
                 mean=0.0,
                 std=factor * ((self.chronos_config.input_patch_size * 2) ** -0.5),
             )
             if hasattr(module.hidden_layer, "bias") and module.hidden_layer.bias is not None:
-                module.hidden_layer.bias.data.zero_()
+                init.zeros_(module.hidden_layer.bias)
 
-            module.residual_layer.weight.data.normal_(
+            init.normal_(
+                module.residual_layer.weight,
                 mean=0.0,
                 std=factor * ((self.chronos_config.input_patch_size * 2) ** -0.5),
             )
             if hasattr(module.residual_layer, "bias") and module.residual_layer.bias is not None:
-                module.residual_layer.bias.data.zero_()
+                init.zeros_(module.residual_layer.bias)
 
-            module.output_layer.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            init.normal_(module.output_layer.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.output_layer, "bias") and module.output_layer.bias is not None:
-                module.output_layer.bias.data.zero_()
+                init.zeros_(module.output_layer.bias)
 
     def encode(
         self, context: torch.Tensor, mask: Optional[torch.Tensor] = None
