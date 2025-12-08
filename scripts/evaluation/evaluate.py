@@ -295,7 +295,7 @@ def chronos_2(
     device: str = "cuda",
     torch_dtype: str = "float32",
     batch_size: int = 32,
-    predict_batches_jointly: bool = False,
+    cross_learning: bool = False,
 ):
     """Evaluate Chronos-2 models.
 
@@ -316,7 +316,7 @@ def chronos_2(
     batch_size : int, optional, default = 32
         Batch size for inference. For Chronos-Bolt models, significantly larger
         batch sizes can be used
-    predict_batches_jointly: bool, optional, default = False
+    cross_learning: bool, optional, default = False
         If True, cross-learning is enables and model makes joint predictions for all
         items in the batch
     """
@@ -335,7 +335,7 @@ def chronos_2(
         metrics_path=metrics_path,
         model_id=model_id,
         batch_size=batch_size,
-        predict_batches_jointly=predict_batches_jointly,
+        cross_learning=cross_learning,
     )
 
 
