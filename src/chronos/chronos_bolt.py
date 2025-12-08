@@ -48,8 +48,7 @@ def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
     In v5, T5Stack.__init__ only accepts (config), and embed_tokens must be set separately.
     """
     if _TRANSFORMERS_V5:
-        stack = T5Stack(config)
-        return stack
+        return T5Stack(config)
     else:
         return T5Stack(config, embed_tokens)
 
