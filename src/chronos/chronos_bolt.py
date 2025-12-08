@@ -49,7 +49,6 @@ def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
     """
     if _TRANSFORMERS_V5:
         stack = T5Stack(config)
-        stack.set_input_embeddings(embed_tokens)
         return stack
     else:
         return T5Stack(config, embed_tokens)
