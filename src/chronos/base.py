@@ -164,7 +164,8 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         quantile_levels
             Quantile levels to compute
         validate_inputs
-            When True, the dataframe(s) will be validated before prediction
+            When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
+            regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 

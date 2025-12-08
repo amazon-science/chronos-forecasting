@@ -851,7 +851,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
             - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
         validate_inputs
-            When True, the dataframe(s) will be validated before prediction
+            When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
+            regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
