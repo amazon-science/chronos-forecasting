@@ -141,6 +141,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         target: str = "target",
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        validate_inputs: bool = True,
         **predict_kwargs,
     ) -> "pd.DataFrame":
         """
@@ -162,6 +163,9 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             Number of steps to predict for each time series
         quantile_levels
             Quantile levels to compute
+        validate_inputs
+            When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
+            regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
@@ -196,6 +200,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             timestamp_column=timestamp_column,
             target_columns=[target],
             prediction_length=prediction_length,
+            validate_inputs=validate_inputs,
         )
 
         # NOTE: any covariates, if present, are ignored here
