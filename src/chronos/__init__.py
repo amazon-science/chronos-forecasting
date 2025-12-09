@@ -12,6 +12,12 @@ from .chronos import (
 )
 from .chronos2 import Chronos2ForecastingConfig, Chronos2Model, Chronos2Pipeline
 from .chronos_bolt import ChronosBoltConfig, ChronosBoltPipeline
+from .utils import (
+    create_group_ids_dict_from_category,
+    create_group_ids_dict_from_mapping,
+    create_manual_group_ids_dict,
+    create_group_ids_from_category
+)
 
 __all__ = [
     "__version__",
@@ -27,4 +33,7 @@ __all__ = [
     "Chronos2ForecastingConfig",
     "Chronos2Model",
     "Chronos2Pipeline",
+    "create_group_ids_dict_from_category",
+    "create_group_ids_dict_from_mapping",
+    "create_manual_group_ids_dict",
 ]

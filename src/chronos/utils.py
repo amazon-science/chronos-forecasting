@@ -7,6 +7,12 @@ from typing import List
 import torch
 from einops import repeat
 
+try:
+    import pandas as pd
+    _PANDAS_AVAILABLE = True
+except ImportError:
+    _PANDAS_AVAILABLE = False
+
 
 def left_pad_and_stack_1D(tensors: List[torch.Tensor]) -> torch.Tensor:
     max_len = max(len(c) for c in tensors)
@@ -210,3 +216,228 @@ def weighted_quantile(
     # Reshape to original shape
     final_shape = (*orig_samples_shape[:-1], len(query_quantile_levels))
     return interpolated_quantiles.reshape(final_shape).to(dtype=orig_dtype)
+
+
+def create_group_ids_dict_from_category(
+    df: "pd.DataFrame",
+    id_column: str,
+    category_column: str
+) -> dict[str, int]:
+    """
+    Create group_ids dictionary (for predict_df) from a categorical column.
+
+    This function is specifically designed for use with Chronos2Pipeline.predict_df(),
+    which accepts a dictionary mapping series IDs to group IDs.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing id_column and category_column.
+    id_column : str
+        Name of the column containing time series identifiers.
+    category_column : str
+        Name of the categorical column to group by (e.g., "region", "product_type", "industry").
+
+    Returns
+    -------
+    dict[str, int]
+        Dictionary mapping series IDs to group IDs.
+        Series with the same category will have the same group ID.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     'item_id': ['A', 'A', 'B', 'B', 'C', 'C'],
+    ...     'region': ['North', 'North', 'North', 'North', 'South', 'South'],
+    ...     'value': [1, 2, 3, 4, 5, 6]
+    ... })
+    >>> create_group_ids_dict_from_category(df, 'item_id', 'region')
+    {'A': 0, 'B': 0, 'C': 1}  # A and B are North (group 0), C is South (group 1)
+
+    Notes
+    -----
+    - Use this for Chronos2Pipeline.predict_df() which expects dict[str, int]
+    - The function automatically handles the order of series IDs
+    - Categories are mapped to consecutive integers starting from 0
+    """
+    if not _PANDAS_AVAILABLE:
+        raise ImportError("pandas is required for this function. Please install it with `pip install pandas`.")
+
+    # Get unique series and their category
+    series_categories = df.groupby(id_column, sort=False)[category_column].first()
+
+    # Map categories to group IDs
+    unique_categories = series_categories.unique()
+    category_to_group = {cat: i for i, cat in enumerate(unique_categories)}
+
+    # Create dictionary mapping series_id -> group_id
+    group_ids_dict = {
+        series_id: category_to_group[category]
+        for series_id, category in series_categories.items()
+    }
+
+    return group_ids_dict
+
+
+def create_group_ids_dict_from_mapping(
+    df: "pd.DataFrame",
+    id_column: str,
+    category_to_group_map: dict[str, int]
+) -> dict[str, int]:
+    """
+    Create group_ids dictionary using a custom category-to-group mapping.
+
+    This allows you to manually specify which categories belong to which groups,
+    useful when you want custom grouping logic beyond simple one-to-one category mapping.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing id_column and a category column.
+    id_column : str
+        Name of the column containing time series identifiers.
+    category_to_group_map : dict[str, int]
+        Dictionary mapping category names to group IDs.
+        Example: {'Retail': 0, 'Wholesale': 0, 'Food': 1, 'Services': 2}
+
+    Returns
+    -------
+    dict[str, int]
+        Dictionary mapping series IDs to group IDs.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     'item_id': ['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D'],
+    ...     'industry': ['Retail', 'Retail', 'Wholesale', 'Wholesale',
+    ...                  'Food', 'Food', 'Services', 'Services'],
+    ...     'value': [1, 2, 3, 4, 5, 6, 7, 8]
+    ... })
+    >>> mapping = {'Retail': 0, 'Wholesale': 0, 'Food': 1, 'Services': 2}
+    >>> create_group_ids_dict_from_mapping(df, 'item_id', mapping)
+    {'A': 0, 'B': 0, 'C': 1, 'D': 2}
+
+    Notes
+    -----
+    - This is more flexible than create_group_ids_dict_from_category()
+    - Useful when multiple categories should map to the same group
+    - All categories in the data must be in the mapping, or will raise KeyError
+    """
+    if not _PANDAS_AVAILABLE:
+        raise ImportError("pandas is required for this function. Please install it with `pip install pandas`.")
+
+    # Infer category column by checking which column contains the mapping keys
+    category_column = None
+    for col in df.columns:
+        if col != id_column and df[col].dtype == 'object':
+            if any(cat in category_to_group_map for cat in df[col].unique()):
+                category_column = col
+                break
+
+    if category_column is None:
+        raise ValueError(
+            f"Could not infer category column. Available columns: {df.columns.tolist()}. "
+            f"Make sure one of them contains categories from the mapping: {list(category_to_group_map.keys())}"
+        )
+
+    # Get unique series and their category
+    series_categories = df.groupby(id_column, sort=False)[category_column].first()
+
+    # Create dictionary mapping series_id -> group_id using the custom mapping
+    group_ids_dict = {}
+    for series_id, category in series_categories.items():
+        if category not in category_to_group_map:
+            raise KeyError(
+                f"Category '{category}' for series '{series_id}' not found in mapping. "
+                f"Available categories in mapping: {list(category_to_group_map.keys())}"
+            )
+        group_ids_dict[series_id] = category_to_group_map[category]
+
+    return group_ids_dict
+
+
+def create_manual_group_ids_dict(
+    series_ids: List[str],
+    group_assignments: List[int]
+) -> dict[str, int]:
+    """
+    Create group_ids dictionary from manual series ID and group assignment lists.
+
+    Parameters
+    ----------
+    series_ids : list of str
+        List of series identifiers.
+    group_assignments : list of int
+        List of group IDs corresponding to each series.
+        Must have the same length as series_ids.
+
+    Returns
+    -------
+    dict[str, int]
+        Dictionary mapping series IDs to group IDs.
+
+    Examples
+    --------
+    >>> series_ids = ['store_1', 'store_2', 'store_3', 'store_4']
+    >>> groups = [0, 0, 1, 1]  # First two together, last two together
+    >>> create_manual_group_ids_dict(series_ids, groups)
+    {'store_1': 0, 'store_2': 0, 'store_3': 1, 'store_4': 1}
+
+    Raises
+    ------
+    ValueError
+        If series_ids and group_assignments have different lengths.
+    """
+    if len(series_ids) != len(group_assignments):
+        raise ValueError(
+            f"Length mismatch: series_ids has {len(series_ids)} elements, "
+            f"but group_assignments has {len(group_assignments)} elements."
+        )
+
+    return dict(zip(series_ids, group_assignments))
+
+def create_group_ids_from_category(
+        train: pd.DataFrame,
+        id_column: str,
+        category_column: str
+) -> list[int]:
+    """
+    Create group_ids list from a categorical column.
+
+    Parameters
+    ----------
+    train : pd.DataFrame
+        Training data containing id_column and category_column.
+    id_column : str
+        Name of the column containing time series identifiers.
+    category_column : str
+        Name of the categorical column to group by (e.g., "region", "product_type").
+
+    Returns
+    -------
+    list[int]
+        List of group IDs, one per series, matching the order of series_ids.
+
+    Examples
+    --------
+    >>> train = pd.DataFrame({
+    ...     'series_id': ['A', 'A', 'B', 'B', 'C', 'C'],
+    ...     'region': ['North', 'North', 'North', 'North', 'South', 'South'],
+    ...     'value': [1, 2, 3, 4, 5, 6]
+    ... })
+    >>> create_group_ids_from_category(train, 'series_id', 'region')
+    [0, 0, 1]  # A and B are North (group 0), C is South (group 1)
+    """
+    # Get unique series and their category
+    series_categories = train.groupby(id_column, sort=False)[category_column].first()
+
+    # Map categories to group IDs
+    unique_categories = series_categories.unique()
+    category_to_group = {cat: i for i, cat in enumerate(unique_categories)}
+
+    # Create group_ids list
+    group_ids = [category_to_group[cat] for cat in series_categories.values]
+
+    return group_ids
