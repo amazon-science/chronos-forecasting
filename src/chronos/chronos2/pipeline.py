@@ -1126,7 +1126,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         test_loader = DataLoader(
             test_dataset,
             batch_size=None,
-            num_workers=1,
+            num_workers=0,
             pin_memory=self.model.device.type == "cuda",
             shuffle=False,
             drop_last=False,
