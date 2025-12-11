@@ -3,6 +3,7 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
+from __future__ import annotations
 
 import warnings
 from typing import TYPE_CHECKING

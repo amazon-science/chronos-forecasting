@@ -3,6 +3,8 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>, Lorenzo Stella <stellalo@amazon.com>, Caner Turkmen <atturkm@amazon.com>
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union

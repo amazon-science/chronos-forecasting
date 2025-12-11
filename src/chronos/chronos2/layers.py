@@ -3,6 +3,8 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import torch

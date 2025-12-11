@@ -3,9 +3,12 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
+from __future__ import annotations
+
 import math
+import sys
 from enum import Enum
-from typing import TYPE_CHECKING, Iterator, Mapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Iterator, Mapping, Sequence, Union, cast
 
 import numpy as np
 import torch
@@ -16,8 +19,13 @@ if TYPE_CHECKING:
     import datasets
     import fev
 
-
-TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
+# TypeAlias is only available in Python 3.10+
+# For runtime type aliases, we need to use Union in Python 3.9
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias
+    TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
+else:
+    TensorOrArray = Union[torch.Tensor, np.ndarray]
 
 
 def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
@@ -444,7 +452,7 @@ class Chronos2Dataset(IterableDataset):
         for idx, raw_task in enumerate(inputs):
             if mode != DatasetMode.TEST:
                 raw_future_covariates = raw_task.get("future_covariates", {})
-                raw_future_covariates = cast(dict[str, TensorOrArray | None], raw_future_covariates)
+                raw_future_covariates = cast("dict[str, TensorOrArray | None]", raw_future_covariates)
                 if raw_future_covariates:
                     fixed_future_covariates = {}
                     for key, value in raw_future_covariates.items():
@@ -453,7 +461,7 @@ class Chronos2Dataset(IterableDataset):
                         )
                     raw_task = {**raw_task, "future_covariates": fixed_future_covariates}
 
-            raw_task = cast(dict[str, TensorOrArray | Mapping[str, TensorOrArray]], raw_task)
+            raw_task = cast("dict[str, TensorOrArray | Mapping[str, TensorOrArray]]", raw_task)
             # convert to a format compatible with model's forward
             task = validate_and_prepare_single_dict_task(raw_task, idx, prediction_length)
 
@@ -642,7 +650,7 @@ class Chronos2Dataset(IterableDataset):
         else:
             raise ValueError("Unexpected inputs format")
 
-        inputs = cast(list[dict[str, TensorOrArray | dict[str, TensorOrArray]]], inputs)
+        inputs = cast("list[dict[str, TensorOrArray | dict[str, TensorOrArray]]]", inputs)
 
         return cls(
             inputs,

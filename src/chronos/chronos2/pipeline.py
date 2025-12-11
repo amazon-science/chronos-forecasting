@@ -3,6 +3,8 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
+from __future__ import annotations
+
 import logging
 import math
 import time

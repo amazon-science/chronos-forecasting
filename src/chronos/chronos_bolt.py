@@ -5,6 +5,8 @@
 # Original source:
 # https://github.com/autogluon/autogluon/blob/f57beb26cb769c6e0d484a6af2b89eab8aee73a8/timeseries/src/autogluon/timeseries/models/chronos/pipeline/chronos_bolt.py
 
+from __future__ import annotations
+
 import copy
 import logging
 import warnings
