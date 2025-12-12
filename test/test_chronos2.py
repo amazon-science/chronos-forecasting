@@ -1139,18 +1139,13 @@ def test_lora_config_uses_source_revision_from_instantiation(
     pipeline: Chronos2Pipeline, tmpdir, source_revision
 ):
     """
-    Test that fit in 'lora' mode correctly uses the '_source_revision'
-    that was (notionally) stored in the model's config during instantiation.
+    Test that fit in 'lora' mode correctly uses the 'revision'
+    stored in the pipeline instance.
     """
     output_dir = Path(tmpdir)
     dummy_inputs = [torch.rand(100)]
 
-    # Manually set the source revision on the config to simulate
-    # it being set during from_pretrained
-    if source_revision:
-        pipeline.model.config._source_revision = source_revision
-    elif hasattr(pipeline.model.config, "_source_revision"):
-        delattr(pipeline.model.config, "_source_revision")
+    pipeline.revision = source_revision
 
     pipeline.fit(
         inputs=dummy_inputs,
