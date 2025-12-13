@@ -210,6 +210,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                     revision=lora_revision,
                 )
             elif isinstance(lora_config, dict):
+                lora_config.setdefault("revision", lora_revision)
                 lora_config = LoraConfig(**lora_config)
             else:
                 assert isinstance(lora_config, LoraConfig), (
