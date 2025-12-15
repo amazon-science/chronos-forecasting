@@ -114,7 +114,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         finetuned_ckpt_name: str = "finetuned-ckpt",
         callbacks: list["TrainerCallback"] | None = None,
         remove_printer_callback: bool = False,
-        disable_data_parallel: bool = False,
+        disable_data_parallel: bool = True,
         **extra_trainer_kwargs,
     ) -> "Chronos2Pipeline":
         """
@@ -322,7 +322,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         training_args = TrainingArguments(**training_kwargs)
 
-        if disable_data_parallel:
+        if disable_data_parallel and not use_cpu:
             # This is a hack to disable the default `transformers` behavior of using DataParallel
             training_args._n_gpu = 1
             assert training_args.n_gpu == 1  # Ensure that the hack worked
