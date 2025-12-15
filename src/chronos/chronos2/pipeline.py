@@ -114,6 +114,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         finetuned_ckpt_name: str = "finetuned-ckpt",
         callbacks: list["TrainerCallback"] | None = None,
         remove_printer_callback: bool = False,
+        disable_data_parallel: bool = False,
         **extra_trainer_kwargs,
     ) -> "Chronos2Pipeline":
         """
@@ -158,6 +159,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             A list of `TrainerCallback`s which will be forwarded to the HuggingFace `Trainer`
         remove_printer_callback
             If True, all instances of `PrinterCallback` are removed from callbacks
+        disable_data_parallel
+            If True, ensures that DataParallel is disabled and training happens on a single GPU
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
 
@@ -318,6 +321,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
             cudnn_tf32 = torch.backends.cudnn.allow_tf32
 
         training_args = TrainingArguments(**training_kwargs)
+
+        if disable_data_parallel:
+            # This is a hack to disable the default `transformers` behavior of using DataParallel
+            training_args._n_gpu = 1
+            assert training_args.n_gpu == 1  # Ensure that the hack worked
 
         trainer = Chronos2Trainer(
             model=model,
