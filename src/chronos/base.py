@@ -218,22 +218,25 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         quantiles_np = quantiles.numpy()  # [n_series, horizon, num_quantiles]
         mean_np = mean.numpy()  # [n_series, horizon]
 
-        results_dfs = []
-        for i, (series_id, future_ts) in enumerate(prediction_timestamps.items()):
-            q_pred = quantiles_np[i]  # (horizon, num_quantiles)
-            point_pred = mean_np[i]  # (horizon)
+        series_ids = list(prediction_timestamps.keys())
+        future_ts = list(prediction_timestamps.values())
 
-            series_forecast_data = {id_column: series_id, timestamp_column: future_ts, "target_name": target}
-            series_forecast_data["predictions"] = point_pred
-            for q_idx, q_level in enumerate(quantile_levels):
-                series_forecast_data[str(q_level)] = q_pred[:, q_idx]
+        data = {
+            id_column: np.repeat(series_ids, prediction_length),
+            timestamp_column: np.concatenate(future_ts),
+            "target_name": target,
+            "predictions": mean_np.ravel(),
+        }
 
-            results_dfs.append(pd.DataFrame(series_forecast_data))
+        quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+        for q_idx, q_level in enumerate(quantile_levels):
+            data[str(q_level)] = quantiles_flat[:, q_idx]
 
-        predictions_df = pd.concat(results_dfs, ignore_index=True)
-        predictions_df.set_index(id_column, inplace=True)
-        predictions_df = predictions_df.loc[original_order]
-        predictions_df.reset_index(inplace=True)
+        predictions_df = pd.DataFrame(data)
+        if validate_inputs:
+            predictions_df.set_index(id_column, inplace=True)
+            predictions_df = predictions_df.loc[original_order]
+            predictions_df.reset_index(inplace=True)
 
         return predictions_df
 
