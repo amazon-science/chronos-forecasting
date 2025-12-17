@@ -16,7 +16,7 @@ from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
 from chronos.chronos2.layers import MHA
 from chronos.df_utils import convert_df_input_to_list_of_dicts_input
-from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor
+from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor, timeout_callback
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
 
@@ -1006,6 +1006,17 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
 
     # Check predictions from the fine-tuned model are different from the original predictions
     assert not np.allclose(orig_result_before["predictions"].to_numpy(), result["predictions"].to_numpy())
+
+
+def test_when_predict_df_called_with_timeout_callback_then_timeout_error_is_raised(pipeline):
+    num_series = 1000
+    large_df = create_df(series_ids=[j for j in range(num_series)], n_points=[2048] * num_series)
+    with pytest.raises(TimeoutError, match="time limit exceeded"):
+        pipeline.predict_df(
+            large_df,
+            prediction_length=48,
+            after_batch=timeout_callback(0.1),
+        )
 
 
 @pytest.mark.parametrize("attn_implementation", ["eager", "sdpa"])

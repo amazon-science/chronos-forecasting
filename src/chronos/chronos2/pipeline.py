@@ -9,7 +9,7 @@ import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, Callable
 
 import numpy as np
 import torch
@@ -577,6 +577,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         # effective batch size increases by a factor of `len(unrolled_quantiles)` when making long-horizon predictions,
         # by default [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+        # A callback which is called after each batch has been processed
+        after_batch_callback: Callable = kwargs.pop("after_batch", lambda: None)
 
         if len(kwargs) > 0:
             raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
@@ -641,6 +643,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 target_idx_ranges=batch_target_idx_ranges,
             )
             all_predictions.extend(batch_prediction)
+            after_batch_callback()
 
         return all_predictions
 
