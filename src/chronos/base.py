@@ -233,6 +233,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             data[str(q_level)] = quantiles_flat[:, q_idx]
 
         predictions_df = pd.DataFrame(data)
+        # If validate_inputs=False, the df is used as-is without sorting by item_id, no reordering required
         if validate_inputs:
             predictions_df.set_index(id_column, inplace=True)
             predictions_df = predictions_df.loc[original_order]
