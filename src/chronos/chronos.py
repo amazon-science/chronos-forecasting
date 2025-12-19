@@ -354,7 +354,7 @@ class ChronosModel(nn.Module):
 
 class ChronosPipeline(BaseChronosPipeline):
     """
-    Forecasting pipeline for the Chronos model.
+    Pipeline for the Chronos model.
     
     Parameters
     ----------
