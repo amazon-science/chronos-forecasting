@@ -403,33 +403,26 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
 class ChronosBoltPipeline(BaseChronosPipeline):
     """
     Pipeline for the Chronos-Bolt model.
-    
+
+    To learn more about this model, refer to:
+
+    Abdul Fatir Ansari, Caner Turkmen, Oleksandr Shchur, and Lorenzo Stella
+    "[Fast and accurate zero-shot forecasting with Chronos-Bolt and AutoGluon](https://aws.amazon.com/blogs/machine-learning/fast-and-accurate-zero-shot-forecasting-with-chronos-bolt-and-autogluon/)."
+    AWS Blogs (2024).
+
     Parameters
     ----------
     model
-        ChronosBoltModelForForecasting instance containing the pretrained model.
-    
-    Attributes
-    ----------
-    model
-        The underlying forecasting model
-    forecast_type
-        Set to ForecastType.QUANTILES indicating this pipeline produces quantiles
-    default_context_length
-        Default context length of 2048 time steps
-    
-    See Also
-    --------
-    ChronosPipeline : Sample-based forecasting with tokenization
-    Chronos2Pipeline : Advanced forecasting with covariates support
+        `ChronosBoltModelForForecasting` instance containing the pretrained model.
     """
+
     forecast_type: ForecastType = ForecastType.QUANTILES
     default_context_length: int = 2048
 
     def __init__(self, model: ChronosBoltModelForForecasting):
         """
         Initialize the ChronosBoltPipeline with a pretrained model.
-        
+
         Parameters
         ----------
         model
@@ -457,11 +450,11 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Extract encoder embeddings for the given time series.
-        
+
         This method processes the input time series through patching and instance
         normalization, then extracts encoder embeddings that can be used for
         downstream tasks like clustering, classification, or similarity search.
-        
+
         Parameters
         ----------
         context
@@ -469,27 +462,18 @@ class ChronosBoltPipeline(BaseChronosPipeline):
             of 1D tensors (multiple series of varying lengths), or a 2D tensor
             where the first dimension is batch size. For 2D tensors, use
             left-padding with torch.nan to align series of different lengths.
-        
+
         Returns
         -------
-        embeddings
+        torch.Tensor
             Encoder embeddings with shape (batch_size, num_patches + 1, d_model),
             where num_patches is the number of patches created from the input
             time series, and the extra 1 is for the [REG] token if used by the model.
             Returned on CPU in the model's dtype.
-        loc_scale
+        Tuple[torch.Tensor, torch.Tensor]
             Tuple of (location, scale) tensors used for instance normalization,
             representing the mean and standard deviation of the original time series.
             Both tensors have shape (batch_size,) and are returned on CPU.
-        
-        Notes
-        -----
-        The embeddings are extracted after patching and instance normalization
-        but before the decoder. They capture the encoded representation of the
-        input time series in the model's latent space.
-        
-        If the input context is longer than the model's context length, it will
-        be automatically truncated to the most recent time steps.
         """
         context_tensor = self._prepare_and_validate_context(context=context)
         model_context_length = self.model.config.chronos_config["context_length"]
@@ -515,12 +499,12 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     ) -> torch.Tensor:
         """
         Generate quantile forecasts for the given time series.
-        
+
         This method directly predicts quantiles without generating sample trajectories.
         For predictions longer than the model's built-in horizon, it uses an
         autoregressive approach that expands the batch size by the number of quantiles
         to generate more robust long-horizon forecasts.
-        
+
         Parameters
         ----------
         inputs
@@ -535,7 +519,7 @@ class ChronosBoltPipeline(BaseChronosPipeline):
             When True, raises an error if prediction_length exceeds the model's
             built-in prediction length. When False (default), allows longer
             predictions with a warning about potential quality degradation.
-        
+
         Returns
         -------
         torch.Tensor
@@ -544,26 +528,27 @@ class ChronosBoltPipeline(BaseChronosPipeline):
             For official Chronos-Bolt models, num_quantiles is 9 for quantiles
             [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
             Returned in fp32 on CPU.
-        
+
         Raises
         ------
         ValueError
             If limit_prediction_length is True and prediction_length exceeds
             the model's built-in prediction length.
-        
+
         Notes
         -----
         For predictions longer than the model's built-in horizon, the method uses
         an autoregressive approach:
+
         1. Generate initial quantiles for the first chunk
         2. Expand context by num_quantiles (treating each quantile as a scenario)
         3. Generate next chunk for each scenario
         4. Compute empirical quantiles across all scenarios
         5. Repeat until desired prediction_length is reached
-        
+
         This approach scales the batch size by num_quantiles for long horizons,
         which may require more GPU memory but produces more robust predictions.
-        
+
         If the input context is longer than the model's context length, it will
         be automatically truncated to the most recent time steps.
         """
@@ -639,12 +624,12 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Generate quantile and mean forecasts for given time series.
-        
+
         This method generates forecasts at the specified quantile levels. If the
         requested quantiles match those the model was trained on, they are returned
         directly. Otherwise, the method performs interpolation or extrapolation
         to obtain the requested quantiles.
-        
+
         Parameters
         ----------
         inputs
@@ -661,32 +646,32 @@ class ChronosBoltPipeline(BaseChronosPipeline):
         **predict_kwargs
             Additional keyword arguments passed to the predict method, such as
             limit_prediction_length.
-        
+
         Returns
         -------
-        quantiles
+        torch.Tensor
             Tensor of quantile forecasts with shape
             (batch_size, prediction_length, num_quantiles).
             Returned in fp32 on CPU.
-        mean
+        torch.Tensor
             Tensor of mean forecasts with shape (batch_size, prediction_length).
             This is actually the median (0.5 quantile) from the model's predictions.
             Returned in fp32 on CPU.
-        
+
         Notes
         -----
         If the requested quantile_levels are a subset of the model's training
         quantiles, they are extracted directly without interpolation.
-        
+
         If quantile_levels include values outside the range of training quantiles,
         the method will extrapolate using the minimum/maximum training quantiles,
         which may significantly affect prediction quality. A warning will be issued
         in this case.
-        
+
         The interpolation/extrapolation assumes the model's training quantiles
         formed an equidistant grid (e.g., 0.1, 0.2, ..., 0.9), which holds for
         official Chronos-Bolt models but may not be true for custom models.
-        
+
         The mean returned is actually the median (0.5 quantile) from the model's
         predictions, not a true mean.
         """
@@ -734,11 +719,11 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         """
         Load a pretrained ChronosBoltPipeline from various sources.
-        
+
         This method loads a pretrained ChronosBoltPipeline model from a local path,
         S3 bucket, or the HuggingFace Hub. It automatically instantiates the
         appropriate model architecture based on the configuration.
-        
+
         Parameters
         ----------
         pretrained_model_name_or_path
@@ -754,26 +739,26 @@ class ChronosBoltPipeline(BaseChronosPipeline):
             - torch_dtype: Data type for model weights ("auto", "float32", "bfloat16")
             - device_map: Device placement strategy for model layers
             - Other transformers AutoConfig and model arguments
-        
+
         Returns
         -------
         ChronosBoltPipeline
             An instance of ChronosBoltPipeline with the loaded model.
-        
+
         Raises
         ------
         AssertionError
             If the configuration is not a valid Chronos config.
-        
+
         Notes
         -----
         For S3 URIs, the method delegates to BaseChronosPipeline.from_pretrained
         which handles S3 download and caching.
-        
+
         The method automatically detects the model architecture from the configuration
         and instantiates the appropriate class. If the architecture is not recognized,
         it defaults to ChronosBoltModelForForecasting.
-        
+
         This method supports all arguments accepted by HuggingFace's AutoConfig
         and model classes.
         """

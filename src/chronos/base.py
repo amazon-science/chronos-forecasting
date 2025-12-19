@@ -44,38 +44,26 @@ class PipelineRegistry(type):
 class BaseChronosPipeline(metaclass=PipelineRegistry):
     """
     Abstract base class for Chronos pretrained time series forecasting pipelines.
-    
+
     This class defines the common interface for all Chronos models. The package provides
     multiple pipeline implementations with different forecasting approaches and architectures:
-    
-    - ChronosPipeline: Sample-based forecasting with scaling and quantization based tokenization
-    - ChronosBoltPipeline: Quantile-based forecasting with patching
-    - Chronos2Pipeline (recommended): Quantile-based forecasting with support for multivariate and covariate-informed forecasting
-    
+
+    - [ChronosPipeline][chronos.chronos.ChronosPipeline]: Sample-based forecasting with scaling and quantization based tokenization
+    - [ChronosBoltPipeline][chronos.chronos_bolt.ChronosBoltPipeline]: Quantile-based forecasting with patching
+    - [Chronos2Pipeline][chronos.chronos2.pipeline.Chronos2Pipeline] (recommended): Quantile-based forecasting with support for multivariate and covariate-informed forecasting
+
     Each subclass implements the abstract methods and properties defined here,
     potentially with different parameter signatures and return types depending
     on the model architecture and forecasting approach.
-    
-    Attributes
-    ----------
-    forecast_type
-        Enum indicating whether the pipeline produces samples or quantiles
-    inner_model
-        The underlying HuggingFace transformers model
-    
-    See Also
-    --------
-    ChronosPipeline: Sample-based forecasting with scaling and quantization based tokenization
-    ChronosBoltPipeline: Quantile-based forecasting with patching
-    Chronos2Pipeline (recommended): Quantile-based forecasting with support for multivariate and covariate-informed forecasting
     """
+
     forecast_type: ForecastType
     dtypes = {"bfloat16": torch.bfloat16, "float32": torch.float32}
 
     def __init__(self, inner_model: "PreTrainedModel"):
         """
         Initialize the base pipeline with a pretrained model.
-        
+
         Parameters
         ----------
         inner_model
@@ -89,18 +77,13 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     def model_context_length(self) -> int:
         """
         Maximum number of time steps the model can use as context.
-        
+
         This is an abstract property that must be implemented by subclasses.
-        
+
         Returns
         -------
         int
             Maximum context length supported by the model
-        
-        Notes
-        -----
-        Subclasses must implement this property based on their specific
-        model architecture and configuration.
         """
         raise NotImplementedError()
 
@@ -108,17 +91,13 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     def model_prediction_length(self) -> int:
         """
         Default prediction horizon for the model.
-        
+
         This is an abstract property that must be implemented by subclasses.
-        
+
         Returns
         -------
         int
             Default prediction horizon
-        
-        Notes
-        -----
-        Subclasses must implement this property based on their specific model architecture and configuration.
         """
         raise NotImplementedError()
 
@@ -135,12 +114,12 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     def predict(self, inputs: Union[torch.Tensor, List[torch.Tensor]], prediction_length: Optional[int] = None):
         """
         Generate forecasts for the given time series.
-        
+
         This is an abstract method that must be implemented by subclasses.
         Each subclass may have different parameters and return types depending
         on the model architecture and forecasting approach. Predictions are
         typically returned in fp32 on the CPU.
-        
+
         Parameters
         ----------
         inputs
@@ -151,13 +130,13 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         prediction_length
             Number of time steps to forecast. If not provided, defaults to
             the model's default prediction length.
-        
+
         Returns
         -------
         torch.Tensor
             Forecasts tensor. The shape and interpretation depend on the
             subclass's forecast_type (samples or quantiles).
-        
+
         Notes
         -----
         Subclasses may extend this interface with additional parameters
@@ -175,11 +154,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Generate quantile and mean forecasts for given time series.
-        
+
         This is an abstract method that must be implemented by subclasses.
         Each subclass may have different parameters depending on the model
         architecture. Predictions are typically returned in fp32 on the CPU.
-        
+
         Parameters
         ----------
         inputs
@@ -195,16 +174,16 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             Default is [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
         **kwargs
             Additional keyword arguments that may be used by subclass implementations.
-        
+
         Returns
         -------
-        quantiles
+        torch.Tensor
             Tensor of quantile forecasts with shape
             (batch_size, prediction_length, num_quantiles)
-        mean
+        torch.Tensor
             Tensor of mean (point) forecasts with shape
             (batch_size, prediction_length)
-        
+
         Notes
         -----
         Subclasses may extend this interface with additional parameters
@@ -227,11 +206,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     ) -> "pd.DataFrame":
         """
         Generate forecasts for time series data in a pandas DataFrame.
-        
+
         This method provides a convenient interface for forecasting on long-format
         pandas DataFrames containing multiple time series. It handles data conversion,
         batching, and result formatting automatically.
-        
+
         Parameters
         ----------
         df
@@ -258,26 +237,27 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         -------
         pd.DataFrame
             Forecast results in long format with the following columns:
+
             - Column named by id_column: Time series identifiers
             - Column named by timestamp_column: Future timestamps
             - "target_name": Name of the forecasted target variable
             - "predictions": Point forecasts (mean predictions)
             - One column per quantile level (e.g., "0.1", "0.5", "0.9")
-        
+
         Raises
         ------
         ImportError
             If pandas is not installed.
         ValueError
             If target is not a string (multivariate forecasting not supported).
-        
+
         Notes
         -----
         This method requires pandas to be installed. Install with `pip install pandas`.
-        
+
         The method internally converts the DataFrame to tensor format, generates
         forecasts using predict_quantiles, and converts results back to DataFrame format.
-        
+
         Subclasses may have additional parameters or behavior. Refer to specific
         subclass documentation for implementation details.
         """
@@ -349,11 +329,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     ) -> tuple[list["datasets.DatasetDict"], float]:
         """
         Generate predictions for evaluation on a fev benchmark task.
-        
+
         This method provides integration with the fev (Forecasting Evaluation)
         library for standardized benchmark evaluation. It handles batching,
         timing, and formatting predictions according to the task requirements.
-        
+
         Parameters
         ----------
         task
@@ -366,21 +346,21 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         **kwargs
             Additional keyword arguments forwarded to the predict_quantiles method.
             These may include model-specific parameters.
-        
+
         Returns
         -------
-        predictions_per_window
+        list[DatasetDict]
             List of DatasetDict objects, one for each evaluation window in the task.
             Each DatasetDict contains predictions formatted according to fev requirements.
-        inference_time_s
+        float
             Total inference time in seconds across all windows, excluding data
             loading and preprocessing time.
-        
+
         Raises
         ------
         ImportError
             If the fev library is not installed.
-        
+
         Notes
         -----
         This method requires the fev library to be installed. Install with
@@ -458,11 +438,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
     ):
         """
         Load a pretrained Chronos pipeline from various sources.
-        
+
         This class method loads a pretrained model from a local path, S3 bucket,
         or the HuggingFace Hub. It automatically detects the appropriate pipeline
         class based on the model configuration and instantiates it.
-        
+
         Parameters
         ----------
         pretrained_model_name_or_path
@@ -481,13 +461,13 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             - torch_dtype: Data type for model weights ("auto", "float32", "bfloat16")
             - device_map: Device placement strategy for model layers
             - Other transformers AutoConfig and AutoModel arguments
-        
+
         Returns
         -------
         BaseChronosPipeline
             An instance of the appropriate pipeline subclass (ChronosPipeline,
             ChronosBoltPipeline, or Chronos2Pipeline) based on the model configuration.
-        
+
         Raises
         ------
         ValueError
@@ -495,16 +475,16 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             specified pipeline class is not recognized.
         ImportError
             If required dependencies are not installed.
-        
+
         Notes
         -----
         The method reads the model configuration to determine which pipeline
         class to instantiate. The configuration must contain either a
         `chronos_pipeline_class` or `chronos_config` attribute.
-        
+
         For S3 URIs, the model is first downloaded to a local cache directory
         before loading.
-        
+
         The torch_dtype parameter can be specified as a string ("float32", "bfloat16")
         or as a torch dtype object. When set to "auto", the dtype is determined
         from the model configuration.
