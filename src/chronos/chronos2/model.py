@@ -4,6 +4,7 @@
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
 import copy
+import os
 from dataclasses import dataclass
 from typing import cast
 
@@ -51,7 +52,7 @@ class Chronos2EncoderBlock(nn.Module):
         *,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        group_time_mask: torch.Tensor,
+        group_time_mask: torch.Tensor | tuple,
         output_attentions: bool = False,
     ) -> Chronos2EncoderBlockOutput:
         # apply time attention
@@ -129,6 +130,24 @@ class Chronos2Encoder(nn.Module):
         group_time_mask = rearrange(group_time_mask, "q b t -> t 1 q b")
         group_time_mask = (1.0 - group_time_mask) * torch.finfo(floating_type).min
 
+        if os.environ.get("CHRONOS2_USE_FAST_GROUP_ATTENTION", "0") == "1":
+            # pad group_time_mask to max group size for less useless computation in self-attention
+            unique_groups, counts = torch.unique(group_ids, return_counts=True)
+            max_group_len = counts.max().item()
+            group_num = unique_groups.size(0)
+            fast_group_time_mask = torch.full(
+                (group_num * group_time_mask.size(0), 1, max_group_len, max_group_len), torch.finfo(floating_type).min, device=group_time_mask.device
+            )
+            group_start_index = counts.cumsum(dim=0) - counts
+            for i in range(group_num):
+                group_len = counts[i].item()
+                start_index = group_start_index[i].item()
+                end_index = start_index + group_len
+                fast_group_time_mask[
+                    i * group_time_mask.size(0) : (i + 1) * group_time_mask.size(0), :, :group_len, :group_len
+                ] = group_time_mask[:, :, start_index : end_index, start_index : end_index]
+            return fast_group_time_mask, group_start_index, counts, max_group_len, group_num
+
         return group_time_mask
 
     def forward(
@@ -152,7 +171,13 @@ class Chronos2Encoder(nn.Module):
         extended_attention_mask = self._expand_and_invert_time_attention_mask(attention_mask, inputs_embeds.dtype)
 
         # construct group time mask
-        group_time_mask = self._construct_and_invert_group_time_mask(group_ids, attention_mask, inputs_embeds.dtype)
+        if os.environ.get("CHRONOS2_USE_FAST_GROUP_ATTENTION", "0") == "1":
+            flast_group_time_mask, group_start_index, counts, max_group_len, group_num = self._construct_and_invert_group_time_mask(
+                group_ids, attention_mask, inputs_embeds.dtype
+            )
+            group_time_mask = (flast_group_time_mask, group_start_index, counts, max_group_len, group_num)
+        else:
+            group_time_mask = self._construct_and_invert_group_time_mask(group_ids, attention_mask, inputs_embeds.dtype)
 
         all_time_self_attentions: tuple[torch.Tensor, ...] = ()
         all_group_self_attentions: tuple[torch.Tensor, ...] = ()

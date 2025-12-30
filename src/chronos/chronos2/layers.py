@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass
 
+import os
 import torch
 from einops import rearrange
 from torch import nn
@@ -351,19 +352,50 @@ class GroupSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, output_attentions: bool = False
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | tuple, output_attentions: bool = False
     ) -> AttentionOutput:
         # flip time and batch axes because attention operates along dim=-2
         hidden_states = rearrange(hidden_states, "batch time d -> time batch d")
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output: AttentionOutput = self.self_attention(
-            normed_hidden_states, mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
+
+        if os.environ.get("CHRONOS2_USE_FAST_GROUP_ATTENTION", "0") == "1":
+            flast_group_time_mask, group_start_index, counts, max_group_len, group_num = attention_mask
+            fast_normed_hidden_states = torch.zeros(
+                (group_num * normed_hidden_states.size(0), max_group_len, normed_hidden_states.size(2)),
+                dtype=normed_hidden_states.dtype,
+                device=normed_hidden_states.device,
+            )
+            for i in range(group_num):
+                start_index = group_start_index[i].item()
+                group_len = counts[i].item()
+                end_index = start_index + group_len
+                fast_normed_hidden_states[i * normed_hidden_states.size(0) : (i + 1) * normed_hidden_states.size(0), :group_len, :] = normed_hidden_states[
+                    :, start_index:end_index, :
+                ]
+            fast_attention_output: AttentionOutput = self.self_attention(
+                fast_normed_hidden_states, mask=flast_group_time_mask, output_attentions=output_attentions
+            )
+            attn_weights = fast_attention_output.attn_weights
+            attention_output = torch.empty_like(normed_hidden_states)
+            for i in range(group_num):
+                start_index = group_start_index[i].item()
+                group_len = counts[i].item()
+                end_index = start_index + group_len
+                attention_output[:, start_index:end_index, :] = fast_attention_output[0][
+                    i * normed_hidden_states.size(0) : (i + 1) * normed_hidden_states.size(0), :group_len, :
+                ]
+        else:
+            attention_output: AttentionOutput = self.self_attention(
+                normed_hidden_states, mask=attention_mask, output_attentions=output_attentions
+            )
+            attn_weights = attention_output.attn_weights
+            attention_output = attention_output[0]
+
+        hidden_states = hidden_states + self.dropout(attention_output)
         # flip time and batch axes back to their original position
         hidden_states = rearrange(hidden_states, "time batch d -> batch time d")
 
-        return AttentionOutput(hidden_states=hidden_states, attn_weights=attention_output.attn_weights)
+        return AttentionOutput(hidden_states=hidden_states, attn_weights=attn_weights)
 
 
 class ResidualBlock(nn.Module):
