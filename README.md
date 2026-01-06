@@ -36,6 +36,8 @@ This package provides an interface to the Chronos family of **pretrained time se
 | Model ID                                                               | Parameters |
 | ---------------------------------------------------------------------- | ---------- |
 | [`amazon/chronos-2`](https://huggingface.co/amazon/chronos-2)   | 120M         |
+| [`autogluon/chronos-2-synth`](https://huggingface.co/autogluon/chronos-2-synth)   | 120M         |
+| [`autogluon/chronos-2-small`](https://huggingface.co/autogluon/chronos-2-small)   | 28M         |
 | [`amazon/chronos-bolt-tiny`](https://huggingface.co/amazon/chronos-bolt-tiny)   | 9M         |
 | [`amazon/chronos-bolt-mini`](https://huggingface.co/amazon/chronos-bolt-mini)   | 21M        |
 | [`amazon/chronos-bolt-small`](https://huggingface.co/amazon/chronos-bolt-small) | 48M        |
