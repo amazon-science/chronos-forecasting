@@ -1,4 +1,5 @@
-from typing import Optional, Tuple
+import time
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,6 @@ def validate_tensor(a: torch.Tensor, shape: Tuple[int, ...], dtype: Optional[tor
 
     if dtype is not None:
         assert a.dtype == dtype
-
 
 
 def create_df(series_ids=["A", "B"], n_points=[10, 10], target_cols=["target"], covariates=None, freq="h"):
@@ -45,3 +45,14 @@ def get_forecast_start_times(df, freq="h"):
     forecast_start_times = [pd.date_range(end_time, periods=2, freq=freq)[-1] for end_time in context_end_times]
 
     return forecast_start_times
+
+
+def timeout_callback(seconds: float | None) -> Callable:
+    """Return a callback object that raises an exception if time limit is exceeded."""
+    start_time = time.monotonic()
+
+    def callback() -> None:
+        if seconds is not None and time.monotonic() - start_time > seconds:
+            raise TimeoutError("time limit exceeded")
+
+    return callback

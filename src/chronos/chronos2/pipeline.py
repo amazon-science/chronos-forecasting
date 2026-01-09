@@ -9,7 +9,7 @@ import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -114,6 +114,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         finetuned_ckpt_name: str = "finetuned-ckpt",
         callbacks: list["TrainerCallback"] | None = None,
         remove_printer_callback: bool = False,
+        disable_data_parallel: bool = True,
         **extra_trainer_kwargs,
     ) -> "Chronos2Pipeline":
         """
@@ -158,6 +159,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             A list of `TrainerCallback`s which will be forwarded to the HuggingFace `Trainer`
         remove_printer_callback
             If True, all instances of `PrinterCallback` are removed from callbacks
+        disable_data_parallel
+            If True, ensures that DataParallel is disabled and training happens on a single GPU
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
 
@@ -318,6 +321,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
             cudnn_tf32 = torch.backends.cudnn.allow_tf32
 
         training_args = TrainingArguments(**training_kwargs)
+
+        if disable_data_parallel and not use_cpu:
+            # This is a hack to disable the default `transformers` behavior of using DataParallel
+            training_args._n_gpu = 1
+            assert training_args.n_gpu == 1  # Ensure that the hack worked
 
         trainer = Chronos2Trainer(
             model=model,
@@ -569,6 +577,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         # effective batch size increases by a factor of `len(unrolled_quantiles)` when making long-horizon predictions,
         # by default [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+        # A callback which is called after each batch has been processed
+        after_batch_callback: Callable = kwargs.pop("after_batch", lambda: None)
 
         if len(kwargs) > 0:
             raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
@@ -608,7 +618,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
             output_patch_size=self.model_output_patch_size,
             mode=DatasetMode.TEST,
         )
-        test_loader = DataLoader(test_dataset, batch_size=None, pin_memory=True, shuffle=False, drop_last=False)
+        test_loader = DataLoader(
+            test_dataset, batch_size=None, pin_memory=self.model.device.type == "cuda", shuffle=False, drop_last=False
+        )
 
         all_predictions: list[torch.Tensor] = []
         for batch in test_loader:
@@ -631,6 +643,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 target_idx_ranges=batch_target_idx_ranges,
             )
             all_predictions.extend(batch_prediction)
+            after_batch_callback()
 
         return all_predictions
 
@@ -901,27 +914,29 @@ class Chronos2Pipeline(BaseChronosPipeline):
         quantiles_np = torch.stack(quantiles).numpy()  # [n_tasks, n_variates, horizon, num_quantiles]
         mean_np = torch.stack(mean).numpy()  # [n_tasks, n_variates, horizon]
 
-        results_dfs = []
-        for i, (series_id, future_ts) in enumerate(prediction_timestamps.items()):
-            q_pred = quantiles_np[i]  # (n_variates, prediction_length, len(quantile_levels))
-            point_pred = mean_np[i]  # (n_variates, prediction_length)
+        n_tasks = len(prediction_timestamps)
+        n_variates = len(target)
 
-            for target_idx, target_col in enumerate(target):
-                series_forecast_data: dict[str | tuple[str, str], Any] = {
-                    id_column: series_id,
-                    timestamp_column: future_ts,
-                    "target_name": target_col,
-                }
-                series_forecast_data["predictions"] = point_pred[target_idx]
-                for q_idx, q_level in enumerate(quantile_levels):
-                    series_forecast_data[str(q_level)] = q_pred[target_idx, :, q_idx]
+        series_ids = list(prediction_timestamps.keys())
+        future_ts = list(prediction_timestamps.values())
 
-                results_dfs.append(pd.DataFrame(series_forecast_data))
+        data = {
+            id_column: np.repeat(series_ids, n_variates * prediction_length),
+            timestamp_column: np.concatenate([np.tile(ts, n_variates) for ts in future_ts]),
+            "target_name": np.tile(np.repeat(target, prediction_length), n_tasks),
+            "predictions": mean_np.ravel(),
+        }
 
-        predictions_df = pd.concat(results_dfs, ignore_index=True)
-        predictions_df.set_index(id_column, inplace=True)
-        predictions_df = predictions_df.loc[original_order]
-        predictions_df.reset_index(inplace=True)
+        quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+        for q_idx, q_level in enumerate(quantile_levels):
+            data[str(q_level)] = quantiles_flat[:, q_idx]
+
+        predictions_df = pd.DataFrame(data)
+        # If validate_inputs=False, the df is used as-is without sorting by item_id, no reordering required
+        if validate_inputs:
+            predictions_df.set_index(id_column, inplace=True)
+            predictions_df = predictions_df.loc[original_order]
+            predictions_df.reset_index(inplace=True)
 
         return predictions_df
 
@@ -1122,7 +1137,12 @@ class Chronos2Pipeline(BaseChronosPipeline):
             mode=DatasetMode.TEST,
         )
         test_loader = DataLoader(
-            test_dataset, batch_size=None, num_workers=1, pin_memory=True, shuffle=False, drop_last=False
+            test_dataset,
+            batch_size=None,
+            num_workers=0,
+            pin_memory=self.model.device.type == "cuda",
+            shuffle=False,
+            drop_last=False,
         )
         all_embeds: list[torch.Tensor] = []
         all_loc_scales: list[tuple[torch.Tensor, torch.Tensor]] = []
