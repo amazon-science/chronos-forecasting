@@ -297,8 +297,12 @@ class Chronos2Model(PreTrainedModel):
             init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
             init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
             init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * kv_proj_dim) ** -0.5))
-        elif isinstance(module, (Chronos2Model)):
+        elif isinstance(module, Chronos2Model):
             init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
+            quantiles = torch.tensor(
+                module.chronos_config.quantiles, dtype=module.dtype, device=module.quantiles.device
+            )
+            init.copy_(module.quantiles, quantiles)
         elif isinstance(module, ResidualBlock):
             init.normal_(
                 module.hidden_layer.weight,
