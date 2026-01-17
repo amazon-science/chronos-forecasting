@@ -278,7 +278,7 @@ def convert_df_input_to_list_of_dicts_input(
                 freq = pd.infer_freq(timestamps)
                 break
 
-            assert freq is not None, "validate is False, but could not infer frequency from the dataframe"
+            assert freq is not None, "validate_inputs is False, but could not infer frequency from the dataframe"
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
