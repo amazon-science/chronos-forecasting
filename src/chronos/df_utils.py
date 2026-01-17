@@ -203,6 +203,7 @@ def convert_df_input_to_list_of_dicts_input(
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
+    freq: str | None = None,
     validate_inputs: bool = True,
 ) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
     """
@@ -229,8 +230,12 @@ def convert_df_input_to_list_of_dicts_input(
         Name of column containing time series identifiers
     timestamp_column
         Name of column containing timestamps
+    freq
+        Frequency string for timestamp generation. If provided, this frequency is used
+        instead of inferring it from the data. Only used when future_df is not provided,
+        since timestamps are extracted from future_df when it's available.
     validate_inputs
-        When True, the dataframe(s) will be validated be conversion
+        When True, the dataframe(s) will be validated before conversion
 
     Returns
     -------
@@ -243,7 +248,7 @@ def convert_df_input_to_list_of_dicts_input(
     import pandas as pd
 
     if validate_inputs:
-        df, future_df, freq, series_lengths, original_order = validate_df_inputs(
+        df, future_df, inferred_freq, series_lengths, original_order = validate_df_inputs(
             df,
             future_df=future_df,
             id_column=id_column,
@@ -251,6 +256,9 @@ def convert_df_input_to_list_of_dicts_input(
             target_columns=target_columns,
             prediction_length=prediction_length,
         )
+        # Use provided freq if available, otherwise use inferred freq
+        if freq is None:
+            freq = inferred_freq
     else:
         # Get the original order of time series IDs
         original_order = df[id_column].unique()
@@ -258,19 +266,19 @@ def convert_df_input_to_list_of_dicts_input(
         # Get series lengths
         series_lengths = df[id_column].value_counts(sort=False).to_list()
 
-        # If validation is skipped, the first freq in the dataframe is used
-        timestamp_index = pd.DatetimeIndex(df[timestamp_column])
-        start_idx = 0
-        freq = None
-        for length in series_lengths:
-            if length < 3:
-                start_idx += length
-                continue
-            timestamps = timestamp_index[start_idx : start_idx + length]
-            freq = pd.infer_freq(timestamps)
-            break
+        # If freq is not provided, infer from the first series with >= 3 points
+        if freq is None:
+            timestamp_index = pd.DatetimeIndex(df[timestamp_column])
+            start_idx = 0
+            for length in series_lengths:
+                if length < 3:
+                    start_idx += length
+                    continue
+                timestamps = timestamp_index[start_idx : start_idx + length]
+                freq = pd.infer_freq(timestamps)
+                break
 
-        assert freq is not None, "validate is False, but could not infer frequency from the dataframe"
+            assert freq is not None, "validate is False, but could not infer frequency from the dataframe"
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
@@ -278,29 +286,29 @@ def convert_df_input_to_list_of_dicts_input(
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     target_array = df[target_columns].to_numpy().T  # Shape: (n_targets, len(df))
-    last_ts = pd.DatetimeIndex(df[timestamp_column].iloc[indptr[1:] - 1])  # Shape: (n_series,)
-    offset = pd.tseries.frequencies.to_offset(freq)
-    with warnings.catch_warnings():
-        # Silence PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
-        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-        # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
-        prediction_timestamps_array = pd.DatetimeIndex(
-            np.dstack([last_ts + step * offset for step in range(1, prediction_length + 1)]).ravel()
-        )
 
     past_covariates_dict = {
         col: df[col].to_numpy() for col in df.columns if col not in [id_column, timestamp_column] + target_columns
     }
     future_covariates_dict = {}
+
     if future_df is not None:
+        # Use timestamps from future_df
+        prediction_timestamps_array = pd.DatetimeIndex(future_df[timestamp_column])
         for col in future_df.columns.drop([id_column, timestamp_column]):
             future_covariates_dict[col] = future_df[col].to_numpy()
-        if validate_inputs:
-            if (pd.DatetimeIndex(future_df[timestamp_column]) != pd.DatetimeIndex(prediction_timestamps_array)).any():
-                raise ValueError(
-                    "future_df timestamps do not match the expected prediction timestamps. "
-                    "You can disable this check by setting `validate_inputs=False`"
-                )
+    else:
+        # Generate timestamps from freq
+        assert freq is not None, "freq must be provided or inferred when future_df is not provided"
+        last_ts = pd.DatetimeIndex(df[timestamp_column].iloc[indptr[1:] - 1])  # Shape: (n_series,)
+        offset = pd.tseries.frequencies.to_offset(freq)
+        with warnings.catch_warnings():
+            # Silence PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
+            warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+            # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
+            prediction_timestamps_array = pd.DatetimeIndex(
+                np.dstack([last_ts + step * offset for step in range(1, prediction_length + 1)]).ravel()
+            )
 
     for i in range(len(series_lengths)):
         start_idx, end_idx = indptr[i], indptr[i + 1]
