@@ -825,6 +825,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         context_length: int | None = None,
         cross_learning: bool = False,
         validate_inputs: bool = True,
+        freq: str | None = None,
         **predict_kwargs,
     ) -> "pd.DataFrame":
         """
@@ -866,6 +867,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
         validate_inputs
             When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
             regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
+        freq
+            Frequency string for timestamp generation (e.g., "h", "D", "W"). If provided, this frequency is used
+            instead of inferring it from the data. This is useful when you already know the frequency and want to
+            skip the inference overhead. Only used when future_df is not provided, since timestamps are extracted
+            from future_df when it's available.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
@@ -896,6 +902,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             timestamp_column=timestamp_column,
             target_columns=target,
             prediction_length=prediction_length,
+            freq=freq,
             validate_inputs=validate_inputs,
         )
 

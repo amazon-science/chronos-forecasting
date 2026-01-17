@@ -142,6 +142,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         validate_inputs: bool = True,
+        freq: str | None = None,
         **predict_kwargs,
     ) -> "pd.DataFrame":
         """
@@ -166,6 +167,10 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         validate_inputs
             When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
             regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
+        freq
+            Frequency string for timestamp generation (e.g., "h", "D", "W"). If provided, this frequency is used
+            instead of inferring it from the data. This is useful when you already know the frequency and want to
+            skip the inference overhead.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
@@ -200,6 +205,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             timestamp_column=timestamp_column,
             target_columns=[target],
             prediction_length=prediction_length,
+            freq=freq,
             validate_inputs=validate_inputs,
         )
 
