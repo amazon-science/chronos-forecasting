@@ -294,7 +294,7 @@ def convert_df_input_to_list_of_dicts_input(
 
     if future_df is not None:
         # Use timestamps from future_df
-        prediction_timestamps_array = pd.DatetimeIndex(future_df[timestamp_column])
+        prediction_timestamps_flat = pd.DatetimeIndex(future_df[timestamp_column])
         for col in future_df.columns.drop([id_column, timestamp_column]):
             future_covariates_dict[col] = future_df[col].to_numpy()
     else:
@@ -306,7 +306,7 @@ def convert_df_input_to_list_of_dicts_input(
             # Silence PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
             warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
             # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
-            prediction_timestamps_array = pd.DatetimeIndex(
+            prediction_timestamps_flat = pd.DatetimeIndex(
                 np.dstack([last_ts + step * offset for step in range(1, prediction_length + 1)]).ravel()
             )
 
@@ -315,7 +315,7 @@ def convert_df_input_to_list_of_dicts_input(
         future_start_idx, future_end_idx = i * prediction_length, (i + 1) * prediction_length
 
         series_id = df[id_column].iloc[start_idx]
-        prediction_timestamps[series_id] = prediction_timestamps_array[future_start_idx:future_end_idx]
+        prediction_timestamps[series_id] = prediction_timestamps_flat[future_start_idx:future_end_idx]
         task: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_array[:, start_idx:end_idx]}
 
         if len(past_covariates_dict) > 0:
