@@ -1143,3 +1143,38 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
     for out_eager, out_sdpa in zip(outputs_eager_grouped, outputs_sdpa_grouped):
         # Should match exactly or very close (numerical precision)
         assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
+
+
+@pytest.mark.parametrize("source_revision", ["my-test-branch", None])
+def test_lora_config_uses_source_revision_from_instantiation(
+    pipeline: Chronos2Pipeline, tmpdir, source_revision
+):
+    """
+    Test that fit in 'lora' mode correctly uses the 'revision'
+    stored in the pipeline instance.
+    """
+    output_dir = Path(tmpdir)
+    dummy_inputs = [torch.rand(100)]
+
+    pipeline.revision = source_revision
+
+    pipeline.fit(
+        inputs=dummy_inputs,
+        prediction_length=10,
+        finetune_mode="lora",
+        output_dir=output_dir,
+        num_steps=1,  # Keep it fast
+        batch_size=32,
+    )
+
+    adapter_config_path = output_dir / "finetuned-ckpt" / "adapter_config.json"
+    assert adapter_config_path.exists(), "adapter_config.json was not created"
+
+    with open(adapter_config_path, "r") as f:
+        adapter_config = json.load(f)
+
+    if source_revision is not None:
+        assert "revision" in adapter_config
+        assert adapter_config["revision"] == source_revision
+    else:
+        assert "revision" not in adapter_config or adapter_config["revision"] is None

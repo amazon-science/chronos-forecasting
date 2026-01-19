@@ -40,10 +40,10 @@ class Chronos2Pipeline(BaseChronosPipeline):
     forecast_type: ForecastType = ForecastType.QUANTILES
     default_context_length: int = 2048
 
-    def __init__(self, model: Chronos2Model):
+    def __init__(self, model: Chronos2Model, revision: str | None = None):
         super().__init__(inner_model=model)
         self.model = model
-
+        self.revision = revision
     @staticmethod
     def _get_prob_mass_per_quantile_level(quantile_levels: torch.Tensor) -> torch.Tensor:
         """
@@ -198,6 +198,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         model.load_state_dict(self.model.state_dict())
 
         if finetune_mode == "lora":
+            lora_revision = self.revision
             if lora_config is None:
                 lora_config = LoraConfig(
                     r=8,
@@ -209,8 +210,10 @@ class Chronos2Pipeline(BaseChronosPipeline):
                         "self_attention.o",
                         "output_patch_embedding.output_layer",
                     ],
+                    revision=lora_revision,
                 )
             elif isinstance(lora_config, dict):
+                lora_config.setdefault("revision", lora_revision)
                 lora_config = LoraConfig(**lora_config)
             else:
                 assert isinstance(lora_config, LoraConfig), (
@@ -1182,6 +1185,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         Load the model, either from a local path, S3 prefix or from the HuggingFace Hub.
         Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
+        revision = kwargs.get("revision")
 
         # Check if the model is on S3 and cache it locally first
         # NOTE: Only base models (not LoRA adapters) are supported via S3
@@ -1199,7 +1203,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
             model = AutoPeftModel.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
             model = model.merge_and_unload()
-            return cls(model=model)
+            return cls(model=model, revision=revision)
 
         # Handle the case for the base model
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
@@ -1213,7 +1217,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             class_ = Chronos2Model
 
         model = class_.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
-        return cls(model=model)
+        return cls(model=model, revision=revision)
 
     def save_pretrained(self, save_directory: str | Path, *args, **kwargs):
         """
