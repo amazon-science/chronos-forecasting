@@ -253,8 +253,9 @@ def convert_df_input_to_list_of_dicts_input(
         raise ValueError(
             "freq can only be provided when validate_inputs=False. "
             "When using freq with validate_inputs=False, you must ensure: "
-            "df (and future_df if provided) are sorted by (id_column, timestamp_column); "
-            "future_df (if provided) contains exactly prediction_length rows per item."
+            "(1) all dataframes are sorted by (id_column, timestamp_column);  "
+            "future_df (if provided) has the same item IDs as df with exactly "
+            "prediction_length rows of future timestamps per item."
         )
 
     if validate_inputs:
