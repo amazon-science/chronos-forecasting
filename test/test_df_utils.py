@@ -364,10 +364,24 @@ def test_convert_df_preserves_all_values_with_random_inputs():
 # Tests for freq parameter
 
 
-@pytest.mark.parametrize("validate_inputs", [True, False])
+def test_convert_df_with_freq_and_validate_inputs_raises_error():
+    """Test that providing freq with validate_inputs=True raises ValueError."""
+    df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], freq="h")
+
+    with pytest.raises(ValueError, match="freq can only be provided when validate_inputs=False"):
+        convert_df_input_to_list_of_dicts_input(
+            df=df,
+            future_df=None,
+            target_columns=["target"],
+            prediction_length=5,
+            freq="h",
+            validate_inputs=True,
+        )
+
+
 @pytest.mark.parametrize("use_future_df", [True, False])
-def test_convert_df_with_provided_freq(validate_inputs, use_future_df):
-    """Test that provided freq works with different combinations of validate_inputs and future_df."""
+def test_convert_df_with_freq_and_validate_inputs_false(use_future_df):
+    """Test that freq works with validate_inputs=False."""
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], covariates=["cov1"], freq="h")
     prediction_length = 5
 
@@ -388,39 +402,10 @@ def test_convert_df_with_provided_freq(validate_inputs, use_future_df):
         target_columns=["target"],
         prediction_length=prediction_length,
         freq="h",
-        validate_inputs=validate_inputs,
+        validate_inputs=False,
     )
 
     assert len(inputs) == 2
     assert len(prediction_timestamps) == 2
     for series_id in ["A", "B"]:
         assert len(prediction_timestamps[series_id]) == prediction_length
-
-
-def test_convert_df_with_future_df_uses_future_df_timestamps():
-    """Test that timestamps from future_df are used when future_df is provided."""
-    df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], covariates=["cov1"], freq="h")
-
-    # Create future_df with 2h freq (different from df's 1h freq)
-    forecast_start_times = get_forecast_start_times(df, freq="2h")
-    future_df = create_future_df(
-        forecast_start_times=forecast_start_times,
-        series_ids=["A", "B"],
-        n_points=[5, 5],
-        covariates=["cov1"],
-        freq="2h"
-    )
-
-    inputs, _, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
-        df=df,
-        future_df=future_df,
-        target_columns=["target"],
-        prediction_length=5,
-        validate_inputs=False,
-    )
-
-    # Verify timestamps come from future_df (2h spacing)
-    future_df_sorted = future_df.sort_values(["item_id", "timestamp"])
-    for series_id in ["A", "B"]:
-        expected_timestamps = pd.DatetimeIndex(future_df_sorted[future_df_sorted["item_id"] == series_id]["timestamp"])
-        pd.testing.assert_index_equal(prediction_timestamps[series_id], expected_timestamps)
