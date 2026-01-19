@@ -170,7 +170,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
             has the same item IDs as df with exactly prediction_length rows of future timestamps per item.
         freq
-            Frequency string for timestamp generation (e.g., "H", "D", "W"). Can only be used when
+            Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
             validate_inputs=False. When provided, skips frequency inference from the data.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
