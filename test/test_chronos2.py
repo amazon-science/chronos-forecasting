@@ -1143,3 +1143,283 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
     for out_eager, out_sdpa in zip(outputs_eager_grouped, outputs_sdpa_grouped):
         # Should match exactly or very close (numerical precision)
         assert torch.allclose(out_eager, out_sdpa, atol=1e-5, rtol=1e-4)
+
+
+# ============================================================================
+# Tests for custom group_ids functionality
+# ============================================================================
+
+
+@pytest.mark.parametrize("group_ids", [[0, 0, 1], torch.tensor([0, 0, 1])])
+def test_predict_with_custom_group_ids_list_and_tensor(pipeline, group_ids):
+    """Test basic functionality with custom group_ids as both list and tensor."""
+    inputs = [torch.rand(100), torch.rand(110), torch.rand(120)]
+    outputs = pipeline.predict(inputs, prediction_length=24, group_ids=group_ids)
+
+    assert isinstance(outputs, list) and len(outputs) == 3
+    for out in outputs:
+        validate_tensor(out, (1, DEFAULT_MODEL_NUM_QUANTILES, 24), dtype=torch.float32)
+
+
+def test_predict_with_group_ids_univariate_batch(pipeline):
+    """Test group_ids with homogeneous univariate batch."""
+    inputs = torch.rand(5, 1, 100)
+    group_ids = [0, 0, 1, 1, 2]  # First two together, next two together, last one alone
+
+    outputs = pipeline.predict(inputs, prediction_length=12, group_ids=group_ids)
+
+    assert len(outputs) == 5
+    for out in outputs:
+        validate_tensor(out, (1, DEFAULT_MODEL_NUM_QUANTILES, 12), dtype=torch.float32)
+
+
+def test_predict_with_group_ids_multivariate(pipeline):
+    """Test group_ids with multivariate inputs."""
+    inputs = [torch.rand(2, 100), torch.rand(2, 110), torch.rand(2, 90)]
+    group_ids = [0, 0, 1]  # First two share info, third is separate
+
+    outputs = pipeline.predict(inputs, prediction_length=16, group_ids=group_ids)
+
+    assert len(outputs) == 3
+    for out in outputs:
+        validate_tensor(out, (2, DEFAULT_MODEL_NUM_QUANTILES, 16), dtype=torch.float32)
+
+
+def test_predict_with_group_ids_and_covariates(pipeline):
+    """Test group_ids with covariates."""
+    prediction_length = 24
+    inputs = [
+        {
+            "target": torch.rand(100),
+            "past_covariates": {"temperature": torch.rand(100)},
+            "future_covariates": {"temperature": torch.rand(prediction_length)},
+        },
+        {
+            "target": torch.rand(110),
+            "past_covariates": {"temperature": torch.rand(110)},
+            "future_covariates": {"temperature": torch.rand(prediction_length)},
+        },
+        {
+            "target": torch.rand(90),
+            "past_covariates": {"temperature": torch.rand(90)},
+            "future_covariates": {"temperature": torch.rand(prediction_length)},
+        },
+    ]
+    group_ids = [0, 0, 1]
+
+    outputs = pipeline.predict(inputs, prediction_length=prediction_length, group_ids=group_ids)
+
+    assert len(outputs) == 3
+    for out in outputs:
+        validate_tensor(out, (1, DEFAULT_MODEL_NUM_QUANTILES, prediction_length), dtype=torch.float32)
+
+
+def test_predict_df_with_group_ids_dict(pipeline):
+    """Test predict_df with dictionary group_ids."""
+    df = create_df(series_ids=["A", "B", "C"], n_points=[10, 10, 10])
+    group_ids = {"A": 0, "B": 0, "C": 1}  # A and B share info, C is separate
+
+    pred_df = pipeline.predict_df(df, prediction_length=5, group_ids=group_ids)
+
+    assert isinstance(pred_df, pd.DataFrame)
+    assert len(pred_df) == 15  # 3 series * 5 predictions
+    assert set(pred_df["item_id"].unique()) == {"A", "B", "C"}
+
+
+def test_predict_df_with_partial_group_ids(pipeline):
+    """Test predict_df when only some series have group_ids assigned."""
+    df = create_df(series_ids=["A", "B", "C", "D"], n_points=[10, 10, 10, 10])
+    group_ids = {"A": 0, "B": 0}  # Only A and B specified, C and D should get unique IDs
+
+    pred_df = pipeline.predict_df(df, prediction_length=5, group_ids=group_ids)
+
+    assert isinstance(pred_df, pd.DataFrame)
+    assert len(pred_df) == 20  # 4 series * 5 predictions
+    assert set(pred_df["item_id"].unique()) == {"A", "B", "C", "D"}
+
+
+def test_predict_df_with_group_ids_and_covariates(pipeline):
+    """Test predict_df with both group_ids and covariates."""
+    df = create_df(series_ids=["A", "B", "C"], n_points=[10, 10, 10], covariates=["temp"])
+    future_df = create_future_df(
+        get_forecast_start_times(df), series_ids=["A", "B", "C"], n_points=[5, 5, 5], covariates=["temp"]
+    )
+    group_ids = {"A": 0, "B": 0, "C": 1}
+
+    pred_df = pipeline.predict_df(df, future_df=future_df, prediction_length=5, group_ids=group_ids)
+
+    assert isinstance(pred_df, pd.DataFrame)
+    assert len(pred_df) == 15
+
+
+def test_group_ids_cross_learning_mutual_exclusion(pipeline):
+    """Test that error is raised when both group_ids and cross_learning are specified."""
+    inputs = [torch.rand(100), torch.rand(110), torch.rand(120)]
+    group_ids = [0, 0, 1]
+
+    with pytest.raises(ValueError, match="Cannot specify both `group_ids` and `cross_learning=True`"):
+        pipeline.predict(inputs, prediction_length=24, group_ids=group_ids, cross_learning=True)
+
+
+def test_predict_df_group_ids_cross_learning_mutual_exclusion(pipeline):
+    """Test that predict_df raises error when both group_ids and cross_learning are specified."""
+    df = create_df(series_ids=["A", "B"], n_points=[10, 10])
+    group_ids = {"A": 0, "B": 0}
+
+    with pytest.raises(ValueError, match="Cannot specify both `group_ids` and `cross_learning=True`"):
+        pipeline.predict_df(df, prediction_length=5, group_ids=group_ids, cross_learning=True)
+
+
+def test_group_ids_length_mismatch_raises_error(pipeline):
+    """Test that error is raised when group_ids length doesn't match inputs."""
+    inputs = [torch.rand(100), torch.rand(110), torch.rand(120)]
+    group_ids = [0, 0]  # Only 2 IDs for 3 inputs
+
+    with pytest.raises(ValueError, match="length .* must match number of tasks"):
+        pipeline.predict(inputs, prediction_length=24, group_ids=group_ids)
+
+
+def test_group_ids_negative_values_raises_error(pipeline):
+    """Test that error is raised when group_ids contain negative values."""
+    inputs = [torch.rand(100), torch.rand(110), torch.rand(120)]
+    group_ids = [0, -1, 1]  # Negative ID not allowed
+
+    with pytest.raises(ValueError, match="must contain only non-negative integers"):
+        pipeline.predict(inputs, prediction_length=24, group_ids=group_ids)
+
+
+def test_group_ids_invalid_type_raises_error(pipeline):
+    """Test that error is raised when group_ids is not list or tensor."""
+    inputs = [torch.rand(100), torch.rand(110)]
+    group_ids = "invalid"  # String not allowed
+
+    with pytest.raises(TypeError, match="must be a list or torch.Tensor"):
+        pipeline.predict(inputs, prediction_length=24, group_ids=group_ids)
+
+
+def test_predict_df_group_ids_invalid_type_raises_error(pipeline):
+    """Test that predict_df raises error when group_ids is not a dict."""
+    df = create_df(series_ids=["A", "B"], n_points=[10, 10])
+    group_ids = [0, 0]  # List not allowed for predict_df (needs dict)
+
+    with pytest.raises(TypeError, match="must be a dictionary"):
+        pipeline.predict_df(df, prediction_length=5, group_ids=group_ids)
+
+
+def test_predict_df_group_ids_invalid_dict_values_raises_error(pipeline):
+    """Test that predict_df raises error when group_ids dict has negative values."""
+    df = create_df(series_ids=["A", "B"], n_points=[10, 10])
+    group_ids = {"A": 0, "B": -1}  # Negative value not allowed
+
+    with pytest.raises(ValueError, match="must be non-negative integers"):
+        pipeline.predict_df(df, prediction_length=5, group_ids=group_ids)
+
+
+def test_predict_df_group_ids_warns_unknown_series(pipeline):
+    """Test that predict_df warns when group_ids contains unknown series IDs."""
+    df = create_df(series_ids=["A", "B"], n_points=[10, 10])
+    group_ids = {"A": 0, "B": 0, "X": 1, "Y": 1}  # X and Y don't exist
+
+    with pytest.warns(UserWarning, match="not found in the dataframe"):
+        pipeline.predict_df(df, prediction_length=5, group_ids=group_ids)
+
+
+# ============================================================================
+# Tests for group_ids helper functions
+# ============================================================================
+
+
+def test_create_group_ids_dict_from_category():
+    """Test create_group_ids_dict_from_category helper function."""
+    from chronos import create_group_ids_dict_from_category
+
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "B", "B", "C", "C"],
+            "region": ["North", "North", "North", "North", "South", "South"],
+            "value": [1, 2, 3, 4, 5, 6],
+        }
+    )
+
+    result = create_group_ids_dict_from_category(df, "item_id", "region")
+
+    assert isinstance(result, dict)
+    assert result == {"A": 0, "B": 0, "C": 1}
+
+
+def test_create_group_ids_dict_from_mapping():
+    """Test create_group_ids_dict_from_mapping helper function."""
+    from chronos import create_group_ids_dict_from_mapping
+
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "B", "B", "C", "C", "D", "D"],
+            "industry": ["Retail", "Retail", "Wholesale", "Wholesale", "Food", "Food", "Services", "Services"],
+            "value": [1, 2, 3, 4, 5, 6, 7, 8],
+        }
+    )
+    mapping = {"Retail": 0, "Wholesale": 0, "Food": 1, "Services": 2}
+
+    result = create_group_ids_dict_from_mapping(df, "item_id", mapping)
+
+    assert isinstance(result, dict)
+    assert result == {"A": 0, "B": 0, "C": 1, "D": 2}
+
+
+def test_create_group_ids_dict_from_mapping_missing_category_raises_error():
+    """Test that create_group_ids_dict_from_mapping raises error for unmapped categories."""
+    from chronos import create_group_ids_dict_from_mapping
+
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "B", "B"],
+            "industry": ["Retail", "Retail", "Tech", "Tech"],
+            "value": [1, 2, 3, 4],
+        }
+    )
+    mapping = {"Retail": 0}  # Missing "Tech"
+
+    with pytest.raises(KeyError, match="not found in mapping"):
+        create_group_ids_dict_from_mapping(df, "item_id", mapping)
+
+
+def test_create_manual_group_ids_dict():
+    """Test create_manual_group_ids_dict helper function."""
+    from chronos import create_manual_group_ids_dict
+
+    series_ids = ["store_1", "store_2", "store_3", "store_4"]
+    groups = [0, 0, 1, 1]
+
+    result = create_manual_group_ids_dict(series_ids, groups)
+
+    assert isinstance(result, dict)
+    assert result == {"store_1": 0, "store_2": 0, "store_3": 1, "store_4": 1}
+
+
+def test_create_manual_group_ids_dict_length_mismatch_raises_error():
+    """Test that create_manual_group_ids_dict raises error on length mismatch."""
+    from chronos import create_manual_group_ids_dict
+
+    series_ids = ["A", "B", "C"]
+    groups = [0, 0]  # Mismatched length
+
+    with pytest.raises(ValueError, match="Length mismatch"):
+        create_manual_group_ids_dict(series_ids, groups)
+
+
+def test_create_group_ids_from_category():
+    """Test create_group_ids_from_category helper function for list output."""
+    from chronos import create_group_ids_from_category
+
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "B", "B", "C", "C"],
+            "region": ["North", "North", "North", "North", "South", "South"],
+            "value": [1, 2, 3, 4, 5, 6],
+        }
+    )
+
+    result = create_group_ids_from_category(df, "item_id", "region")
+
+    assert isinstance(result, list)
+    assert result == [0, 0, 1]  # A and B are North (0), C is South (1)

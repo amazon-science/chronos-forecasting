@@ -456,6 +456,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         batch_size: int = 256,
         context_length: int | None = None,
         cross_learning: bool = False,
+        group_ids: list[int] | torch.Tensor | None = None,
         limit_prediction_length: bool = False,
         **kwargs,
     ) -> list[torch.Tensor]:
@@ -548,6 +549,12 @@ class Chronos2Pipeline(BaseChronosPipeline):
             - Results become dependent on batch size. Very large batch sizes may not provide benefits as they deviate from the maximum group size used during pretraining.
             For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
             - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
+        group_ids
+            Optional custom group IDs to control information sharing between time series.
+            If provided, must be a list or tensor of integers with length equal to the number of tasks in `inputs`.
+            Tasks with the same group ID will share information during prediction via cross-attention.
+            Cannot be used together with `cross_learning=True`. By default None (each task gets unique group ID).
+            Example: [0, 0, 1] means first two tasks share information, third is separate.
         limit_prediction_length
             If True, an error is raised when prediction_length is greater than model's default prediction length, by default False
 
@@ -569,6 +576,40 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 stacklevel=2,
             )
             cross_learning = kwargs.pop("predict_batches_jointly")
+
+        # Validate group_ids and cross_learning interaction
+        if group_ids is not None and cross_learning:
+            raise ValueError(
+                "Cannot specify both `group_ids` and `cross_learning=True`. "
+                "Use `group_ids` to define custom groups, or `cross_learning=True` to enable full batch-wide learning."
+            )
+
+        # Convert group_ids to tensor if provided
+        custom_group_ids_tensor = None
+        if group_ids is not None:
+            if isinstance(group_ids, list):
+                # Strict type check: only integers are allowed in the list
+                if not all(isinstance(x, (int, np.integer)) for x in group_ids):
+                    raise TypeError("`group_ids` list must contain only integers")
+                if any(x < 0 for x in group_ids):
+                    raise ValueError("`group_ids` must contain only non-negative integers")
+                custom_group_ids_tensor = torch.tensor(group_ids, dtype=torch.long)
+            elif isinstance(group_ids, torch.Tensor):
+                # Enforce integer dtype for tensor inputs
+                if torch.is_floating_point(group_ids) or group_ids.dtype == torch.bool:
+                    raise TypeError("`group_ids` tensor must have an integer dtype")
+                if (group_ids < 0).any():
+                    raise ValueError("`group_ids` must contain only non-negative integers")
+                custom_group_ids_tensor = group_ids.to(dtype=torch.long).clone()
+            else:
+                raise TypeError(f"`group_ids` must be a list or torch.Tensor, got {type(group_ids)}")
+
+            # Validate length matches number of tasks
+            if len(custom_group_ids_tensor) != len(inputs):
+                raise ValueError(
+                    f"`group_ids` length ({len(custom_group_ids_tensor)}) must match number of tasks in inputs ({len(inputs)})"
+                )
+
         # The maximum number of output patches to generate in a single forward pass before the long-horizon heuristic kicks in. Note: A value larger
         # than the model's default max_output_patches may lead to degradation in forecast accuracy, defaults to a model-specific value
         max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
@@ -623,6 +664,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
         )
 
         all_predictions: list[torch.Tensor] = []
+        # Track the current task index for custom group ID mapping
+        current_task_idx = 0
+
         for batch in test_loader:
             assert batch["future_target"] is None
             batch_context = batch["context"]
@@ -630,7 +674,38 @@ class Chronos2Pipeline(BaseChronosPipeline):
             batch_future_covariates = batch["future_covariates"]
             batch_target_idx_ranges = batch["target_idx_ranges"]
 
-            if cross_learning:
+            # Apply custom group IDs if provided
+            if custom_group_ids_tensor is not None:
+                # Determine how many tasks are in this batch
+                num_tasks_in_batch = len(batch_target_idx_ranges)
+
+                # The key insight: batch_group_ids already maps variates to tasks
+                # We just need to replace the task IDs with our custom ones
+
+                # Create a mapping from old task IDs to new task IDs
+                old_group_ids = batch_group_ids.cpu().numpy()
+                # Preserve first-appearance order of group IDs (robust to non-consecutive IDs)
+                seen = set()
+                unique_old_ids_list: list[int] = []
+                for gid in old_group_ids.tolist():
+                    if gid not in seen:
+                        seen.add(int(gid))
+                        unique_old_ids_list.append(int(gid))
+
+                # Map old group IDs to task indices (0, 1, 2, ..., num_tasks_in_batch-1)
+                # Then map those to custom group IDs
+                new_group_ids = old_group_ids.copy()
+
+                for task_offset, old_group_id in enumerate(unique_old_ids_list):
+                    task_idx = current_task_idx + task_offset
+                    custom_group_id = custom_group_ids_tensor[task_idx].item()
+                    # Replace all occurrences of old_group_id with custom_group_id
+                    new_group_ids[old_group_ids == old_group_id] = custom_group_id
+
+                batch_group_ids = torch.tensor(new_group_ids, dtype=torch.long)
+                current_task_idx += num_tasks_in_batch
+
+            elif cross_learning:
                 batch_group_ids = torch.zeros_like(batch_group_ids)
 
             batch_prediction = self._predict_batch(
@@ -824,6 +899,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         batch_size: int = 256,
         context_length: int | None = None,
         cross_learning: bool = False,
+        group_ids: dict[str, int] | None = None,
         validate_inputs: bool = True,
         freq: str | None = None,
         **predict_kwargs,
@@ -864,6 +940,12 @@ class Chronos2Pipeline(BaseChronosPipeline):
             - Results become dependent on batch size. Very large batch sizes may not provide benefits as they deviate from the maximum group size used during pretraining.
             For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
             - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
+        group_ids
+            Optional dictionary mapping series IDs (from id_column) to group IDs.
+            Series with the same group ID will share information during prediction.
+            Cannot be used together with `cross_learning=True`. By default None.
+            Example: {'series_A': 0, 'series_B': 0, 'series_C': 1} means series_A and series_B share info, series_C is separate.
+            If a series ID is not in the dictionary, it will be assigned a unique group ID.
         validate_inputs
             [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
             validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
@@ -907,6 +989,48 @@ class Chronos2Pipeline(BaseChronosPipeline):
             validate_inputs=validate_inputs,
         )
 
+        # Convert dictionary group_ids to list format matching inputs order
+        group_ids_list = None
+        if group_ids is not None:
+            # Validate group_ids format
+            if not isinstance(group_ids, dict):
+                raise TypeError(f"`group_ids` must be a dictionary, got {type(group_ids)}")
+
+            if not all(isinstance(k, str) and isinstance(v, int) for k, v in group_ids.items()):
+                raise TypeError("`group_ids` dictionary must have string keys and integer values")
+
+            if any(v < 0 for v in group_ids.values()):
+                raise ValueError("`group_ids` values must be non-negative integers")
+
+            if cross_learning:
+                raise ValueError(
+                    "Cannot specify both `group_ids` and `cross_learning=True`. "
+                    "Use `group_ids` to define custom groups, or `cross_learning=True` to enable full batch-wide learning."
+                )
+
+            # Warn if series IDs in group_ids don't exist in dataframe
+            series_in_df = set(df[id_column].unique())
+            unknown_series = set(group_ids.keys()) - series_in_df
+            if unknown_series:
+                warnings.warn(
+                    f"The following series IDs in `group_ids` were not found in the dataframe: {unknown_series}. "
+                    f"They will be ignored.",
+                    category=UserWarning,
+                )
+
+            # Create list of group IDs matching the order of inputs
+            # original_order contains the series IDs in the order they appear in inputs
+            group_ids_list = []
+            next_auto_group_id = max(group_ids.values()) + 1 if group_ids else 0
+
+            for series_id in original_order:
+                if series_id in group_ids:
+                    group_ids_list.append(group_ids[series_id])
+                else:
+                    # Assign unique group ID to series not in the mapping
+                    group_ids_list.append(next_auto_group_id)
+                    next_auto_group_id += 1
+
         # Generate forecasts
         quantiles, mean = self.predict_quantiles(
             inputs=inputs,
@@ -916,6 +1040,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             batch_size=batch_size,
             context_length=context_length,
             cross_learning=cross_learning,
+            group_ids=group_ids_list,
             **predict_kwargs,
         )
         # since predict_df tasks are homogenous by input design, we can safely stack the list of tensors into a single tensor
