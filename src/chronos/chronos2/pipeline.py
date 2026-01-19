@@ -868,7 +868,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
             validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
             must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
-            has the same item IDs as df with exactly prediction_length rows of future timestamps per item.
+            has the same item IDs as df with exactly prediction_length rows of future timestamps per item; (3) all
+            timestamps are regularly spaced (e.g., with hourly frequency).
         freq
             Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
             validate_inputs=False. When provided, skips frequency inference from the data.
