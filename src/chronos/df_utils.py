@@ -203,8 +203,8 @@ def convert_df_input_to_list_of_dicts_input(
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-    freq: str | None = None,
     validate_inputs: bool = True,
+    freq: str | None = None,
 ) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
     """
     Convert from dataframe input format to a list of dictionaries input format.
@@ -230,14 +230,14 @@ def convert_df_input_to_list_of_dicts_input(
         Name of column containing time series identifiers
     timestamp_column
         Name of column containing timestamps
-    freq
-        Frequency string for timestamp generation (e.g., "H", "D", "W"). Can only be used
-        when validate_inputs=False. When provided, skips frequency inference from the data.
     validate_inputs
         [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
         validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
         must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
         has the same item IDs as df with exactly prediction_length rows of future timestamps per item.
+    freq
+        Frequency string for timestamp generation (e.g., "H", "D", "W"). Can only be used
+        when validate_inputs=False. When provided, skips frequency inference from the data.
 
     Returns
     -------
