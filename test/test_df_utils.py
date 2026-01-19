@@ -368,9 +368,6 @@ def test_convert_df_preserves_all_values_with_random_inputs():
     assert len(prediction_timestamps) == n_series
 
 
-# Tests for freq parameter
-
-
 def test_convert_df_with_freq_and_validate_inputs_raises_error():
     """Test that providing freq with validate_inputs=True raises ValueError."""
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], freq="h")
