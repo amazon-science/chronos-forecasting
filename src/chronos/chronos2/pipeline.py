@@ -865,8 +865,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
             For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
             - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
         validate_inputs
-            When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
-            regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
+            [ADVANCED] When False, skips validation. You must ensure: (1) df and future_df (if provided)
+            are sorted by (id_column, timestamp_column); (2) future_df (if provided) contains exactly
+            prediction_length rows per item. Defaults to True.
         freq
             Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
             validate_inputs=False. When provided, skips frequency inference from the data.

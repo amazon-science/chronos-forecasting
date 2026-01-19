@@ -165,10 +165,11 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         quantile_levels
             Quantile levels to compute
         validate_inputs
-            When True, the dataframe(s) will be validated before prediction, ensuring that timestamps have a
-            regular frequency, and item IDs match between past and future data. Setting to False disables these checks.
+            [ADVANCED] When False, skips validation. You must ensure: (1) df and future_df (if provided)
+            are sorted by (id_column, timestamp_column); (2) future_df (if provided) contains exactly
+            prediction_length rows per item. Defaults to True.
         freq
-            Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
+            Frequency string for timestamp generation (e.g., "H", "D", "W"). Can only be used when
             validate_inputs=False. When provided, skips frequency inference from the data.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
