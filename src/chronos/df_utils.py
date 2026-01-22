@@ -204,6 +204,7 @@ def convert_df_input_to_list_of_dicts_input(
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
     validate_inputs: bool = True,
+    freq: str | None = None,
 ) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
     """
     Convert from dataframe input format to a list of dictionaries input format.
@@ -230,7 +231,14 @@ def convert_df_input_to_list_of_dicts_input(
     timestamp_column
         Name of column containing timestamps
     validate_inputs
-        When True, the dataframe(s) will be validated be conversion
+        [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
+        validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
+        must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
+        has the same item IDs as df with exactly prediction_length rows of future timestamps per item; (3) all
+        timestamps are regularly spaced (e.g., with hourly frequency).
+    freq
+        Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used
+        when validate_inputs=False. When provided, skips frequency inference from the data.
 
     Returns
     -------
@@ -241,6 +249,16 @@ def convert_df_input_to_list_of_dicts_input(
     """
 
     import pandas as pd
+
+    if freq is not None and validate_inputs:
+        raise ValueError(
+            "freq can only be provided when validate_inputs=False. "
+            "When using freq with validate_inputs=False, you must ensure: "
+            "(1) all dataframes are sorted by (id_column, timestamp_column);  "
+            "(2) future_df (if provided) has the same item IDs as df with exactly "
+            "prediction_length rows of future timestamps per item; "
+            "(3) all timestamps are regularly spaced."
+        )
 
     if validate_inputs:
         df, future_df, freq, series_lengths, original_order = validate_df_inputs(
@@ -258,19 +276,19 @@ def convert_df_input_to_list_of_dicts_input(
         # Get series lengths
         series_lengths = df[id_column].value_counts(sort=False).to_list()
 
-        # If validation is skipped, the first freq in the dataframe is used
-        timestamp_index = pd.DatetimeIndex(df[timestamp_column])
-        start_idx = 0
-        freq = None
-        for length in series_lengths:
-            if length < 3:
-                start_idx += length
-                continue
-            timestamps = timestamp_index[start_idx : start_idx + length]
-            freq = pd.infer_freq(timestamps)
-            break
+        # If freq is not provided, infer from the first series with >= 3 points
+        if freq is None:
+            timestamp_index = pd.DatetimeIndex(df[timestamp_column])
+            start_idx = 0
+            for length in series_lengths:
+                if length < 3:
+                    start_idx += length
+                    continue
+                timestamps = timestamp_index[start_idx : start_idx + length]
+                freq = pd.infer_freq(timestamps)
+                break
 
-        assert freq is not None, "validate is False, but could not infer frequency from the dataframe"
+            assert freq is not None, "validate_inputs is False, but could not infer frequency from the dataframe"
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
