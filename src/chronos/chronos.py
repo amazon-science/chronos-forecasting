@@ -152,6 +152,19 @@ class ChronosTokenizer:
 
 
 class MeanScaleUniformBins(ChronosTokenizer):
+    """
+    A tokenizer which first applies mean scaling and then quantizes the scaled values in uniformly-spaced bins.
+
+    Parameters
+    ----------
+    low_limit
+        The lower limit of quantization. (Scaled) Values smaller than this will be clipped.
+    high_limit
+        The upper limit of quantization. (Scaled) Values larger than this will be clipped.
+    config
+        The ``ChronosConfig``
+    """
+
     def __init__(self, low_limit: float, high_limit: float, config: ChronosConfig) -> None:
         self.config = config
         self.centers = torch.linspace(
@@ -354,18 +367,22 @@ class ChronosModel(nn.Module):
 
 class ChronosPipeline(BaseChronosPipeline):
     """
-    A ``ChronosPipeline`` uses the given tokenizer and model to forecast
-    input time series.
+    Pipeline for the Chronos model.
+    
+    To learn more about this model, refer to:
 
-    Use the ``from_pretrained`` class method to load serialized models.
-    Use the ``predict`` method to get forecasts.
+    Ansari, Abdul Fatir, Stella, Lorenzo et al.
+    "[Chronos: Learning the Language of Time Series](https://arxiv.org/abs/2403.07815)."
+    Transactions on Machine Learning Research (2024).
+
 
     Parameters
     ----------
     tokenizer
-        The tokenizer object to use.
+        ChronosTokenizer instance that handles conversion between time series
+        values and discrete tokens.
     model
-        The model to use.
+        ChronosModel instance wrapping the underlying transformer model.
     """
 
     tokenizer: ChronosTokenizer
@@ -373,6 +390,17 @@ class ChronosPipeline(BaseChronosPipeline):
     forecast_type: ForecastType = ForecastType.SAMPLES
 
     def __init__(self, tokenizer, model):
+        """
+        Initialize the ChronosPipeline with a tokenizer and model.
+
+        Parameters
+        ----------
+        tokenizer
+            ChronosTokenizer instance for converting between time series
+            and token representations.
+        model
+            ChronosModel instance containing the pretrained transformer model.
+        """
         super().__init__(inner_model=model.model)
         self.tokenizer = tokenizer
         self.model = model
@@ -398,26 +426,39 @@ class ChronosPipeline(BaseChronosPipeline):
     @torch.no_grad()
     def embed(self, context: Union[torch.Tensor, List[torch.Tensor]]) -> Tuple[torch.Tensor, Any]:
         """
-        Get encoder embeddings for the given time series.
+        Extract encoder embeddings for the given time series.
+
+        This method tokenizes the input time series and extracts the encoder
+        embeddings, which can be used for downstream tasks like clustering,
+        classification, or similarity search. Only available for encoder-decoder
+        (seq2seq) models.
 
         Parameters
         ----------
         context
-            Input series. This is either a 1D tensor, or a list
-            of 1D tensors, or a 2D tensor whose first dimension
-            is batch. In the latter case, use left-padding with
-            ``torch.nan`` to align series of different lengths.
+            Input time series. Can be a 1D tensor (single series), a list
+            of 1D tensors (multiple series of varying lengths), or a 2D tensor
+            where the first dimension is batch size. For 2D tensors, use
+            left-padding with torch.nan to align series of different lengths.
 
         Returns
         -------
-        embeddings, tokenizer_state
-            A tuple of two tensors: the encoder embeddings and the tokenizer_state,
-            e.g., the scale of the time series in the case of mean scaling.
-            The encoder embeddings are shaped (batch_size, context_length, d_model)
-            or (batch_size, context_length + 1, d_model), where context_length
-            is the size of the context along the time axis if a 2D tensor was provided
-            or the length of the longest time series, if a list of 1D tensors was
-            provided, and the extra 1 is for EOS.
+        torch.Tensor
+            Encoder embeddings with shape (batch_size, context_length, d_model)
+            or (batch_size, context_length + 1, d_model) if EOS token is used.
+            The context_length is either the time dimension of the input 2D tensor
+            or the length of the longest series in the input list.
+        Any
+            Tokenizer state containing scaling information (e.g., mean scale)
+            used during tokenization. Can be used for consistent processing
+            of related time series.
+
+        Notes
+        -----
+        This method is only supported for encoder-decoder (seq2seq) models.
+        Decoder-only (causal) models do not have a separate encoder.
+
+        The embeddings are returned on CPU in fp32 format.
         """
         context_tensor = self._prepare_and_validate_context(context=context)
         token_ids, attention_mask, tokenizer_state = self.tokenizer.context_input_transform(context_tensor)
@@ -438,36 +479,64 @@ class ChronosPipeline(BaseChronosPipeline):
         limit_prediction_length: bool = False,
     ) -> torch.Tensor:
         """
-        Get forecasts for the given time series.
+        Generate sample-based forecasts for the given time series.
 
-        Refer to the base method (``BaseChronosPipeline.predict``)
-        for details on shared parameters.
+        This method tokenizes the input time series, generates multiple sample
+        trajectories using the transformer model, and decodes them back to real
+        values. For predictions longer than the model's built-in horizon, it uses
+        autoregressive generation by feeding back the median of generated samples.
 
-        Additional parameters
-        ---------------------
+        Parameters
+        ----------
+        inputs
+            Input time series. Can be a 1D tensor (single series), a list
+            of 1D tensors (multiple series of varying lengths), or a 2D tensor
+            where the first dimension is batch size. For 2D tensors, use
+            left-padding with torch.nan to align series of different lengths.
+        prediction_length
+            Number of time steps to forecast. If not provided, uses the model's
+            default prediction length from the configuration.
         num_samples
-            Number of sample paths to predict. Defaults to what
-            specified in ``self.model.config``.
+            Number of sample trajectories to generate for each input series.
+            If not provided, uses the value from model configuration.
         temperature
-            Temperature to use for generating sample tokens.
-            Defaults to what specified in ``self.model.config``.
+            Sampling temperature for token generation. Higher values increase
+            randomness. If not provided, uses the value from model configuration.
         top_k
-            Top-k parameter to use for generating sample tokens.
-            Defaults to what specified in ``self.model.config``.
+            Number of highest probability tokens to consider during sampling.
+            If not provided, uses the value from model configuration.
         top_p
-            Top-p parameter to use for generating sample tokens.
-            Defaults to what specified in ``self.model.config``.
+            Cumulative probability threshold for nucleus sampling. Only tokens
+            with cumulative probability up to top_p are considered.
+            If not provided, uses the value from model configuration.
         limit_prediction_length
-            Force prediction length smaller or equal than the
-            built-in prediction length from the model. False by
-            default. When true, fail loudly if longer predictions
-            are requested, otherwise longer predictions are allowed.
+            When True, raises an error if prediction_length exceeds the model's
+            built-in prediction length. When False (default), allows longer
+            predictions with a warning about potential quality degradation.
 
         Returns
         -------
-        samples
-            Tensor of sample forecasts, of shape
-            (batch_size, num_samples, prediction_length).
+        torch.Tensor
+            Sample forecasts with shape (batch_size, num_samples, prediction_length).
+            Returned in fp32 on CPU.
+
+        Raises
+        ------
+        ValueError
+            If limit_prediction_length is True and prediction_length exceeds
+            the model's built-in prediction length.
+
+        Notes
+        -----
+        For predictions longer than the model's built-in horizon, the method
+        uses autoregressive generation by iteratively:
+
+        1. Generating samples for the next chunk
+        2. Taking the median across samples
+        3. Appending it to the context for the next iteration
+
+        This autoregressive approach may lead to quality degradation for very
+        long horizons, as the model was not explicitly trained for this.
         """
         context_tensor = self._prepare_and_validate_context(context=inputs)
 
@@ -518,7 +587,49 @@ class ChronosPipeline(BaseChronosPipeline):
         **predict_kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Refer to the base method (``BaseChronosPipeline.predict_quantiles``).
+        Generate quantile and mean forecasts from sample trajectories.
+
+        This method first generates multiple sample trajectories using the predict
+        method, then computes empirical quantiles and mean from these samples.
+        This provides a convenient interface for obtaining quantile forecasts from
+        the model.
+
+        Parameters
+        ----------
+        inputs
+            Input time series. Can be a 1D tensor (single series), a list
+            of 1D tensors (multiple series of varying lengths), or a 2D tensor
+            where the first dimension is batch size. For 2D tensors, use
+            left-padding with torch.nan to align series of different lengths.
+        prediction_length
+            Number of time steps to forecast. If not provided, uses the model's
+            default prediction length from the configuration.
+        quantile_levels
+            List of quantile levels to compute, each between 0 and 1.
+            Default is [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
+        **predict_kwargs
+            Additional keyword arguments passed to the predict method, such as
+            num_samples, temperature, top_k, top_p, and limit_prediction_length.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of quantile forecasts with shape
+            (batch_size, prediction_length, num_quantiles).
+            Returned in fp32 on CPU.
+        torch.Tensor
+            Tensor of mean forecasts with shape
+            (batch_size, prediction_length).
+            Returned in fp32 on CPU.
+
+        Notes
+        -----
+        The quantiles are computed empirically from the generated samples.
+        The accuracy of quantile estimates depends on the number of samples
+        generated (controlled by num_samples parameter in predict_kwargs).
+
+        For better quantile estimates, consider increasing num_samples, though
+        this will increase memory usage and computation time.
         """
         prediction_samples = (
             self.predict(inputs, prediction_length=prediction_length, **predict_kwargs).detach().swapaxes(1, 2)
@@ -535,8 +646,49 @@ class ChronosPipeline(BaseChronosPipeline):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         """
-        Load the model, either from a local path S3 prefix or from the HuggingFace Hub.
-        Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
+        Load a pretrained ChronosPipeline from various sources.
+
+        This method loads a pretrained ChronosPipeline model from a local path,
+        S3 bucket, or the HuggingFace Hub. It automatically instantiates the
+        appropriate tokenizer and model based on the configuration.
+
+        Parameters
+        ----------
+        pretrained_model_name_or_path
+            Path or identifier for the pretrained model. Can be:
+            - A local directory path containing model files
+            - An S3 URI (s3://bucket/prefix)
+            - A HuggingFace Hub model identifier (e.g., "amazon/chronos-t5-small")
+        *args
+            Additional positional arguments passed to AutoConfig and AutoModel.
+        **kwargs
+            Additional keyword arguments passed to AutoConfig and AutoModel.
+            Common options include:
+            - torch_dtype: Data type for model weights ("auto", "float32", "bfloat16")
+            - device_map: Device placement strategy for model layers
+            - Other transformers AutoConfig and AutoModel arguments
+
+        Returns
+        -------
+        ChronosPipeline
+            An instance of ChronosPipeline with loaded tokenizer and model.
+
+        Raises
+        ------
+        AssertionError
+            If the configuration is not a valid Chronos config.
+
+        Notes
+        -----
+        For S3 URIs, the method delegates to BaseChronosPipeline.from_pretrained
+        which handles S3 download and caching.
+
+        The method automatically detects whether to load a seq2seq or causal
+        model based on the configuration and instantiates the appropriate
+        model class.
+
+        This method supports all arguments accepted by HuggingFace's AutoConfig
+        and AutoModel classes.
         """
 
         if str(pretrained_model_name_or_path).startswith("s3://"):
