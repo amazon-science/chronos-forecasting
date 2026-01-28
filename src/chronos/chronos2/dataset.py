@@ -39,7 +39,7 @@ def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
 
 def validate_and_prepare_single_dict_task(
     task: Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]], idx: int, prediction_length: int
-) -> tuple[torch.Tensor, torch.Tensor, int, int, int]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int, int]:
     """Validates and prepares a single dictionary task for Chronos2Model.
 
     Parameters
@@ -72,7 +72,7 @@ def validate_and_prepare_single_dict_task(
     - task_n_future_covariates: Number of known future covariates
     """
 
-    allowed_keys = {"target", "past_covariates", "future_covariates"}
+    allowed_keys = {"target", "past_covariates", "future_covariates", "static_covariantes"}
 
     # validate keys
     keys = set(task.keys())
@@ -95,6 +95,22 @@ def validate_and_prepare_single_dict_task(
         )
     history_length = task_target.shape[-1]
     task_target = task_target.view(-1, history_length)
+
+    # Validate static_covariates
+    task_static_covariates = task.get("static_covariates", None)
+    if task_static_covariates is not None:
+        if isinstance(task_static_covariates, np.ndarray):
+            task_static_covariates = torch.from_numpy(task_static_covariates)
+        if not isinstance(task_static_covariates, torch.Tensor):
+            raise ValueError(f"static_covariates must be a numpy array or torch tensor at index {idx}")
+        
+        if task_static_covariates.ndim == 0:
+            task_static_covariates = task_static_covariates.unsqueeze(0)
+        elif task_static_covariates.ndim > 1:
+            task_static_covariates = task_static_covariates.view(-1)
+    
+    else: 
+        task_static_covariantes = torch.zeros((0,), device=task_target.device)
 
     # validate past_covariates
     cat_encoders: dict = {}
@@ -200,6 +216,7 @@ def validate_and_prepare_single_dict_task(
     return (
         task_context_tensor,
         task_future_covariates_tensor,
+        task_static_covariates,
         task_n_targets,
         task_n_covariates,
         task_n_future_covariates,
@@ -473,6 +490,7 @@ class Chronos2Dataset(IterableDataset):
         (
             task_past_tensor,  # shape:  (task_n_targets + task_n_covariates, history_length)
             task_future_tensor,
+            task_static_tensor,
             task_n_targets,
             task_n_covariates,
             task_n_future_covariates,
@@ -533,25 +551,27 @@ class Chronos2Dataset(IterableDataset):
         # task_future_covariates: (task_n_targets + task_n_past_only_covariates + task_n_future_covariates, prediction_length),
         # the entries corresponding to targets and past-only covariates are NaNs
 
-        return task_context, task_future_target, task_future_covariates, task_n_targets
+        return task_context, task_future_target, task_future_covariates, task_static_tensor, task_n_targets
 
     def _build_batch(self, task_indices: list[int]) -> dict[str, torch.Tensor | int | list[tuple[int, int]] | None]:
         """Build a batch from given task indices."""
         batch_context_tensor_list = []
         batch_future_target_tensor_list = []
         batch_future_covariates_tensor_list = []
+        batch_static_covariates_list = []
         batch_group_ids_list = []
         target_idx_ranges: list[tuple[int, int]] = []
 
         target_start_idx = 0
         for group_id, task_idx in enumerate(task_indices):
-            task_context, task_future_target, task_future_covariates, task_n_targets = self._construct_slice(task_idx)
+            task_context, task_future_target, task_future_covariates, static_tensor, task_n_targets = self._construct_slice(task_idx)
 
             group_size = task_context.shape[0]
             task_group_ids = torch.full((group_size,), fill_value=group_id)
             batch_context_tensor_list.append(task_context)
             batch_future_target_tensor_list.append(task_future_target)
             batch_future_covariates_tensor_list.append(task_future_covariates)
+            batch_static_covariates_list.append(static_tensor)
             batch_group_ids_list.append(task_group_ids)
             target_idx_ranges.append((target_start_idx, target_start_idx + task_n_targets))
             target_start_idx += group_size
@@ -562,6 +582,7 @@ class Chronos2Dataset(IterableDataset):
             if self.mode == DatasetMode.TEST
             else torch.cat(cast(list[torch.Tensor], batch_future_target_tensor_list), dim=0),
             "future_covariates": torch.cat(batch_future_covariates_tensor_list, dim=0),
+            "static_covariates": torch.stack(batch_static_covariates_list, dim=0),
             "group_ids": torch.cat(batch_group_ids_list, dim=0),
             "num_output_patches": self.num_output_patches,
             "target_idx_ranges": target_idx_ranges,

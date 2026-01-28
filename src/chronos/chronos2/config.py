@@ -110,6 +110,7 @@ class Chronos2ForecastingConfig:
     use_arcsinh: bool = False
     max_output_patches: int = 1
     time_encoding_scale: int | None = None
+    n_static_covariates: int = 0
 
     @classmethod
     def editable_fields(cls) -> list[str]:

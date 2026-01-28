@@ -235,6 +235,16 @@ class Chronos2Model(PreTrainedModel):
             dropout_p=config.dropout_rate,
         )
 
+        # Embedding for static covariables
+        if self.chronos_config.n_static_covariates > 0:
+            self.static_covariates_embedding = ResidualBlock(
+                in_dim=self.chronos_config.n_static_covariates,
+                h_dim=config.d_ff,
+                out_dim=config.d_model,
+                act_fn_name=config.dense_act_fn,
+                dropout_p=config.dropout_rate,
+            )
+        
         # patching layer
         self.patch = Patch(
             patch_size=self.chronos_config.input_patch_size, patch_stride=self.chronos_config.input_patch_stride
@@ -322,12 +332,18 @@ class Chronos2Model(PreTrainedModel):
         num_output_patches: int,
         future_target: torch.Tensor | None,
         future_target_mask: torch.Tensor | None,
+        static_covariates: torch.Tensor | None,
     ):
         output_patch_size = self.chronos_config.output_patch_size
         if context.ndim != 2:
             raise ValueError(f"context must have shape (batch_size, context_length), found: {tuple(context.shape)}")
         if context_mask is not None and context_mask.shape != context.shape:
             raise ValueError(f"mask must have shape {tuple(context.shape)}, found: {tuple(context_mask.shape)}")
+        if self.chronos_config.n_static_covariates > 0:
+            if static_covariates is None:
+                raise ValueError(f"Model expects {self.chronos_config.n_static_covariates} static covariates, but None provided.")
+            if static_covariates.shape[0] != context.shape[0] or static_covariates.shape[-1] != self.chronos_config.n_static_covariates:
+                raise ValueError(f"static_covariates must have shape (batch_size, {self.chronos_config.n_static_covariates}), found {tuple(static_covariates.shape)}")
         if future_covariates is not None:
             if future_covariates.shape[0] != context.shape[0] or future_covariates.ndim != 2:
                 raise ValueError(
@@ -557,6 +573,7 @@ class Chronos2Model(PreTrainedModel):
         num_output_patches: int = 1,
         future_target: torch.Tensor | None = None,
         future_target_mask: torch.Tensor | None = None,
+        static_covariates: torch.Tensor | None = None,
         output_attentions: bool = False,
     ):
         self._validate_input(
@@ -568,6 +585,7 @@ class Chronos2Model(PreTrainedModel):
             num_output_patches=num_output_patches,
             future_target=future_target,
             future_target_mask=future_target_mask,
+            static_covariates=static_covariates,
         )
 
         batch_size = context.shape[0]
@@ -578,6 +596,14 @@ class Chronos2Model(PreTrainedModel):
 
         # get input embeddings of shape (batch, num_context_patches, d_model)
         input_embeds: torch.Tensor = self.input_patch_embedding(patched_context)
+
+        # Injection Static Covariates
+        if self.chronos_config.n_static_covariates > 0:
+            static_embeds = self.static_covariates_embedding(static_covariates.to(self.dtype))
+            static_embeds = static_embeds.unsqueeze(1)
+            input_embeds = torch.cat([static_embeds, input_embeds], dim=-2)
+            static_mask = torch.ones((batch_size, 1), dtype=attention_mask.dtype, device=attention_mask.device)
+            attention_mask = torch.cat([static_mask, attention_mask], dim=-1)
         # append [REG] special token embedding, if needed
         if self.chronos_config.use_reg_token:
             reg_input_ids = torch.full((batch_size, 1), self.config.reg_token_id, device=input_embeds.device)
@@ -625,6 +651,7 @@ class Chronos2Model(PreTrainedModel):
         num_output_patches: int = 1,
         future_target: torch.Tensor | None = None,
         future_target_mask: torch.Tensor | None = None,
+        static_covariates: torch.Tensor | None = None,
         output_attentions: bool = False,
     ) -> Chronos2Output:
         """Forward pass of the Chronos2 model.
@@ -703,10 +730,18 @@ class Chronos2Model(PreTrainedModel):
             num_output_patches=num_output_patches,
             future_target=future_target,
             future_target_mask=future_target_mask,
+            static_covariates=static_covariates,
             output_attentions=output_attentions,
         )
         hidden_states: torch.Tensor = encoder_outputs[0]
-        assert hidden_states.shape == (batch_size, num_context_patches + 1 + num_output_patches, self.model_dim)
+
+        expect_seq_len = num_context_patches + 1 + num_output_patches
+        if self.chronos_config.use_reg_token:
+            expect_seq_len += 1
+        if self.chronos_config.n_static_covariates > 0:
+            expect_seq_len += 1
+
+        # assert hidden_states.shape == (batch_size, num_context_patches + 1 + num_output_patches, self.model_dim)
 
         # slice the last num_output_patches hidden states to be input into the output_patch_embedding
         forecast_embeds = hidden_states[:, -num_output_patches:]
