@@ -4,6 +4,7 @@
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>, Lorenzo Stella <stellalo@amazon.com>, Caner Turkmen <atturkm@amazon.com>
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
@@ -237,7 +238,7 @@ class MeanScaleUniformBins(ChronosTokenizer):
             min=0,
             max=len(self.centers) - 1,
         )
-        return self.centers[indices] * scale_unsqueezed
+        return self.centers.to(samples.device)[indices] * scale_unsqueezed
 
 
 class ChronosModel(nn.Module):
@@ -427,6 +428,7 @@ class ChronosPipeline(BaseChronosPipeline):
         ).cpu()
         return embeddings, tokenizer_state
 
+    @torch.inference_mode()
     def predict(
         self,
         inputs: Union[torch.Tensor, List[torch.Tensor]],
@@ -471,6 +473,15 @@ class ChronosPipeline(BaseChronosPipeline):
         """
         context_tensor = self._prepare_and_validate_context(context=inputs)
 
+        # Setup automatic mixed precision (AMP)
+        device = self.model.device 
+        device_type = "cuda" if device.type == "cuda" else "cpu"
+        amp_dtype = (
+            torch.bfloat16
+            if device_type == "cuda" and torch.cuda.is_bf16_supported()
+            else torch.float16
+        )
+
         if prediction_length is None:
             prediction_length = self.model.config.prediction_length
 
@@ -487,26 +498,30 @@ class ChronosPipeline(BaseChronosPipeline):
         predictions = []
         remaining = prediction_length
 
-        while remaining > 0:
-            token_ids, attention_mask, scale = self.tokenizer.context_input_transform(context_tensor)
-            samples = self.model(
-                token_ids.to(self.model.device),
-                attention_mask.to(self.model.device),
-                min(remaining, self.model.config.prediction_length),
-                num_samples,
-                temperature,
-                top_k,
-                top_p,
-            )
-            prediction = self.tokenizer.output_transform(samples.to(scale.device), scale)
+        with torch.autocast(device_type=device_type, dtype=amp_dtype, enabled=device_type == "cuda"):
+            while remaining > 0:
+                token_ids, attention_mask, scale = self.tokenizer.context_input_transform(context_tensor)
+                
+                scale = scale.to(device)
 
-            predictions.append(prediction)
-            remaining -= prediction.shape[-1]
+                samples = self.model(
+                    token_ids.to(self.model.device),
+                    attention_mask.to(self.model.device),
+                    min(remaining, self.model.config.prediction_length),
+                    num_samples,
+                    temperature,
+                    top_k,
+                    top_p,
+                )
+                prediction = self.tokenizer.output_transform(samples.to(scale.device), scale)
 
-            if remaining <= 0:
-                break
+                predictions.append(prediction)
+                remaining -= prediction.shape[-1]
 
-            context_tensor = torch.cat([context_tensor, prediction.median(dim=1).values], dim=-1)
+                if remaining <= 0:
+                    break
+
+                context_tensor = torch.cat([context_tensor, prediction.median(dim=1).values.to("cpu")], dim=-1)
 
         return torch.cat(predictions, dim=-1).to(dtype=torch.float32, device="cpu")
 
