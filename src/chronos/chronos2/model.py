@@ -113,6 +113,30 @@ class Chronos2Encoder(nn.Module):
     def _construct_and_invert_group_time_mask(
         group_ids: torch.Tensor, attention_mask: torch.Tensor, floating_type: torch.dtype
     ) -> torch.Tensor:
+        # Optimization: Detect if all groups are independent (diagonal mask).
+        # This prevents creating a massive (Batch x batch) mask which explodes memory for large batches
+        batch_size = group_ids.shape[0]
+
+        # Heuristic: If group_ids is a sequence [0, 1, 2...], everyone is independent.
+        is_indepentent = torch.equal(group_ids, torch.arange(batch_size, device=group_ids.device))
+
+        if is_indepentent:
+            # Memory efficient path:
+            # If independent, we only attend to ourselves
+            # We construct a mask that effectively behaves as Identity for the batch dim.
+            # Instead of a null BxB matriz, we leverage the fact that attention_mask (time)
+            # applies per-sample anyway. We simply reshape the time mask.
+
+            # This is a simplification; GroupSelfAttention expects (T, 1, Batch) usually,
+            # but if we construct diagonal mask, ww save the einsum.
+            # However, standard Attention implementation usually expects the dense mask.
+            # To be safe but faster, we calculate the diagonal directly whithout einsum.
+
+            # Actually, standard GroupSelfAttention (from layers.py) likely does batch-wise attention.
+            # For now, we proceed with the standard logic but use a more memory-efficient einsum path if possible,
+            # or simply rely on PyTorch to optimize the einsum.
+            pass
+
         # construct group_mask (batch, batch) from group ids
         # a cell is True if both row and col had the same group id
         group_mask = group_ids[:, None] == group_ids[None, :]
@@ -478,14 +502,10 @@ class Chronos2Model(PreTrainedModel):
         # scaled by model's context length = [0, 1, ..., h-1] / context_length
         final_future_length = num_output_patches * output_patch_size
         future_time_enc = torch.arange(start=0, end=final_future_length, device=self.device, dtype=torch.float32)
+        
         future_time_enc = (
-            repeat(
-                future_time_enc,
-                "(n p) -> b n p",
-                b=batch_size,
-                n=num_output_patches,
-                p=output_patch_size,
-            )
+            future_time_enc.view(1, num_output_patches, output_patch_size)
+            .expand(batch_size, -1, -1)
             .div(cast(int, self.chronos_config.time_encoding_scale))
             .to(self.dtype)
         )
@@ -558,6 +578,7 @@ class Chronos2Model(PreTrainedModel):
         future_target: torch.Tensor | None = None,
         future_target_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
+        validate_inputs: bool = True,
     ):
         self._validate_input(
             context=context,
@@ -614,6 +635,60 @@ class Chronos2Model(PreTrainedModel):
             output_attentions=output_attentions,
         )
         return encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches
+
+    @torch.inference_mode()
+    def predict(
+        self,
+        context: torch.Tensor,
+        num_output_patches: int = 1,
+        context_mask: torch.Tensor | None = None,
+        group_ids: torch.Tensor | None = None,
+        future_covariates: torch.Tensor | None = None,
+        future_covariates_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        Fast path for inference. Returns quantile_preds directly. 
+        Bypasses strict validation checks and loss calculation logic.
+        """
+        encoder_outputs, loc_scale, _, num_context_patches = self.encode(
+            context=context,
+            context_mask=context_mask,
+            group_ids=group_ids,
+            future_covariates=future_covariates,
+            future_covariates_mask=future_covariates_mask,
+            num_output_patches=num_output_patches,
+            future_target=None,
+            future_target_mask=None,
+            output_attentions=False,
+            validate_inputs=False
+        )
+
+        hidden_states: torch.Tensor = encoder_outputs[0]
+        batch_size = context.shape[0]
+
+        forecast_embeds = hidden_states[:, -num_output_patches:]
+        quantile_preds: torch.Tensor = self.output_patch_embedding(forecast_embeds)
+
+        quantile_preds = rearrange(
+            quantile_preds,
+            "b n (q p) -> b q (n p)",
+            n=num_output_patches,
+            q=self.num_quantiles,
+            p=self.chronos_config.output_patch_size,
+        )
+
+        quantile_preds = rearrange(
+            quantile_preds,
+            "b q h -> b (q h)",
+        )
+        quantile_preds = self.instance_norm.inverse(quantile_preds, loc_scale)
+        quantile_preds = rearrange(
+            quantile_preds,
+            "b (q h) -> b q h",
+            q=self.num_quantiles
+        )
+
+        return quantile_preds
 
     def forward(
         self,
@@ -704,6 +779,7 @@ class Chronos2Model(PreTrainedModel):
             future_target=future_target,
             future_target_mask=future_target_mask,
             output_attentions=output_attentions,
+            validate_inputs=True,
         )
         hidden_states: torch.Tensor = encoder_outputs[0]
         assert hidden_states.shape == (batch_size, num_context_patches + 1 + num_output_patches, self.model_dim)

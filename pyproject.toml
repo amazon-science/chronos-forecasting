@@ -45,6 +45,11 @@ extras = [
   "fev>=0.6.1",
   "pandas[pyarrow]>=2.0,<2.4",
 ]
+inference = [
+  "optimum>=1.20.0",
+  "onnx>=1.16.0",
+  "onnxruntime>=1.18.0",
+]
 test = [
   "pytest~=8.0",
   "boto3>=1.10,<2",
