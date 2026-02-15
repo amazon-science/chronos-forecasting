@@ -1,8 +1,4 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/amazon-science/chronos-forecasting/main/figures/chronos-logo.png" width="60%">
-</div>
-
-<div align="center">
 
 # Chronos: Pretrained Models for Time Series Forecasting
 
@@ -11,7 +7,7 @@
 [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20HF-Datasets-FFD21E)](https://huggingface.co/datasets/autogluon/chronos_datasets)
 [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20HF-Models-FFD21E)](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444)
 [![fev](https://img.shields.io/static/v1?label=fev&message=Benchmark&color=B31B1B&logo=github)](https://github.com/autogluon/fev)
-[![aws](https://img.shields.io/static/v1?label=SageMaker&message=Deploy&color=FF9900&logo=amazon-web-services)](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb)
+[![aws](https://img.shields.io/static/v1?label=SageMaker&message=Deploy&color=FF9900&logo=amazon-web-services)](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
 [![faq](https://img.shields.io/badge/FAQ-Questions%3F-blue)](https://github.com/amazon-science/chronos-forecasting/issues?q=is%3Aissue+label%3AFAQ)
 [![License: MIT](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -19,8 +15,8 @@
 
 
 ## 🚀 News
-- **20 Oct 2025**: 🚀 [Chronos-2](https://arxiv.org/abs/2510.15821) released. It offers _zero-shot_ support for univariate, multivariate, and covariate-informed forecasting tasks. Chronos-2 achieves the best performance on fev-bench, GIFT-Eval and Chronos Benchmark II amongst pretrained models. Check out [this notebook](notebooks/chronos-2-quickstart.ipynb) to get started with Chronos-2.
-- **14 Feb 2025**: 🚀 Chronos-Bolt is now available on Amazon SageMaker JumpStart! Check out the [tutorial notebook](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos endpoints for production use in 3 lines of code.
+- **30 Dec 2025**: ☁️ Deploy Chronos-2 to AWS with Amazon SageMaker: new guide covers real-time inference (GPU/CPU), serverless endpoints with automatic scaling, and batch transform for large-scale forecasting. See the [deployment tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb).
+- **20 Oct 2025**: 🚀 [Chronos-2](https://huggingface.co/amazon/chronos-2) released. It offers _zero-shot_ support for univariate, multivariate, and covariate-informed forecasting tasks. Chronos-2 achieves the best performance on fev-bench, GIFT-Eval and Chronos Benchmark II amongst pretrained models. Check out [this notebook](notebooks/chronos-2-quickstart.ipynb) to get started with Chronos-2.
 - **12 Dec 2024**: 📊 We released [`fev`](https://github.com/autogluon/fev), a lightweight package for benchmarking time series forecasting models based on the [Hugging Face `datasets`](https://huggingface.co/docs/datasets/en/index) library.
 - **26 Nov 2024**: ⚡️ Chronos-Bolt models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos-Bolt models are more accurate (5% lower error), up to 250x faster and 20x more memory efficient than the original Chronos models of the same size!
 - **13 Mar 2024**: 🚀 Chronos [paper](https://arxiv.org/abs/2403.07815) and inference code released.
@@ -39,7 +35,9 @@ This package provides an interface to the Chronos family of **pretrained time se
 
 | Model ID                                                               | Parameters |
 | ---------------------------------------------------------------------- | ---------- |
-| [`s3://autogluon/chronos-2`](https://arxiv.org/abs/2510.15821)   | 120M         |
+| [`amazon/chronos-2`](https://huggingface.co/amazon/chronos-2)   | 120M         |
+| [`autogluon/chronos-2-synth`](https://huggingface.co/autogluon/chronos-2-synth)   | 120M         |
+| [`autogluon/chronos-2-small`](https://huggingface.co/autogluon/chronos-2-small)   | 28M         |
 | [`amazon/chronos-bolt-tiny`](https://huggingface.co/amazon/chronos-bolt-tiny)   | 9M         |
 | [`amazon/chronos-bolt-mini`](https://huggingface.co/amazon/chronos-bolt-mini)   | 21M        |
 | [`amazon/chronos-bolt-small`](https://huggingface.co/amazon/chronos-bolt-small) | 48M        |
@@ -48,7 +46,7 @@ This package provides an interface to the Chronos family of **pretrained time se
 | [`amazon/chronos-t5-mini`](https://huggingface.co/amazon/chronos-t5-mini)   | 20M        |
 | [`amazon/chronos-t5-small`](https://huggingface.co/amazon/chronos-t5-small) | 46M        |
 | [`amazon/chronos-t5-base`](https://huggingface.co/amazon/chronos-t5-base)   | 200M       |
-| [`amazon/chronos-t5-large`](https://huggingface.co/amazon/chronos-t5-large) | 710M       | 
+| [`amazon/chronos-t5-large`](https://huggingface.co/amazon/chronos-t5-large) | 710M       |
 
 </div>
 
@@ -60,6 +58,10 @@ To perform inference with Chronos, the easiest way is to install this package th
 pip install chronos-forecasting
 ```
 
+> [!TIP]
+> For reliable production use, we recommend using Chronos-2 models through [Amazon SageMaker JumpStart](https://aws.amazon.com/sagemaker/ai/jumpstart/). Check out [this tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos-2 inference endpoints to AWS with just a few lines of code.
+
+
 ### Forecasting
 
 A minimal example showing how to perform forecasting using Chronos-2:
@@ -68,7 +70,7 @@ A minimal example showing how to perform forecasting using Chronos-2:
 import pandas as pd  # requires: pip install 'pandas[pyarrow]'
 from chronos import Chronos2Pipeline
 
-pipeline = Chronos2Pipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cuda")
+pipeline = Chronos2Pipeline.from_pretrained("amazon/chronos-2", device_map="cuda")
 
 # Load historical target values and past values of covariates
 context_df = pd.read_parquet("https://autogluon.s3.amazonaws.com/datasets/timeseries/electricity_price/train.parquet")
@@ -115,8 +117,15 @@ plt.legend()
 ## Example Notebooks
 
 - [Chronos-2 Quick Start](notebooks/chronos-2-quickstart.ipynb)
-- [Deploy Chronos-Bolt on Amazon SageMaker](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb)
-- Deploy Chronos-2 on Amazon SageMaker (coming soon!)
+  &nbsp;
+  <a href="https://studiolab.sagemaker.aws/import/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
+    <img src="https://studiolab.sagemaker.aws/studiolab.svg" alt="Open In SageMaker Studio Lab" height="18" align="absmiddle">
+  </a>
+  &nbsp;
+  <a href="https://colab.research.google.com/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" height="18" align="absmiddle">
+  </a>
+- [Deploy Chronos-2 on Amazon SageMaker](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
 
 ## 📝 Citation
 

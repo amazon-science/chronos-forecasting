@@ -30,4 +30,4 @@ CUDA version:
 PyTorch version: 
 HuggingFace transformers version:
 HuggingFace accelerate version:
-
+Pandas version:

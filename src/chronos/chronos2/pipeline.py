@@ -9,29 +9,29 @@ import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, Sequence
 
 import numpy as np
 import torch
 from einops import rearrange, repeat
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
+from transformers.utils.import_utils import is_peft_available
+from transformers.utils.peft_utils import find_adapter_config_file
 
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
-from chronos.chronos2.dataset import (
-    Chronos2Dataset,
-    DatasetMode,
-    TensorOrArray,
-    convert_df_input_to_list_of_dicts_input,
-)
+from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
+from chronos.df_utils import convert_df_input_to_list_of_dicts_input
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
     import datasets
     import fev
     import pandas as pd
+    from peft import LoraConfig
+    from transformers.trainer_callback import TrainerCallback
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +103,18 @@ class Chronos2Pipeline(BaseChronosPipeline):
         | Sequence[TensorOrArray]
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
         | None = None,
+        finetune_mode: Literal["full", "lora"] = "full",
+        lora_config: "LoraConfig | dict | None" = None,
         context_length: int | None = None,
-        learning_rate: float = 1e-5,
+        learning_rate: float = 1e-6,
         num_steps: int = 1000,
         batch_size: int = 256,
         output_dir: Path | str | None = None,
         min_past: int | None = None,
         finetuned_ckpt_name: str = "finetuned-ckpt",
+        callbacks: list["TrainerCallback"] | None = None,
+        remove_printer_callback: bool = False,
+        disable_data_parallel: bool = True,
         **extra_trainer_kwargs,
     ) -> "Chronos2Pipeline":
         """
@@ -127,10 +132,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         validation_inputs
             The time series used for validation and model selection. The format of `validation_inputs` is exactly the same as `inputs`, by default None which
             means that no validation is performed. Note that enabling validation may slow down fine-tuning for large datasets.
+        finetune_mode
+            One of "full" (performs full fine-tuning) or "lora" (performs Low Rank Adaptation (LoRA) fine-tuning), by default "full"
+        lora_config
+            The configuration to use for LoRA fine-tuning when finetune_mode="lora". Can be a `LoraConfig` object or a dict which is used to initialize `LoraConfig`.
+            When unspecified and finetune_mode="lora", a default configuration is used
         context_length
             The maximum context length used during fine-tuning, by default set to the model's default context length
         learning_rate
-            The learning rate for the optimizer, by default 1e-5
+            The learning rate for the optimizer, by default 1e-6
+            When finetune_mode="lora", we recommend using a higher value of the learning rate, such as 1e-5
         num_steps
             The number of steps to fine-tune for, by default 1000
         batch_size
@@ -144,6 +155,12 @@ class Chronos2Pipeline(BaseChronosPipeline):
             are filtered out, by default set equal to prediction_length
         finetuned_ckpt_name
             The name of the directory inside `output_dir` in which the final fine-tuned checkpoint will be saved, by default "finetuned-ckpt"
+        callbacks
+            A list of `TrainerCallback`s which will be forwarded to the HuggingFace `Trainer`
+        remove_printer_callback
+            If True, all instances of `PrinterCallback` are removed from callbacks
+        disable_data_parallel
+            If True, ensures that DataParallel is disabled and training happens on a single GPU
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
 
@@ -153,20 +170,58 @@ class Chronos2Pipeline(BaseChronosPipeline):
         """
 
         import torch.cuda
+        from transformers.trainer_callback import PrinterCallback
         from transformers.training_args import TrainingArguments
+
+        if finetune_mode == "lora":
+            if is_peft_available():
+                from peft import LoraConfig, get_peft_model
+            else:
+                warnings.warn(
+                    "`peft` is required for `finetune_mode='lora'`. Please install it with `pip install peft`. Falling back to `finetune_mode='full'`."
+                )
+                finetune_mode = "full"
+                lora_config = None
 
         from chronos.chronos2.trainer import Chronos2Trainer, EvaluateAndSaveFinalStepCallback
 
-        warnings.warn(
-            "Fine-tuning support is experimental and may be changed in future versions.",
-            category=FutureWarning,
-            stacklevel=2,
-        )
+        assert finetune_mode in ["full", "lora"], f"finetune_mode must be one of ['full', 'lora'], got {finetune_mode}"
+
+        if finetune_mode == "full" and lora_config is not None:
+            raise ValueError(
+                "lora_config should not be specified when `finetune_mode='full'`. To enable LoRA, set `finetune_mode='lora'`."
+            )
 
         # Create a copy of the model to avoid modifying the original
         config = deepcopy(self.model.config)
         model = Chronos2Model(config).to(self.model.device)  # type: ignore
         model.load_state_dict(self.model.state_dict())
+
+        if finetune_mode == "lora":
+            if lora_config is None:
+                lora_config = LoraConfig(
+                    r=8,
+                    lora_alpha=16,
+                    target_modules=[
+                        "self_attention.q",
+                        "self_attention.v",
+                        "self_attention.k",
+                        "self_attention.o",
+                        "output_patch_embedding.output_layer",
+                    ],
+                )
+            elif isinstance(lora_config, dict):
+                lora_config = LoraConfig(**lora_config)
+            else:
+                assert isinstance(lora_config, LoraConfig), (
+                    f"lora_config must be an instance of LoraConfig or a dict, got {type(lora_config)}"
+                )
+
+            model = get_peft_model(model, lora_config)
+            n_trainable_params, n_params = model.get_nb_trainable_parameters()
+            logger.info(
+                f"Using LoRA. Number of trainable parameters: {n_trainable_params}, total parameters: {n_params}."
+            )
 
         if context_length is None:
             context_length = self.model_context_length
@@ -217,7 +272,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             report_to="none",
             max_steps=num_steps,
             gradient_accumulation_steps=1,
-            dataloader_num_workers=1,
+            dataloader_num_workers=0,
             tf32=has_sm80 and not use_cpu,
             bf16=has_sm80 and not use_cpu,
             save_only_model=True,
@@ -233,7 +288,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         )
 
         eval_dataset = None
-        callbacks = []
+        callbacks = callbacks or []
         if validation_inputs is not None:
             # construct validation dataset
             eval_dataset = Chronos2Dataset.convert_inputs(
@@ -267,6 +322,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         training_args = TrainingArguments(**training_kwargs)
 
+        if disable_data_parallel and not use_cpu:
+            # This is a hack to disable the default `transformers` behavior of using DataParallel
+            training_args._n_gpu = 1
+            assert training_args.n_gpu == 1  # Ensure that the hack worked
+
         trainer = Chronos2Trainer(
             model=model,
             args=training_args,
@@ -274,12 +334,19 @@ class Chronos2Pipeline(BaseChronosPipeline):
             eval_dataset=eval_dataset,
             callbacks=callbacks,
         )
+
+        if remove_printer_callback:
+            trainer.pop_callback(PrinterCallback)
+
         trainer.train()
 
-        # update max_output_patches, if the model was fine-tuned with longer prediction_length
+        # update context_length and max_output_patches, if the model was fine-tuned with larger values
+        model.chronos_config.context_length = max(model.chronos_config.context_length, context_length)
         model.chronos_config.max_output_patches = max(
             model.chronos_config.max_output_patches, math.ceil(prediction_length / self.model_output_patch_size)
         )
+        # update chronos_config in model's config, so it is saved correctly
+        model.config.chronos_config = model.chronos_config.__dict__
 
         # Create a new pipeline with the fine-tuned model
         finetuned_pipeline = Chronos2Pipeline(model=model)
@@ -388,7 +455,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         batch_size: int = 256,
         context_length: int | None = None,
-        predict_batches_jointly: bool = False,
+        cross_learning: bool = False,
         limit_prediction_length: bool = False,
         **kwargs,
     ) -> list[torch.Tensor]:
@@ -474,7 +541,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             will be lower than this value, by default 256
         context_length
             The maximum context length used during for inference, by default set to the model's default context length
-        predict_batches_jointly
+        cross_learning
             If True, cross-learning is enabled, i.e., all the tasks in `inputs` will be predicted jointly and the model will share information across all inputs, by default False
             The following must be noted when using cross-learning:
             - Cross-learning doesn't always improve forecast accuracy and must be tested for individual use cases.
@@ -494,6 +561,14 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if prediction_length is None:
             prediction_length = model_prediction_length
 
+        if kwargs.get("predict_batches_jointly") is not None:
+            warnings.warn(
+                "The `predict_batches_jointly` argument is deprecated and will be removed in a future version. "
+                "Please use `cross_learning=True` to enable the cross-learning mode.",
+                category=FutureWarning,
+                stacklevel=2,
+            )
+            cross_learning = kwargs.pop("predict_batches_jointly")
         # The maximum number of output patches to generate in a single forward pass before the long-horizon heuristic kicks in. Note: A value larger
         # than the model's default max_output_patches may lead to degradation in forecast accuracy, defaults to a model-specific value
         max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
@@ -502,6 +577,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         # effective batch size increases by a factor of `len(unrolled_quantiles)` when making long-horizon predictions,
         # by default [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         unrolled_quantiles = kwargs.pop("unrolled_quantiles", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+        # A callback which is called after each batch has been processed
+        after_batch_callback: Callable = kwargs.pop("after_batch", lambda: None)
 
         if len(kwargs) > 0:
             raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
@@ -542,7 +619,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             mode=DatasetMode.TEST,
         )
         test_loader = DataLoader(
-            test_dataset, batch_size=None, num_workers=1, pin_memory=True, shuffle=False, drop_last=False
+            test_dataset, batch_size=None, pin_memory=self.model.device.type == "cuda", shuffle=False, drop_last=False
         )
 
         all_predictions: list[torch.Tensor] = []
@@ -553,7 +630,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             batch_future_covariates = batch["future_covariates"]
             batch_target_idx_ranges = batch["target_idx_ranges"]
 
-            if predict_batches_jointly:
+            if cross_learning:
                 batch_group_ids = torch.zeros_like(batch_group_ids)
 
             batch_prediction = self._predict_batch(
@@ -566,6 +643,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 target_idx_ranges=batch_target_idx_ranges,
             )
             all_predictions.extend(batch_prediction)
+            after_batch_callback()
 
         return all_predictions
 
@@ -744,6 +822,10 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         batch_size: int = 256,
+        context_length: int | None = None,
+        cross_learning: bool = False,
+        validate_inputs: bool = True,
+        freq: str | None = None,
         **predict_kwargs,
     ) -> "pd.DataFrame":
         """
@@ -773,6 +855,24 @@ class Chronos2Pipeline(BaseChronosPipeline):
             The batch size used for prediction. Note that the batch size here means the number of time series, including target(s) and covariates,
             which are input into the model. If your data has multiple target and/or covariates, the effective number of time series tasks in a batch
             will be lower than this value, by default 256
+        context_length
+            The maximum context length used during for inference, by default set to the model's default context length
+        cross_learning
+            If True, cross-learning is enabled, i.e., all the tasks in `inputs` will be predicted jointly and the model will share information across all inputs, by default False
+            The following must be noted when using cross-learning:
+            - Cross-learning doesn't always improve forecast accuracy and must be tested for individual use cases.
+            - Results become dependent on batch size. Very large batch sizes may not provide benefits as they deviate from the maximum group size used during pretraining.
+            For optimal results, consider using a batch size around 100 (as used in the Chronos-2 technical report).
+            - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
+        validate_inputs
+            [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
+            validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
+            must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
+            has the same item IDs as df with exactly prediction_length rows of future timestamps per item; (3) all
+            timestamps are regularly spaced (e.g., with hourly frequency).
+        freq
+            Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
+            validate_inputs=False. When provided, skips frequency inference from the data.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 
@@ -803,6 +903,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             timestamp_column=timestamp_column,
             target_columns=target,
             prediction_length=prediction_length,
+            freq=freq,
+            validate_inputs=validate_inputs,
         )
 
         # Generate forecasts
@@ -812,33 +914,37 @@ class Chronos2Pipeline(BaseChronosPipeline):
             quantile_levels=quantile_levels,
             limit_prediction_length=False,
             batch_size=batch_size,
+            context_length=context_length,
+            cross_learning=cross_learning,
             **predict_kwargs,
         )
         # since predict_df tasks are homogenous by input design, we can safely stack the list of tensors into a single tensor
         quantiles_np = torch.stack(quantiles).numpy()  # [n_tasks, n_variates, horizon, num_quantiles]
         mean_np = torch.stack(mean).numpy()  # [n_tasks, n_variates, horizon]
 
-        results_dfs = []
-        for i, (series_id, future_ts) in enumerate(prediction_timestamps.items()):
-            q_pred = quantiles_np[i]  # (n_variates, prediction_length, len(quantile_levels))
-            point_pred = mean_np[i]  # (n_variates, prediction_length)
+        n_tasks = len(prediction_timestamps)
+        n_variates = len(target)
 
-            for target_idx, target_col in enumerate(target):
-                series_forecast_data: dict[str | tuple[str, str], Any] = {
-                    id_column: series_id,
-                    timestamp_column: future_ts,
-                    "target_name": target_col,
-                }
-                series_forecast_data["predictions"] = point_pred[target_idx]
-                for q_idx, q_level in enumerate(quantile_levels):
-                    series_forecast_data[str(q_level)] = q_pred[target_idx, :, q_idx]
+        series_ids = list(prediction_timestamps.keys())
+        future_ts = list(prediction_timestamps.values())
 
-                results_dfs.append(pd.DataFrame(series_forecast_data))
+        data = {
+            id_column: np.repeat(series_ids, n_variates * prediction_length),
+            timestamp_column: np.concatenate([np.tile(ts, n_variates) for ts in future_ts]),
+            "target_name": np.tile(np.repeat(target, prediction_length), n_tasks),
+            "predictions": mean_np.ravel(),
+        }
 
-        predictions_df = pd.concat(results_dfs, ignore_index=True)
-        predictions_df.set_index(id_column, inplace=True)
-        predictions_df = predictions_df.loc[original_order]
-        predictions_df.reset_index(inplace=True)
+        quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+        for q_idx, q_level in enumerate(quantile_levels):
+            data[str(q_level)] = quantiles_flat[:, q_idx]
+
+        predictions_df = pd.DataFrame(data)
+        # If validate_inputs=False, the df is used as-is without sorting by item_id, no reordering required
+        if validate_inputs:
+            predictions_df.set_index(id_column, inplace=True)
+            predictions_df = predictions_df.loc[original_order]
+            predictions_df.reset_index(inplace=True)
 
         return predictions_df
 
@@ -973,11 +1079,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             finetune_kwargs["prediction_length"] = first_window.horizon
             finetune_kwargs["batch_size"] = finetune_kwargs.get("batch_size", batch_size)
 
-            try:
-                pipeline = self.fit(inputs=inputs, **finetune_kwargs)
-            except Exception as e:
-                msg = f"Finetuning failed with error: {e}. Continuing with the pretrained model."
-                warnings.warn(msg, category=UserWarning, stacklevel=2)
+            pipeline = self.fit(inputs=inputs, **finetune_kwargs)
 
         predictions_per_window = []
         inference_time_s = 0.0
@@ -994,6 +1096,86 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return predictions_per_window, inference_time_s
 
+    @torch.no_grad()
+    def embed(
+        self, inputs: TensorOrArray | Sequence[TensorOrArray], batch_size: int = 256, context_length: int | None = None
+    ) -> tuple[list[torch.Tensor], list[tuple[torch.Tensor, torch.Tensor]]]:
+        """
+        Get encoder embeddings for the given time series.
+
+        Parameters
+        ----------
+        inputs
+            The time series to get embeddings for, can be one of:
+            - A 3-dimensional `torch.Tensor` or `np.ndarray` of shape (batch, n_variates, history_length). When `n_variates > 1`, information
+            will be shared among the different variates of each time series in the batch.
+            - A list of `torch.Tensor` or `np.ndarray` where each element can either be 1-dimensional of shape (history_length,)
+            or 2-dimensional of shape (n_variates, history_length). The history_lengths may be different across elements; left-padding
+            will be applied, if needed.
+        batch_size
+            The batch size used for generating embeddings. Note that the batch size here means the total number of time series which are input into the model.
+            If your data has multiple variates, the effective number of time series tasks in a batch will be lower than this value, by default 256
+        context_length
+            The maximum context length used during for inference, by default set to the model's default context length
+
+        Returns
+        -------
+        embeddings
+            a list of `torch.Tensor` where each element has shape (n_variates, num_patches + 2, d_model) and the number of elements are equal to the number
+            of target time series (univariate or multivariate) in the `inputs`. The extra +2 is due to embeddings of the [REG] token and a masked output patch token.
+        loc_scale
+            a list of tuples with the mean and standard deviation of each time series.
+        """
+        if context_length is None:
+            context_length = self.model_context_length
+
+        if context_length > self.model_context_length:
+            warnings.warn(
+                f"The specified context_length {context_length} is greater than the model's default context length {self.model_context_length}. "
+                f"Resetting context_length to {self.model_context_length}."
+            )
+            context_length = self.model_context_length
+
+        test_dataset = Chronos2Dataset.convert_inputs(
+            inputs=inputs,
+            context_length=context_length,
+            prediction_length=0,
+            batch_size=batch_size,
+            output_patch_size=self.model_output_patch_size,
+            mode=DatasetMode.TEST,
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=None,
+            num_workers=0,
+            pin_memory=self.model.device.type == "cuda",
+            shuffle=False,
+            drop_last=False,
+        )
+        all_embeds: list[torch.Tensor] = []
+        all_loc_scales: list[tuple[torch.Tensor, torch.Tensor]] = []
+        for batch in test_loader:
+            assert batch["future_target"] is None
+            batch_context = batch["context"]
+            batch_group_ids = batch["group_ids"]
+            batch_target_idx_ranges = batch["target_idx_ranges"]
+
+            encoder_outputs, (locs, scales), *_ = self.model.encode(
+                context=batch_context.to(device=self.model.device, dtype=torch.float32),
+                group_ids=batch_group_ids.to(self.model.device),
+            )
+            batch_embeds = [encoder_outputs[0][start:end].cpu() for (start, end) in batch_target_idx_ranges]
+            batch_loc_scales = list(
+                zip(
+                    [locs[start:end].cpu() for (start, end) in batch_target_idx_ranges],
+                    [scales[start:end].cpu() for (start, end) in batch_target_idx_ranges],
+                )
+            )
+            all_embeds.extend(batch_embeds)
+            all_loc_scales.extend(batch_loc_scales)
+
+        return all_embeds, all_loc_scales
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
         """
@@ -1001,9 +1183,25 @@ class Chronos2Pipeline(BaseChronosPipeline):
         Supports the same arguments as ``AutoConfig`` and ``AutoModel`` from ``transformers``.
         """
 
+        # Check if the model is on S3 and cache it locally first
+        # NOTE: Only base models (not LoRA adapters) are supported via S3
         if str(pretrained_model_name_or_path).startswith("s3://"):
             return BaseChronosPipeline.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
 
+        # Check if the hub model_id or local path is a LoRA adapter
+        if find_adapter_config_file(pretrained_model_name_or_path) is not None:
+            if not is_peft_available():
+                raise ImportError(
+                    f"The model at {pretrained_model_name_or_path} is a `peft` adaptor, but `peft` is not available. "
+                    f"Please install `peft` with `pip install peft` to use this model. "
+                )
+            from peft import AutoPeftModel
+
+            model = AutoPeftModel.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+            model = model.merge_and_unload()
+            return cls(model=model)
+
+        # Handle the case for the base model
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
 
