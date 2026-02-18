@@ -302,7 +302,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 prediction_length=prediction_length,
                 batch_size=batch_size,
                 output_patch_size=self.model_output_patch_size,
-                min_past=min_past,
                 mode=DatasetMode.VALIDATION,
                 convert_inputs=convert_inputs,
             )
