@@ -164,10 +164,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             If True, ensures that DataParallel is disabled and training happens on a single GPU
         convert_inputs
             If True (default), preprocess raw inputs (convert tensors, encode categoricals, validate).
-            If False, inputs are expected to be already preprocessed (e.g., loaded from Arrow file
-            using `chronos.chronos2.preprocessing.ArrowTaskSequence` or prepared manually with
-            `chronos.chronos2.preprocessing.prepare_tasks`). This allows for efficient training on
-            large datasets that don't fit in memory.
+            If False, inputs are expected to be already preprocessed using `chronos.chronos2.dataset.prepare_tasks`.
+            This allows for efficient training on large datasets that don't fit in memory.
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
 
