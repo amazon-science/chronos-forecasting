@@ -15,6 +15,7 @@ from torch.utils.data import IterableDataset
 if TYPE_CHECKING:
     import datasets
     import fev
+    from chronos.chronos2.preprocessing import PreparedTask, RawTask
 
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
@@ -383,49 +384,63 @@ class Chronos2Dataset(IterableDataset):
     Arguments
     ----------
     inputs
-        Time series data. Must be a list of dictionaries where each dictionary may have the following keys.
-        - `target` (required): a 1-d or 2-d `torch.Tensor` or `np.ndarray` of shape (history_length,) or (n_variates, history_length).
-        Forecasts will be generated for items in `target`.
-        - `past_covariates` (optional): a dict of past-only covariates or past values of known future covariates. The keys of the dict
-        must be names of the covariates and values must be 1-d `torch.Tensor` or `np.ndarray` with length equal to the `history_length`
-        of `target`.
-        - `future_covariates` (optional): a dict of future values of known future covariates. The keys of the dict must be names of the
-        covariates and values must be 1-d `torch.Tensor` or `np.ndarray` with length equal to the `prediction_length`. All keys in
-        `future_covariates` must be a subset of the keys in `past_covariates`.
-        Note: when the mode is set to TRAIN, the values inside `future_covariates` are not technically used for training the model;
-        however, this key is used to infer which covariates are known into the future. Therefore, if your task contains known future covariates,
-        make sure that this key exists in `inputs`. The values of individual future covariates may be set to `None` or an empty array.
+        Time series data. Can be either:
+
+        1. Raw inputs (when `convert_inputs=True`, default): A sequence of dictionaries where each
+           dictionary may have the following keys:
+           - `target` (required): a 1-d or 2-d `torch.Tensor` or `np.ndarray` of shape (history_length,)
+             or (n_variates, history_length).
+           - `past_covariates` (optional): a dict of past-only covariates or past values of known future
+             covariates.
+           - `future_covariates` (optional): a dict of future values of known future covariates.
+
+        2. Pre-processed inputs (when `convert_inputs=False`): A sequence of prepared tasks, each with keys:
+           - `context`: 2-d array of shape (n_variates, history_length)
+           - `future_covariates`: 2-d array of shape (n_variates, prediction_length)
+           - `n_targets`, `n_covariates`, `n_future_covariates`: int metadata
+
+           Use `chronos.chronos2.preprocessing.prepare_tasks()` to create pre-processed inputs.
     context_length
         The maximum context length used for training or inference
     prediction_length
         The prediction horizon
     batch_size
-        The batch size for training the model. Note that the batch size here means the number of time series, including target(s) and
-        covariates, that are input into the model. If your data has multiple target and/or covariates, the effective number of time series
-        tasks in a batch will be lower than this value.
+        The batch size for training the model. Note that the batch size here means the number of time series,
+        including target(s) and covariates, that are input into the model.
     output_patch_size
-        The output patch size of the model. This is used to compute the number of patches needed to cover `prediction_length`
+        The output patch size of the model. This is used to compute the number of patches needed to cover
+        `prediction_length`
     min_past
-        The minimum number of time steps the context must have during training. All time series shorter than `min_past + prediction_length`
-        are filtered out, by default 1
+        The minimum number of time steps the context must have during training. All time series shorter than
+        `min_past + prediction_length` are filtered out, by default 1
     mode
         `DatasetMode` governing whether to generate training, validation or test samples, by default "train"
+    convert_inputs
+        If True (default), preprocess raw inputs. If False, inputs are expected to be already preprocessed.
     """
 
     def __init__(
         self,
-        inputs: Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]],
+        inputs: "Sequence[PreparedTask | RawTask]",
         context_length: int,
         prediction_length: int,
         batch_size: int,
         output_patch_size: int,
         min_past: int = 1,
         mode: str | DatasetMode = DatasetMode.TRAIN,
+        convert_inputs: bool = True,
     ) -> None:
         super().__init__()
         assert mode in {DatasetMode.TRAIN, DatasetMode.VALIDATION, DatasetMode.TEST}, f"Invalid mode: {mode}"
 
-        self.tasks = Chronos2Dataset._prepare_tasks(inputs, prediction_length, min_past, mode)
+        if convert_inputs:
+            from chronos.chronos2.preprocessing import prepare_tasks
+            self.tasks = prepare_tasks(inputs, prediction_length, min_past, mode)
+        else:
+            from chronos.chronos2.preprocessing import validate_prepared_schema
+            validate_prepared_schema(inputs[0])
+            self.tasks = inputs
+
         self.context_length = context_length
         self.prediction_length = prediction_length
         self.batch_size = batch_size
@@ -433,51 +448,20 @@ class Chronos2Dataset(IterableDataset):
         self.min_past = min_past
         self.mode = mode
 
-    @staticmethod
-    def _prepare_tasks(
-        inputs: Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]],
-        prediction_length: int,
-        min_past: int,
-        mode: str | DatasetMode,
-    ):
-        tasks = []
-        for idx, raw_task in enumerate(inputs):
-            if mode != DatasetMode.TEST:
-                raw_future_covariates = raw_task.get("future_covariates", {})
-                raw_future_covariates = cast(dict[str, TensorOrArray | None], raw_future_covariates)
-                if raw_future_covariates:
-                    fixed_future_covariates = {}
-                    for key, value in raw_future_covariates.items():
-                        fixed_future_covariates[key] = (
-                            np.full(prediction_length, np.nan) if value is None or len(value) == 0 else value
-                        )
-                    raw_task = {**raw_task, "future_covariates": fixed_future_covariates}
-
-            raw_task = cast(dict[str, TensorOrArray | Mapping[str, TensorOrArray]], raw_task)
-            # convert to a format compatible with model's forward
-            task = validate_and_prepare_single_dict_task(raw_task, idx, prediction_length)
-
-            if mode != DatasetMode.TEST and task[0].shape[-1] < min_past + prediction_length:
-                # filter tasks based on min_past + prediction_length
-                continue
-            tasks.append(task)
-
-        if len(tasks) == 0:
-            raise ValueError(
-                "The dataset is empty after filtering based on the length of the time series (length >= min_past + prediction_length). "
-                "Please provide longer time series or reduce `min_past` or `prediction_length`. "
-            )
-        return tasks
-
     def _construct_slice(self, task_idx: int) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, int]:
-        (
-            task_past_tensor,  # shape:  (task_n_targets + task_n_covariates, history_length)
-            task_future_tensor,
-            task_n_targets,
-            task_n_covariates,
-            task_n_future_covariates,
-        ) = self.tasks[task_idx]
-        task_past_tensor, task_future_tensor = task_past_tensor.clone(), task_future_tensor.clone()
+        task = self.tasks[task_idx]
+        # Convert numpy arrays to torch tensors if needed
+        context = task["context"]
+        future_cov = task["future_covariates"]
+        if isinstance(context, np.ndarray):
+            context = torch.from_numpy(context)
+        if isinstance(future_cov, np.ndarray):
+            future_cov = torch.from_numpy(future_cov)
+        task_past_tensor = context.clone().to(torch.float32)
+        task_future_tensor = future_cov.clone().to(torch.float32)
+        task_n_targets = task["n_targets"]
+        task_n_covariates = task["n_covariates"]
+        task_n_future_covariates = task["n_future_covariates"]
         task_n_past_only_covariates = task_n_covariates - task_n_future_covariates
 
         full_length = task_past_tensor.shape[-1]
@@ -575,7 +559,7 @@ class Chronos2Dataset(IterableDataset):
             while current_batch_size < self.batch_size:
                 task_idx = np.random.randint(len(self.tasks))
                 task_indices.append(task_idx)
-                current_batch_size += self.tasks[task_idx][0].shape[0]
+                current_batch_size += self.tasks[task_idx]["context"].shape[0]
 
             yield self._build_batch(task_indices)
 
@@ -587,7 +571,7 @@ class Chronos2Dataset(IterableDataset):
 
             while task_idx < len(self.tasks) and current_batch_size < self.batch_size:
                 task_indices.append(task_idx)
-                current_batch_size += self.tasks[task_idx][0].shape[0]
+                current_batch_size += self.tasks[task_idx]["context"].shape[0]
                 task_idx += 1
 
             yield self._build_batch(task_indices)
@@ -631,7 +615,12 @@ class Chronos2Dataset(IterableDataset):
         min_past: int = 1,
         mode: str | DatasetMode = DatasetMode.TRAIN,
     ) -> "Chronos2Dataset":
-        """Convert from different input formats to a Chronos2Dataset."""
+        """Convert from different input formats to a Chronos2Dataset.
+
+        This method handles various input formats (tensors, list of tensors, list of dicts)
+        and creates a dataset with preprocessing.
+        """
+        # Convert various input formats to list of dicts
         if isinstance(inputs, (torch.Tensor, np.ndarray)):
             inputs = convert_tensor_input_to_list_of_dicts_input(inputs)
         elif isinstance(inputs, list) and all([isinstance(x, (torch.Tensor, np.ndarray)) for x in inputs]):
@@ -652,4 +641,5 @@ class Chronos2Dataset(IterableDataset):
             output_patch_size=output_patch_size,
             min_past=min_past,
             mode=mode,
+            convert_inputs=True,
         )
