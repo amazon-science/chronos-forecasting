@@ -236,27 +236,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if min_past is None:
             min_past = prediction_length
 
-        if convert_inputs:
-            train_dataset = Chronos2Dataset.convert_inputs(
-                inputs=inputs,
-                context_length=context_length,
-                prediction_length=prediction_length,
-                batch_size=batch_size,
-                output_patch_size=self.model_output_patch_size,
-                min_past=min_past,
-                mode=DatasetMode.TRAIN,
-            )
-        else:
-            train_dataset = Chronos2Dataset(
-                inputs=inputs,
-                context_length=context_length,
-                prediction_length=prediction_length,
-                batch_size=batch_size,
-                output_patch_size=self.model_output_patch_size,
-                min_past=min_past,
-                mode=DatasetMode.TRAIN,
-                convert_inputs=False,
-            )
+        train_dataset = Chronos2Dataset(
+            inputs=inputs,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            batch_size=batch_size,
+            output_patch_size=self.model_output_patch_size,
+            min_past=min_past,
+            mode=DatasetMode.TRAIN,
+            convert_inputs=convert_inputs,
+        )
 
         if output_dir is None:
             output_dir = Path("chronos-2-finetuned") / time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -309,27 +298,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
         eval_dataset = None
         callbacks = callbacks or []
         if validation_inputs is not None:
-            # construct validation dataset
-            if convert_inputs:
-                eval_dataset = Chronos2Dataset.convert_inputs(
-                    inputs=validation_inputs,
-                    context_length=context_length,
-                    prediction_length=prediction_length,
-                    batch_size=batch_size,
-                    output_patch_size=self.model_output_patch_size,
-                    mode=DatasetMode.VALIDATION,
-                )
-            else:
-                eval_dataset = Chronos2Dataset(
-                    inputs=validation_inputs,
-                    context_length=context_length,
-                    prediction_length=prediction_length,
-                    batch_size=batch_size,
-                    output_patch_size=self.model_output_patch_size,
-                    min_past=min_past,
-                    mode=DatasetMode.VALIDATION,
-                    convert_inputs=False,
-                )
+            eval_dataset = Chronos2Dataset(
+                inputs=validation_inputs,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                batch_size=batch_size,
+                output_patch_size=self.model_output_patch_size,
+                min_past=min_past,
+                mode=DatasetMode.VALIDATION,
+                convert_inputs=convert_inputs,
+            )
 
             # set validation parameters
             training_kwargs["save_strategy"] = "steps"
