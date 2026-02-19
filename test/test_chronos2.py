@@ -1147,13 +1147,13 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
 
 def test_pipeline_can_be_finetuned_with_preprocessed_hf_dataset(pipeline):
     """Test that fine-tuning works with preprocessed inputs from a HuggingFace Dataset."""
-    from chronos.chronos2.dataset import prepare_tasks
+    from chronos.chronos2.dataset import prepare_inputs
 
     prediction_length = 8
     raw_inputs = [{"target": torch.rand(20)}, {"target": torch.rand(25)}, {"target": torch.rand(30)}]
 
     # Preprocess and convert to HF Dataset (simulating Arrow-based lazy loading)
-    prepared_tasks = prepare_tasks(raw_inputs, prediction_length=prediction_length, min_past=1, mode="train")
+    prepared_tasks = prepare_inputs(raw_inputs, prediction_length=prediction_length, min_past=1, mode="train")
     hf_dataset = datasets.Dataset.from_list(prepared_tasks).with_format("torch")
 
     # Fine-tune with preprocessed inputs
