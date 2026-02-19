@@ -13,7 +13,8 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig
+from packaging import version
+from transformers import AutoConfig, __version__ as transformers_version
 from transformers.models.t5.modeling_t5 import (
     ACT2FN,
     T5Config,
@@ -27,6 +28,29 @@ from .base import BaseChronosPipeline, ForecastType
 
 
 logger = logging.getLogger(__file__)
+
+_TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0.dev0")
+
+# In transformers v5, use guarded init functions that check _is_hf_initialized
+# to avoid re-initializing weights loaded from checkpoint
+if _TRANSFORMERS_V5:
+    from transformers import initialization as init
+else:
+    from torch.nn import init
+
+
+def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
+    """
+    Create a T5Stack with the given config and embed_tokens.
+
+    This helper function provides backward compatibility between transformers v4 and v5.
+    In v4, T5Stack.__init__ accepts (config, embed_tokens).
+    In v5, T5Stack.__init__ only accepts (config), and embed_tokens must be set separately.
+    """
+    if _TRANSFORMERS_V5:
+        return T5Stack(config)
+    else:
+        return T5Stack(config, embed_tokens)
 
 
 @dataclass
@@ -150,7 +174,15 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         r"output_patch_embedding\.",
     ]
     _keys_to_ignore_on_load_unexpected = [r"lm_head.weight"]  # type: ignore
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]  # type: ignore
+    # In transformers v5, _tied_weights_keys changed from list to dict {target: source}
+    _tied_weights_keys = (  # type: ignore
+        {
+            "encoder.embed_tokens.weight": "shared.weight",
+            "decoder.embed_tokens.weight": "shared.weight",
+        }
+        if _TRANSFORMERS_V5
+        else ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    )
 
     def __init__(self, config: T5Config):
         assert hasattr(config, "chronos_config"), "Not a Chronos config file"
@@ -188,7 +220,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        self.encoder = T5Stack(encoder_config, self.shared)
+        self.encoder = _create_t5_stack(encoder_config, self.shared)
 
         self._init_decoder(config)
 
@@ -217,25 +249,33 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, (self.__class__)):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
+            # Reinitialize quantiles buffer for transformers v5 meta device compatibility
+            if _TRANSFORMERS_V5:
+                quantiles = torch.tensor(
+                    module.chronos_config.quantiles, dtype=module.dtype, device=module.quantiles.device
+                )
+                init.copy_(module.quantiles, quantiles)
         elif isinstance(module, ResidualBlock):
-            module.hidden_layer.weight.data.normal_(
+            init.normal_(
+                module.hidden_layer.weight,
                 mean=0.0,
                 std=factor * ((self.chronos_config.input_patch_size * 2) ** -0.5),
             )
             if hasattr(module.hidden_layer, "bias") and module.hidden_layer.bias is not None:
-                module.hidden_layer.bias.data.zero_()
+                init.zeros_(module.hidden_layer.bias)
 
-            module.residual_layer.weight.data.normal_(
+            init.normal_(
+                module.residual_layer.weight,
                 mean=0.0,
                 std=factor * ((self.chronos_config.input_patch_size * 2) ** -0.5),
             )
             if hasattr(module.residual_layer, "bias") and module.residual_layer.bias is not None:
-                module.residual_layer.bias.data.zero_()
+                init.zeros_(module.residual_layer.bias)
 
-            module.output_layer.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            init.normal_(module.output_layer.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.output_layer, "bias") and module.output_layer.bias is not None:
-                module.output_layer.bias.data.zero_()
+                init.zeros_(module.output_layer.bias)
 
     def encode(
         self, context: torch.Tensor, mask: Optional[torch.Tensor] = None
@@ -359,7 +399,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared)
+        self.decoder = _create_t5_stack(decoder_config, self.shared)
 
     def decode(
         self,
