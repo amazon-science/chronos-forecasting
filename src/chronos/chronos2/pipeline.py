@@ -616,8 +616,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             )
             context_length = self.model_context_length
 
-        test_dataset = Chronos2Dataset.convert_inputs(
-            inputs=inputs,
+        test_dataset = Chronos2Dataset(
+            inputs,
             context_length=context_length,
             prediction_length=prediction_length,
             batch_size=batch_size,
@@ -1142,8 +1142,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             )
             context_length = self.model_context_length
 
-        test_dataset = Chronos2Dataset.convert_inputs(
-            inputs=inputs,
+        test_dataset = Chronos2Dataset(
+            inputs,
             context_length=context_length,
             prediction_length=0,
             batch_size=batch_size,
