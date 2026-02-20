@@ -5,7 +5,7 @@
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, NotRequired, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, TypeAlias, TypedDict, cast
 
 import numpy as np
 import torch
@@ -15,6 +15,11 @@ from torch.utils.data import IterableDataset
 if TYPE_CHECKING:
     import datasets
     import fev
+
+try:
+    from typing import NotRequired  # Python 3.11+
+except ImportError:
+    from typing_extensions import NotRequired
 
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
