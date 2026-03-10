@@ -36,13 +36,13 @@ jobs:
         run: pip install ".[dev]" -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
       - name: Run Eval Script for Chronos-2
-        run: python scripts/evaluation/evaluate.py chronos-2 ci/evaluate/backtest_config.yaml $CHRONOS_2_RESULTS_CSV --model-id=s3://autogluon/chronos-2 --device=cpu --torch-dtype=float32
+        run: python scripts/evaluation/evaluate.py chronos-2 ci/evaluate/backtest_config.yaml $CHRONOS_2_RESULTS_CSV --model-id=amazon/chronos-2 --device=cpu --torch-dtype=float32
 
       - name: Print Chronos-2 CSV
         run: cat $CHRONOS_2_RESULTS_CSV
 
       - name: Run Eval Script for Chronos-Bolt
         run: python scripts/evaluation/evaluate.py chronos-bolt ci/evaluate/backtest_config.yaml $CHRONOS_BOLT_RESULTS_CSV --model-id=amazon/chronos-bolt-small --device=cpu --torch-dtype=float32
-      
+
       - name: Print Chronos-Bolt CSV
         run: cat $CHRONOS_BOLT_RESULTS_CSV

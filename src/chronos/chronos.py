@@ -377,6 +377,14 @@ class ChronosPipeline(BaseChronosPipeline):
         self.tokenizer = tokenizer
         self.model = model
 
+    @property
+    def model_context_length(self) -> int:
+        return self.model.config.context_length
+
+    @property
+    def model_prediction_length(self) -> int:
+        return self.model.config.prediction_length
+
     def _prepare_and_validate_context(self, context: Union[torch.Tensor, List[torch.Tensor]]):
         if isinstance(context, list):
             context = left_pad_and_stack_1D(context)

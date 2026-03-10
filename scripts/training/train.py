@@ -663,7 +663,6 @@ def main(
         lr_scheduler_type=lr_scheduler_type,
         warmup_ratio=warmup_ratio,
         optim=optim,
-        logging_dir=str(output_dir / "logs"),
         logging_strategy="steps",
         logging_steps=log_steps,
         save_strategy="steps",

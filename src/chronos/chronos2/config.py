@@ -4,7 +4,7 @@
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Literal
 
 from transformers.configuration_utils import PretrainedConfig
 
@@ -39,6 +39,8 @@ class Chronos2CoreConfig(PretrainedConfig):
         Token ID for padding/missing value token, by default 0
     rope_theta
         The base theta for rotary position embedding (RoPE), by default 10000.0
+    attn_implementation
+        The attention implementation to use. Options: "eager" or "sdpa", by default None (uses "sdpa")
     """
 
     model_type = "t5"
@@ -63,6 +65,7 @@ class Chronos2CoreConfig(PretrainedConfig):
         vocab_size: int = 2,
         pad_token_id: int = 0,
         rope_theta: float = 10000.0,
+        attn_implementation: Literal["eager", "sdpa"] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -83,11 +86,17 @@ class Chronos2CoreConfig(PretrainedConfig):
 
         assert not self.is_gated_act, "gated activation is not supported"
 
+        # Attention implementation - default to "sdpa" if not specified
+        attn_implementation = attn_implementation or "sdpa"
+        assert attn_implementation in ["eager", "sdpa"], f"attn_implementation {attn_implementation} not supported"
+
         # unused
         kwargs.pop("is_encoder_decoder", None)
         kwargs.pop("eos_token_id", None)
 
-        super().__init__(pad_token_id=pad_token_id, is_encoder_decoder=False, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id, is_encoder_decoder=False, attn_implementation=attn_implementation, **kwargs
+        )
 
 
 @dataclass
