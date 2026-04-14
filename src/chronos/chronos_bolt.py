@@ -29,7 +29,7 @@ from .base import BaseChronosPipeline, ForecastType
 
 logger = logging.getLogger(__file__)
 
-_TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0.dev0")
+_TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 
 # In transformers v5, use guarded init functions that check _is_hf_initialized
 # to avoid re-initializing weights loaded from checkpoint

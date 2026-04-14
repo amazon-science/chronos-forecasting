@@ -16,7 +16,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
 
-_TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0.dev0")
+_TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 
 if _TRANSFORMERS_V5:
     from transformers import initialization as init
