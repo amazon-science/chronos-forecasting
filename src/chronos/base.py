@@ -348,9 +348,16 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         if str(pretrained_model_name_or_path).startswith("s3://"):
             from .boto_utils import cache_model_from_s3
 
-            local_model_path = cache_model_from_s3(
-                str(pretrained_model_name_or_path), force_download=force_s3_download
-            )
+            try:
+                local_model_path = cache_model_from_s3(
+                    str(pretrained_model_name_or_path), force_download=force_s3_download
+                )
+            except ImportError as e:
+                raise ImportError(
+                    "Loading models from s3:// URIs requires boto3. "
+                    "Install the optional dependencies with: "
+                    "pip install 'chronos-forecasting[extras]'"
+                ) from e
             return cls.from_pretrained(local_model_path, *model_args, **kwargs)
 
         from transformers import AutoConfig
