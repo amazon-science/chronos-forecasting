@@ -144,8 +144,10 @@ def validate_df_inputs(
     df[timestamp_column] = pd.to_datetime(df[timestamp_column])
     df = df.sort_values([id_column, timestamp_column])
 
-    # Get series lengths
-    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    # Get series lengths in the exact order that appears in the sorted dataframe.
+    # This avoids dtype-specific ordering differences (e.g., string[python]) that can
+    # break the alignment with contiguous timestamp slices below.
+    series_lengths = df.groupby(id_column, sort=False).size().to_list()
 
     def validate_freq(timestamps: pd.DatetimeIndex, series_id: str):
         freq = pd.infer_freq(timestamps)
@@ -273,8 +275,8 @@ def convert_df_input_to_list_of_dicts_input(
         # Get the original order of time series IDs
         original_order = df[id_column].unique()
 
-        # Get series lengths
-        series_lengths = df[id_column].value_counts(sort=False).to_list()
+        # Keep lengths aligned with dataframe row order regardless of ID dtype.
+        series_lengths = df.groupby(id_column, sort=False).size().to_list()
 
         # If freq is not provided, infer from the first series with >= 3 points
         if freq is None:
