@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     import datasets
     import fev
 
+try:
+    from typing import NotRequired  # Python 3.11+
+except ImportError:
+    from typing_extensions import NotRequired
+
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
 
@@ -23,8 +28,8 @@ TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
 class PreparedInput(TypedDict):
     """A preprocessed time series input ready for model training/inference."""
 
-    context: torch.Tensor  # (n_variates, history_length), float32
-    future_covariates: torch.Tensor  # (n_variates, prediction_length), float32
+    context: torch.Tensor  # (n_variates, history_length)
+    future_covariates: NotRequired[torch.Tensor]  # (n_variates, prediction_length); only required in TEST mode
     n_targets: int
     n_covariates: int
     n_future_covariates: int
@@ -200,7 +205,8 @@ def validate_and_prepare_single_dict_input(
 
     context_tensor = torch.cat([target, past_covariates_tensor], dim=0).to(dtype=torch.float32)
     future_covariates_tensor = torch.cat(
-        [future_covariates_target_padding, future_covariates_tensor], dim=0
+        [future_covariates_target_padding, future_covariates_tensor],
+        dim=0,
     ).to(dtype=torch.float32)
     n_targets = target.shape[0]
     n_covariates = past_covariates_tensor.shape[0]
@@ -260,15 +266,28 @@ def prepare_inputs(
     return inputs
 
 
-def validate_prepared_schema(prepared_input: Any) -> None:
-    """Validate that an input matches the PreparedInput schema."""
+def validate_prepared_schema(prepared_input: Any, mode: "DatasetMode | str") -> None:
+    """Validate that an input matches the PreparedInput schema.
+
+    Parameters
+    ----------
+    prepared_input
+        The input to validate
+    mode
+        Dataset mode. `future_covariates` is only required in TEST mode since it's reconstructed
+        from context in TRAIN/VALIDATION modes.
+    """
     if not isinstance(prepared_input, Mapping):
         raise TypeError(
             f"Expected input to be a dict-like, got {type(prepared_input).__name__}. "
             "Set convert_inputs=True when calling fit() to preprocess raw inputs."
         )
 
-    required_keys = {"context", "future_covariates", "n_targets", "n_covariates", "n_future_covariates"}
+    # future_covariates is only required in TEST mode (reconstructed from context otherwise)
+    required_keys = {"context", "n_targets", "n_covariates", "n_future_covariates"}
+    if mode == DatasetMode.TEST:
+        required_keys.add("future_covariates")
+
     missing = required_keys - set(prepared_input.keys())
     if missing:
         raise TypeError(
@@ -283,20 +302,21 @@ def validate_prepared_schema(prepared_input: Any) -> None:
             "Set convert_inputs=True when calling fit() to preprocess raw inputs."
         )
 
-    future_covariates = prepared_input["future_covariates"]
-    if not isinstance(future_covariates, torch.Tensor) or future_covariates.ndim != 2:
-        raise TypeError(
-            f"Expected 'future_covariates' to be 2-d torch.Tensor, got {type(future_covariates).__name__} "
-            f"with shape {getattr(future_covariates, 'shape', 'N/A')}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
-        )
+    future_covariates = prepared_input.get("future_covariates")
+    if future_covariates is not None:
+        if not isinstance(future_covariates, torch.Tensor) or future_covariates.ndim != 2:
+            raise TypeError(
+                f"Expected 'future_covariates' to be 2-d torch.Tensor, got {type(future_covariates).__name__} "
+                f"with shape {getattr(future_covariates, 'shape', 'N/A')}. "
+                "Set convert_inputs=True when calling fit() to preprocess raw inputs."
+            )
 
-    if context.shape[0] != future_covariates.shape[0]:
-        raise ValueError(
-            f"Expected 'context' and 'future_covariates' to have the same first dimension, "
-            f"got {context.shape[0]} and {future_covariates.shape[0]}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
-        )
+        if context.shape[0] != future_covariates.shape[0]:
+            raise ValueError(
+                f"Expected 'context' and 'future_covariates' to have the same first dimension, "
+                f"got {context.shape[0]} and {future_covariates.shape[0]}. "
+                "Set convert_inputs=True when calling fit() to preprocess raw inputs."
+            )
 
 
 def convert_list_of_tensors_input_to_list_of_dicts_input(
@@ -532,7 +552,7 @@ class Chronos2Dataset(IterableDataset):
                 inputs = convert_list_of_tensors_input_to_list_of_dicts_input(cast(Sequence[TensorOrArray], inputs))
             self.inputs = prepare_inputs(cast(Iterable[Mapping[str, Any]], inputs), prediction_length, min_past, mode)
         else:
-            validate_prepared_schema(inputs[0])
+            validate_prepared_schema(inputs[0], mode=mode)
             self.inputs = cast(Sequence[PreparedInput], inputs)
 
         self.context_length = context_length
@@ -545,7 +565,6 @@ class Chronos2Dataset(IterableDataset):
     def _construct_slice(self, input_idx: int) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, int]:
         prepared = self.inputs[input_idx]
         past_tensor = prepared["context"].clone()  # shape: (n_targets + n_covariates, history_length)
-        future_tensor = prepared["future_covariates"].clone()
         n_targets = int(prepared["n_targets"])
         n_covariates = int(prepared["n_covariates"])
         n_future_covariates = int(prepared["n_future_covariates"])
@@ -580,9 +599,7 @@ class Chronos2Dataset(IterableDataset):
 
             if n_future_covariates > 0:
                 # the last n_future_covariates elements in context_tensor are the known covariates
-                future_covariates = past_tensor[
-                    -n_future_covariates:, slice_idx : slice_idx + self.prediction_length
-                ]
+                future_covariates = past_tensor[-n_future_covariates:, slice_idx : slice_idx + self.prediction_length]
             else:
                 # zero-length tensor for easy concatenation later
                 future_covariates = torch.zeros((0, self.prediction_length))
@@ -596,7 +613,7 @@ class Chronos2Dataset(IterableDataset):
             future_covariates = torch.cat([future_covariates_padding, future_covariates], dim=0)
         else:
             future_target = None
-            future_covariates = future_tensor
+            future_covariates = prepared["future_covariates"].clone()
 
         # context: (n_targets + n_covariates, min(context_length, history_length))
         # future_target: (n_targets + n_covariates, prediction_length), the future values of known future covariates

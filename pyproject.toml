@@ -20,6 +20,7 @@ dependencies = [
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
   "scikit-learn>=1.6.0,<2",
+  "typing_extensions~=4.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
