@@ -52,6 +52,10 @@ test = [
   "fev>=0.6.1",
   "pandas[pyarrow]>=2.0,<2.4",
 ]
+vllm = [
+  "vllm>=0.13.0",
+  "pydantic>=2.0",
+]
 typecheck = ["mypy~=1.9"]
 dev = [
   "gluonts[pro]~=0.16",
@@ -64,6 +68,12 @@ dev = [
   "rich",
   "pandas>=2.0,<2.4",
 ]
+
+[project.entry-points."vllm.general_plugins"]
+chronos2 = "chronos.chronos2.vllm:register_chronos2_model"
+
+[project.entry-points."vllm.io_processor_plugins"]
+chronos2 = "chronos.chronos2.vllm:get_chronos2_io_processor"
 
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
