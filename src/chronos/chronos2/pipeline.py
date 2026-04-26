@@ -22,6 +22,7 @@ from transformers.utils.peft_utils import find_adapter_config_file
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
+from chronos.chronos2.model import _TRANSFORMERS_V5
 from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
 from chronos.df_utils import convert_df_input_to_list_of_dicts_input
 from chronos.utils import interpolate_quantiles, weighted_quantile
@@ -270,7 +271,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             per_device_eval_batch_size=batch_size,
             learning_rate=learning_rate,
             lr_scheduler_type="linear",
-            warmup_ratio=0.0,
+            **({"warmup_steps": 0} if _TRANSFORMERS_V5 else {"warmup_ratio": 0.0}),
             optim="adamw_torch_fused",
             logging_strategy="steps",
             logging_steps=100,
