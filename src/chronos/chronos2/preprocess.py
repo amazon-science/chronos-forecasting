@@ -2,16 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Preprocessing module for converting various input formats to list[PreparedInput].
-
-Entry points:
-- from_tensor()       : 3D tensor/array → list[PreparedInput]
-- from_tensor_list()  : list of 1D/2D tensors → list[PreparedInput]
-- from_dataframe()    : pd.DataFrame → list[PreparedInput]
-- from_dict_list()    : list[dict] → list[PreparedInput]
-
-The first two are direct conversions (no encoding needed).
-The latter two handle encoding via _build_prepared_inputs().
+Preprocessing module for converting various input formats to list[PreparedInput] expected by Chronos2Dataset.
 """
 
 from typing import TYPE_CHECKING, TypedDict
