@@ -19,7 +19,6 @@ dependencies = [
   "accelerate>=0.34,<2",
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
-  "scikit-learn>=1.6.0,<2",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
