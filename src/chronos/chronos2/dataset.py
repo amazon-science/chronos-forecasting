@@ -5,12 +5,14 @@
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, TypeAlias, cast
 
 import numpy as np
 import torch
 from sklearn.preprocessing import OrdinalEncoder, TargetEncoder
 from torch.utils.data import IterableDataset
+
+from chronos.chronos2.preprocess import PreparedInput
 
 if TYPE_CHECKING:
     import datasets
@@ -18,16 +20,6 @@ if TYPE_CHECKING:
 
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
-
-
-class PreparedInput(TypedDict):
-    """A preprocessed time series input ready for model training/inference."""
-
-    context: torch.Tensor  # (n_variates, history_length), float32
-    future_covariates: torch.Tensor  # (n_variates, prediction_length), float32
-    n_targets: int
-    n_covariates: int
-    n_future_covariates: int
 
 
 def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
