@@ -724,27 +724,131 @@ class Chronos2Pipeline(BaseChronosPipeline):
         future_covariates: torch.Tensor | None,
         num_output_patches: int,
     ) -> torch.Tensor:
-        kwargs = {}
-        if future_covariates is not None:
-            output_size = num_output_patches * self.model_output_patch_size
-
-            if output_size > future_covariates.shape[1]:
-                batch_size = len(future_covariates)
-                padding_size = output_size - future_covariates.shape[1]
-                padding_tensor = torch.full(
-                    (batch_size, padding_size), fill_value=torch.nan, device=future_covariates.device
-                )
-                future_covariates = torch.cat([future_covariates, padding_tensor], dim=1)
-
-            else:
-                future_covariates = future_covariates[..., :output_size]
-            kwargs["future_covariates"] = future_covariates
+        kwargs = self._prepare_predict_step_kwargs(
+            future_covariates=future_covariates,
+            num_output_patches=num_output_patches,
+        )
         with torch.no_grad():
             prediction: torch.Tensor = self.model(
                 context=context, group_ids=group_ids, num_output_patches=num_output_patches, **kwargs
             ).quantile_preds.to(context)
 
         return prediction
+
+    def _prepare_predict_step_kwargs(
+        self,
+        future_covariates: torch.Tensor | None,
+        num_output_patches: int,
+    ) -> dict[str, torch.Tensor]:
+        kwargs = {}
+        if future_covariates is None:
+            return kwargs
+
+        output_size = num_output_patches * self.model_output_patch_size
+
+        if output_size > future_covariates.shape[1]:
+            batch_size = len(future_covariates)
+            padding_size = output_size - future_covariates.shape[1]
+            padding_tensor = torch.full(
+                (batch_size, padding_size), fill_value=torch.nan, device=future_covariates.device
+            )
+            future_covariates = torch.cat([future_covariates, padding_tensor], dim=1)
+
+        else:
+            future_covariates = future_covariates[..., :output_size]
+        kwargs["future_covariates"] = future_covariates
+        return kwargs
+
+    @torch.no_grad()
+    def predict_last_latent(
+        self,
+        inputs: TensorOrArray
+        | Sequence[TensorOrArray]
+        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]],
+        prediction_length: int | None = None,
+        batch_size: int = 256,
+        context_length: int | None = None,
+        cross_learning: bool = False,
+        limit_prediction_length: bool = False,
+        **kwargs,
+    ) -> list[torch.Tensor]:
+        """
+        Return the last latent from the final Chronos-2 encoder layer using the
+        same input formats and batching path as ``predict``/``predict_quantiles``.
+
+        Each returned tensor corresponds to one input item and has shape
+        ``(n_target_variates, d_model)``.
+        """
+        model_prediction_length = self.model_prediction_length
+        if prediction_length is None:
+            prediction_length = model_prediction_length
+
+        max_output_patches = kwargs.pop("max_output_patches", self.max_output_patches)
+        after_batch_callback: Callable = kwargs.pop("after_batch", lambda: None)
+
+        if len(kwargs) > 0:
+            raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}.")
+
+        if prediction_length > model_prediction_length:
+            msg = (
+                f"We recommend keeping prediction length <= {model_prediction_length}. "
+                "The quality of longer predictions may degrade since the model is not optimized for it. "
+            )
+            if limit_prediction_length:
+                msg += "You can turn off this check by setting `limit_prediction_length=False`."
+                raise ValueError(msg)
+            warnings.warn(msg)
+
+        if context_length is None:
+            context_length = self.model_context_length
+
+        if context_length > self.model_context_length:
+            warnings.warn(
+                f"The specified context_length {context_length} is greater than the model's default context length {self.model_context_length}. "
+                f"Resetting context_length to {self.model_context_length}."
+            )
+            context_length = self.model_context_length
+
+        test_dataset = Chronos2Dataset(
+            inputs,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            batch_size=batch_size,
+            output_patch_size=self.model_output_patch_size,
+            mode=DatasetMode.TEST,
+        )
+        test_loader = DataLoader(
+            test_dataset, batch_size=None, pin_memory=self.model.device.type == "cuda", shuffle=False, drop_last=False
+        )
+
+        all_last_latents: list[torch.Tensor] = []
+        for batch in test_loader:
+            assert batch["future_target"] is None
+            batch_context = batch["context"].to(device=self.model.device, dtype=torch.float32)
+            batch_group_ids = batch["group_ids"].to(device=self.model.device)
+            batch_future_covariates = batch["future_covariates"].to(device=self.model.device, dtype=torch.float32)
+            batch_target_idx_ranges = batch["target_idx_ranges"]
+
+            if cross_learning:
+                batch_group_ids = torch.zeros_like(batch_group_ids)
+
+            num_output_patches = math.ceil(prediction_length / self.model_output_patch_size)
+            num_output_patches = min(num_output_patches, max_output_patches)
+            kwargs = self._prepare_predict_step_kwargs(
+                future_covariates=batch_future_covariates,
+                num_output_patches=num_output_patches,
+            )
+            encoder_outputs, *_ = self.model.encode(
+                context=batch_context,
+                group_ids=batch_group_ids,
+                num_output_patches=num_output_patches,
+                **kwargs,
+            )
+            last_latents = encoder_outputs.last_hidden_state[:, -1, :].to(dtype=torch.float32, device="cpu")
+            all_last_latents.extend(last_latents[start:end] for (start, end) in batch_target_idx_ranges)
+            after_batch_callback()
+
+        return all_last_latents
 
     @staticmethod
     def _slide_context_and_future_covariates(
