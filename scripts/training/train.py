@@ -4,6 +4,7 @@
 import ast
 import logging
 import os
+import uuid
 import re
 import sys
 import json
