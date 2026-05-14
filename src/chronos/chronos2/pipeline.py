@@ -413,6 +413,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         unrolled_quantiles: torch.Tensor,
         unrolled_sample_weights: torch.Tensor,
         num_output_patches: int,
+        clip_factor: float | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Get unrolled_quantiles from prediction and append it to the expanded context
         prediction_unrolled = interpolate_quantiles(
@@ -439,6 +440,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             else None,
             group_ids=rearrange(group_ids, "b n -> (b n)"),
             num_output_patches=num_output_patches,
+            clip_factor=clip_factor,
         )
         # Reshape predictions from (batch * n_paths, n_quantiles, length) to (batch, n_paths * n_quantiles, length)
         prediction = rearrange(prediction, "(b n) q h -> b (n q) h", n=n_paths)
@@ -463,6 +465,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         context_length: int | None = None,
         cross_learning: bool = False,
         limit_prediction_length: bool = False,
+        clip_factor: float | None = None,
         **kwargs,
     ) -> list[torch.Tensor]:
         """
@@ -647,8 +650,14 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 prediction_length=prediction_length,
                 max_output_patches=max_output_patches,
                 target_idx_ranges=batch_target_idx_ranges,
+                clip_factor=clip_factor,
             )
-            all_predictions.extend(batch_prediction)
+
+            # Remove floating point noise around integers
+            for item in batch_prediction:
+                item = torch.where(torch.abs(item - item.round()) < 1e-5, item.round(), item)
+                all_predictions.append(item)
+
             after_batch_callback()
 
         return all_predictions
@@ -662,6 +671,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         prediction_length: int,
         max_output_patches: int,
         target_idx_ranges: list[tuple[int, int]],
+        clip_factor: float | None = None,
     ) -> list[torch.Tensor]:
         context = context.to(device=self.model.device, dtype=torch.float32)
         group_ids = group_ids.to(device=self.model.device)
@@ -682,6 +692,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             group_ids=group_ids,
             future_covariates=future_covariates,
             num_output_patches=get_num_output_patches(remaining),
+            clip_factor=clip_factor,
         )
         predictions.append(prediction)
         remaining -= prediction.shape[-1]
@@ -707,6 +718,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 unrolled_quantiles=unrolled_quantiles_tensor,
                 unrolled_sample_weights=unrolled_sample_weights,
                 num_output_patches=get_num_output_patches(remaining),
+                clip_factor=clip_factor,
             )
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
@@ -723,6 +735,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         group_ids: torch.Tensor,
         future_covariates: torch.Tensor | None,
         num_output_patches: int,
+        clip_factor: float | None = None,
     ) -> torch.Tensor:
         kwargs = {}
         if future_covariates is not None:
@@ -741,7 +754,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
             kwargs["future_covariates"] = future_covariates
         with torch.no_grad():
             prediction: torch.Tensor = self.model(
-                context=context, group_ids=group_ids, num_output_patches=num_output_patches, **kwargs
+                context=context,
+                group_ids=group_ids,
+                num_output_patches=num_output_patches,
+                clip_factor=clip_factor,
+                **kwargs,
             ).quantile_preds.to(context)
 
         return prediction
