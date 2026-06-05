@@ -527,6 +527,15 @@ class Chronos2Dataset(IterableDataset):
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
 
+        if mode != DatasetMode.TEST:
+            self.inputs = [x for x in self.inputs if x["context"].shape[-1] >= min_past + prediction_length]
+            if len(self.inputs) == 0:
+                raise ValueError(
+                    "The dataset is empty after filtering based on the length of the time series "
+                    "(length >= min_past + prediction_length). Please provide longer time series or "
+                    "reduce `min_past` or `prediction_length`."
+                )
+
         self.context_length = context_length
         self.prediction_length = prediction_length
         self.batch_size = batch_size
