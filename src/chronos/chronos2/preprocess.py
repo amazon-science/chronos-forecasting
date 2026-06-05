@@ -167,11 +167,11 @@ def from_dataframe(
     import pandas.api.types as ptypes
 
     if validate_inputs:
-        df[timestamp_column] = pd.to_datetime(df[timestamp_column])
-        df = df.sort_values([id_column, timestamp_column])
+        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
+        df.sort_values([id_column, timestamp_column], inplace=True)
         if future_df is not None:
-            future_df[timestamp_column] = pd.to_datetime(future_df[timestamp_column])
-            future_df = future_df.sort_values([id_column, timestamp_column])
+            future_df = future_df.assign(**{timestamp_column: pd.to_datetime(future_df[timestamp_column])})
+            future_df.sort_values([id_column, timestamp_column], inplace=True)
         _validate_dataframe(
             df=df,
             future_df=future_df,
@@ -260,13 +260,20 @@ def from_list_of_dicts(
     -------
     list[PreparedInput], one per dict
     """
-    if validate_inputs:
-        _validate_list_of_dicts(data=data, prediction_length=prediction_length)
-
     if len(data) == 0:
         return []
 
-    has_future_values = "future_covariates" in data[0] and len(data[0]["future_covariates"]) > 0
+    first_future = data[0].get("future_covariates") or {}
+    if any(v is None for v in first_future.values()):
+        known_covariates_names = list(first_future)
+        data = [d.copy() for d in data]
+        for d in data:
+            d.pop("future_covariates", None)
+
+    if validate_inputs:
+        _validate_list_of_dicts(data=data, prediction_length=prediction_length)
+
+    has_future_values = bool(data[0].get("future_covariates"))
     if has_future_values and known_covariates_names is not None:
         raise ValueError("Cannot provide both known_covariates_names and future_covariates in dicts")
 
@@ -366,7 +373,12 @@ def _build_prepared_inputs(
     encoded_past: list[np.ndarray] = []
     encoded_future: list[np.ndarray] = []
 
-    for key, values in past_covariates.items():
+    # past-only first, known-future last (Chronos2Dataset relies on this row order)
+    past_only = [k for k in past_covariates if k not in future_covariates]
+    known_future = [k for k in past_covariates if k in future_covariates]
+
+    for key in past_only + known_future:
+        values = past_covariates[key]
         is_known_future = key in future_covariates
         future_values = future_covariates.get(key)
 
