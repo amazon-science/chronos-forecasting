@@ -391,8 +391,9 @@ def _build_prepared_inputs(
 
             future_codes = None
             if future_values is not None:
+                # unseen categories map to n_categories (the "unseen" slot in target encoding)
                 future_codes = np.array(
-                    [cat_to_code.get(v, 0) for v in future_values], dtype=np.intp
+                    [cat_to_code.get(v, n_categories) for v in future_values], dtype=np.intp
                 )
 
             if use_target_encoding and n_targets == 1:
@@ -411,9 +412,12 @@ def _build_prepared_inputs(
             else:
                 encoded_past.append(past_codes.astype(np.float32))
                 if is_known_future:
-                    encoded_future.append(
-                        future_codes.astype(np.float32) if future_codes is not None else nan_future
-                    )
+                    if future_codes is not None:
+                        encoded = future_codes.astype(np.float32)
+                        encoded[future_codes == n_categories] = np.nan
+                        encoded_future.append(encoded)
+                    else:
+                        encoded_future.append(nan_future)
         else:
             encoded_past.append(values)
             if is_known_future:
@@ -651,15 +655,17 @@ def _target_encode(
     item_counts = np.bincount(id_codes, weights=mask.astype(float), minlength=n_items)
     item_means = np.divide(item_sums, item_counts, out=np.zeros(n_items), where=item_counts > 0)
 
-    combined_codes = id_codes * n_categories + cat_codes
-    sums = np.bincount(combined_codes, weights=target_masked * mask, minlength=n_items * n_categories)
-    counts = np.bincount(combined_codes, weights=mask.astype(float), minlength=n_items * n_categories)
+    # extra slot for unseen categories — sums/counts stay 0, so lookup → item_mean
+    n_slots = n_categories + 1
+    combined_codes = id_codes * n_slots + cat_codes
+    sums = np.bincount(combined_codes, weights=target_masked * mask, minlength=n_items * n_slots)
+    counts = np.bincount(combined_codes, weights=mask.astype(float), minlength=n_items * n_slots)
 
-    lookup = (smooth * np.repeat(item_means, n_categories) + sums) / (smooth + counts)
+    lookup = (smooth * np.repeat(item_means, n_slots) + sums) / (smooth + counts)
     encoded_past = lookup[combined_codes].astype(np.float32)
 
     encoded_future = None
     if future_id_codes is not None and future_cat_codes is not None:
-        encoded_future = lookup[future_id_codes * n_categories + future_cat_codes].astype(np.float32)
+        encoded_future = lookup[future_id_codes * n_slots + future_cat_codes].astype(np.float32)
 
     return encoded_past, encoded_future
