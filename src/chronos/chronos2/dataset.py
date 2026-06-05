@@ -12,6 +12,7 @@ import torch
 from sklearn.preprocessing import OrdinalEncoder, TargetEncoder
 from torch.utils.data import IterableDataset
 
+from chronos.chronos2 import preprocess
 from chronos.chronos2.preprocess import PreparedInput
 
 if TYPE_CHECKING:
@@ -517,12 +518,17 @@ class Chronos2Dataset(IterableDataset):
         self.inputs: Sequence[PreparedInput]
         if convert_inputs:
             if isinstance(inputs, (torch.Tensor, np.ndarray)):
-                inputs = convert_tensor_input_to_list_of_dicts_input(inputs)
+                self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
             elif (
                 isinstance(inputs, Sequence) and len(inputs) > 0 and isinstance(inputs[0], (torch.Tensor, np.ndarray))
             ):
-                inputs = convert_list_of_tensors_input_to_list_of_dicts_input(cast(Sequence[TensorOrArray], inputs))
-            self.inputs = prepare_inputs(cast(Iterable[Mapping[str, Any]], inputs), prediction_length, min_past, mode)
+                self.inputs = preprocess.from_list_of_tensors(
+                    cast("list[TensorOrArray]", inputs), prediction_length=prediction_length
+                )
+            else:
+                self.inputs = preprocess.from_list_of_dicts(
+                    cast(list[dict], inputs), prediction_length=prediction_length
+                )
         else:
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)

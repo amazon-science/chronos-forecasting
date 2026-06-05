@@ -48,7 +48,8 @@ def from_tensor(
         data = torch.from_numpy(data)
     if data.ndim != 3:
         raise ValueError(
-            f"Expected 3-d tensor with shape (n_series, n_variates, context_length), got shape {tuple(data.shape)}"
+            f"When the input is a torch tensor or numpy array, it should be 3-d with shape "
+            f"(n_series, n_variates, history_length). Found shape: {tuple(data.shape)}."
         )
 
     data = data.to(dtype=torch.float32)
@@ -94,7 +95,9 @@ def from_list_of_tensors(
             item = torch.from_numpy(item)
         if item.ndim > 2:
             raise ValueError(
-                f"Each element should be 1-d or 2-d, found shape {tuple(item.shape)} at index {idx}"
+                f"When the input is a list of torch tensors or numpy arrays, the elements should either be 1-d "
+                f"with shape (history_length,) or 2-d with shape (n_variates, history_length). Found element "
+                f"at index {idx} with shape {tuple(item.shape)}."
             )
         context = item.view(-1, item.shape[-1]).to(dtype=torch.float32)
         n_targets = context.shape[0]
@@ -264,7 +267,7 @@ def from_list_of_dicts(
         return []
 
     first_future = data[0].get("future_covariates") or {}
-    if any(v is None for v in first_future.values()):
+    if any(v is None or len(v) == 0 for v in first_future.values()):
         known_covariates_names = list(first_future)
         data = [d.copy() for d in data]
         for d in data:
@@ -540,56 +543,71 @@ def _validate_list_of_dicts(
 
     if not set(first_future_keys).issubset(first_past_keys):
         raise ValueError(
-            f"future_covariates keys must be a subset of past_covariates keys. "
-            f"Got past={first_past_keys}, future={first_future_keys}"
+            f"Expected keys in `future_covariates` to be a subset of `past_covariates` {first_past_keys}, "
+            f"but found {first_future_keys}"
         )
 
     for idx, d in enumerate(data):
         keys = set(d.keys())
         if not keys.issubset(allowed_keys):
-            raise ValueError(f"Invalid keys at index {idx}. Allowed: {allowed_keys}, found: {keys}")
+            raise ValueError(
+                f"Found invalid keys in element at index {idx}. Allowed keys are {allowed_keys}, but found {keys}"
+            )
         if "target" not in keys:
-            raise ValueError(f"Element at index {idx} is missing required key 'target'")
+            raise ValueError(f"Element at index {idx} does not contain the required key 'target'")
 
         target = np.asarray(d["target"])
         if target.ndim > 2:
-            raise ValueError(f"Target must be 1-d or 2-d, found shape {tuple(target.shape)} at index {idx}")
+            raise ValueError(
+                f"When the input is a list of dicts, the `target` should either be 1-d with shape (history_length,) "
+                f"or 2-d with shape (n_variates, history_length). Found element at index {idx} "
+                f"with shape {tuple(target.shape)}."
+            )
         n_targets = 1 if target.ndim == 1 else target.shape[0]
         if n_targets != first_n_targets:
             raise ValueError(
-                f"All targets must have same n_targets. Expected {first_n_targets}, got {n_targets} at index {idx}"
+                f"All targets must have the same n_targets. Expected {first_n_targets}, got {n_targets} "
+                f"at index {idx}. Heterogeneous lists with different target shapes are not supported — "
+                f"please loop over the inputs and call the model per-item instead."
             )
         history_length = target.shape[-1]
 
         past_covariates = d.get("past_covariates", {})
         if not isinstance(past_covariates, dict):
-            raise ValueError(f"past_covariates must be a dict at index {idx}, got {type(past_covariates)}")
+            raise ValueError(
+                f"Found invalid type for `past_covariates` in element at index {idx}. "
+                f'Expected dict with {{"feat_1": tensor_1, ...}}, but found {type(past_covariates)}'
+            )
         if sorted(past_covariates.keys()) != first_past_keys:
             raise ValueError(
                 f"All past_covariates must have same keys. Expected {first_past_keys}, "
-                f"got {sorted(past_covariates.keys())} at index {idx}"
+                f"got {sorted(past_covariates.keys())} at index {idx}. Heterogeneous lists are not supported."
             )
         for key, val in past_covariates.items():
             val = np.asarray(val)
             if val.ndim != 1 or len(val) != history_length:
                 raise ValueError(
-                    f"past_covariates['{key}'] must be 1-d with length {history_length}, "
-                    f"got shape {tuple(val.shape)} at index {idx}"
+                    f"Individual `past_covariates` must be 1-d with length equal to the length of `target` "
+                    f"(= {history_length}), found: {key} with shape {tuple(val.shape)} in element at index {idx}"
                 )
 
         future_covariates = d.get("future_covariates", {})
         if not isinstance(future_covariates, dict):
-            raise ValueError(f"future_covariates must be a dict at index {idx}, got {type(future_covariates)}")
+            raise ValueError(
+                f"Found invalid type for `future_covariates` in element at index {idx}. "
+                f'Expected dict with {{"feat_1": tensor_1, ...}}, but found {type(future_covariates)}'
+            )
         if sorted(future_covariates.keys()) != first_future_keys:
             raise ValueError(
                 f"All future_covariates must have same keys. Expected {first_future_keys}, "
-                f"got {sorted(future_covariates.keys())} at index {idx}"
+                f"got {sorted(future_covariates.keys())} at index {idx}. Heterogeneous lists are not supported."
             )
         for key, val in future_covariates.items():
             val = np.asarray(val)
             if val.ndim != 1 or len(val) != prediction_length:
                 raise ValueError(
-                    f"future_covariates['{key}'] must be 1-d with length {prediction_length}, "
+                    f"Individual `future_covariates` must be 1-d with length equal to the "
+                    f"prediction_length={prediction_length}, "
                     f"got shape {tuple(val.shape)} at index {idx}"
                 )
 
