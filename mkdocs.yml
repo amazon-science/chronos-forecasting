@@ -1,0 +1,40 @@
+site_name: chronos-forecasting
+site_description: A library for the Chronos time series foundation models
+site_url: https://amazon-science.github.io/chronos-forecasting/
+repo_url: https://github.com/amazon-science/chronos-forecasting
+repo_name: amazon-science/chronos-forecasting
+
+theme:
+  name: material
+  palette:
+    primary: blue
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_category_heading: true
+            group_by_category: true
+            allow_inspection: true
+
+nav:
+  - Home: index.md
+  # - Tutorials:
+  #   - Quickstart: 
+  - API Reference:
+    - Base: api/base.md
+    - Chronos: api/chronos.md
+    - Chronos-Bolt: api/chronos-bolt.md
+    - Chronos-2: api/chronos-2.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html
