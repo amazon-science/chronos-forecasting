@@ -169,15 +169,12 @@ def from_dataframe(
     import pandas as pd
     import pandas.api.types as ptypes
 
-    # Group rows by id (in first-appearance order) and sort by timestamp within each group, in
-    # one lexsort over integer keys. Skip the sort entirely if rows are already in that layout.
-    df, codes = _group_and_sort(df, id_column, timestamp_column, coerce_timestamps=validate_inputs)
-    original_order = pd.unique(df[id_column])  # cheap: order is fixed by _group_and_sort
-
+    df = _normalize_df(df, id_column, timestamp_column, coerce_timestamps=validate_inputs)
     if future_df is not None:
-        future_df, _ = _group_and_sort(
-            future_df, id_column, timestamp_column, coerce_timestamps=validate_inputs,
-            order=original_order,
+        future_df = _normalize_df(
+            future_df, id_column, timestamp_column,
+            coerce_timestamps=validate_inputs,
+            order=pd.unique(df[id_column]),
         )
 
     if validate_inputs:
@@ -218,9 +215,8 @@ def from_dataframe(
             if col in past_covariates:
                 future_covariates[col] = None
 
-    # codes is already aligned with df rows and contiguous per group, so bincount gives lengths
-    # in original_order without another pass over id strings.
-    series_lengths = np.bincount(codes, minlength=len(original_order)).tolist()
+    # df is already grouped by id; value_counts(sort=False) returns lengths in that order.
+    series_lengths = df[id_column].value_counts(sort=False).tolist()
 
     return _build_prepared_inputs(
         target=target,
@@ -477,17 +473,17 @@ def _build_prepared_inputs(
     return results
 
 
-def _group_and_sort(
+def _normalize_df(
     df: "pd.DataFrame",
     id_column: str,
     timestamp_column: str,
     coerce_timestamps: bool,
     order: "np.ndarray | None" = None,
-) -> "tuple[pd.DataFrame, np.ndarray]":
+) -> "pd.DataFrame":
     """
-    Return (df_reordered, codes) where rows are grouped by id (in first-appearance order, or the
-    `order` argument if given) and sorted by timestamp within each group. `codes[i]` is the
-    group index of row i. Skips the sort if the layout is already correct.
+    Return a df with rows grouped by id (in first-appearance order, or `order` if given) and
+    sorted by timestamp within each group. Optionally coerces the timestamp column to datetime.
+    Skips the sort if rows are already in that layout.
     """
     import pandas as pd
     import pandas.api.types as ptypes
@@ -510,8 +506,7 @@ def _group_and_sort(
     if not sorted_within:
         perm = np.lexsort([ts, codes])
         df = df.iloc[perm].reset_index(drop=True)
-        codes = codes[perm]
-    return df, codes
+    return df
 
 
 def _validate_dataframe(
