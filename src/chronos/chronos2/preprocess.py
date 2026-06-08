@@ -169,15 +169,13 @@ def from_dataframe(
     import pandas as pd
     import pandas.api.types as ptypes
 
-    df = _normalize_df(df, id_column, timestamp_column, coerce_timestamps=validate_inputs)
-    if future_df is not None:
-        future_df = _normalize_df(
-            future_df, id_column, timestamp_column,
-            coerce_timestamps=validate_inputs,
-            order=pd.unique(df[id_column]),
-        )
-
     if validate_inputs:
+        df = _normalize_df(df, id_column, timestamp_column)
+        if future_df is not None:
+            future_df = _normalize_df(
+                future_df, id_column, timestamp_column,
+                order=pd.unique(df[id_column]),
+            )
         _validate_dataframe(
             df=df,
             future_df=future_df,
@@ -436,34 +434,33 @@ def _build_prepared_inputs(
         if not is_known_future:
             encoded_future.append(nan_future)
 
-    # Split into per-series PreparedInputs using indptr
+    # Stack all rows once into 2D arrays so per-series construction is just slicing.
+    # context_full layout: target rows on top, then encoded covariates (past-only first,
+    # known-future last). future_full layout: NaN padding for targets on top, then encoded_future.
+    if encoded_past:
+        past_block = np.stack(encoded_past).astype(np.float32, copy=False)
+        context_full = np.concatenate([target, past_block], axis=0)
+    else:
+        context_full = target  # already (n_targets, total_rows) float32
+
+    target_future_padding = np.full((n_targets, n_series * prediction_length), np.nan, dtype=np.float32)
+    if encoded_future:
+        future_block = np.stack(encoded_future).astype(np.float32, copy=False)
+        future_full_all = np.concatenate([target_future_padding, future_block], axis=0)
+    else:
+        future_full_all = target_future_padding
+
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype(np.intp)
 
     results: list[PreparedInput] = []
     for i in range(n_series):
         p_start, p_end = indptr[i], indptr[i + 1]
-        f_start, f_end = i * prediction_length, (i + 1) * prediction_length
-
-        target_i = target[:, p_start:p_end]
-        past_cov_i = (
-            np.stack([arr[p_start:p_end] for arr in encoded_past])
-            if encoded_past
-            else np.zeros((0, series_lengths[i]), dtype=np.float32)
-        )
-        future_cov_i = (
-            np.stack([arr[f_start:f_end] for arr in encoded_future])
-            if encoded_future
-            else np.zeros((0, prediction_length), dtype=np.float32)
-        )
-
-        context = np.concatenate([target_i, past_cov_i], axis=0)
-        target_padding = np.full((n_targets, prediction_length), np.nan, dtype=np.float32)
-        future_full = np.concatenate([target_padding, future_cov_i], axis=0)
-
+        f_start = i * prediction_length
+        f_end = f_start + prediction_length
         results.append(
             PreparedInput(
-                context=torch.from_numpy(context).to(dtype=torch.float32),
-                future_covariates=torch.from_numpy(future_full).to(dtype=torch.float32),
+                context=torch.from_numpy(context_full[:, p_start:p_end]),
+                future_covariates=torch.from_numpy(future_full_all[:, f_start:f_end]),
                 n_targets=n_targets,
                 n_covariates=n_covariates,
                 n_future_covariates=n_future_covariates,
@@ -477,18 +474,17 @@ def _normalize_df(
     df: "pd.DataFrame",
     id_column: str,
     timestamp_column: str,
-    coerce_timestamps: bool,
     order: "np.ndarray | None" = None,
 ) -> "pd.DataFrame":
     """
-    Return a df with rows grouped by id (in first-appearance order, or `order` if given) and
-    sorted by timestamp within each group. Optionally coerces the timestamp column to datetime.
+    Return a df with the timestamp column coerced to datetime, rows grouped by id (in
+    first-appearance order, or `order` if given), and sorted by timestamp within each group.
     Skips the sort if rows are already in that layout.
     """
     import pandas as pd
     import pandas.api.types as ptypes
 
-    if coerce_timestamps and not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
+    if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
         df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
 
     if order is None:
