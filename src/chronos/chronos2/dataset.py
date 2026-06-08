@@ -12,7 +12,27 @@ import torch
 from torch.utils.data import IterableDataset
 
 from chronos.chronos2 import preprocess
+from chronos.chronos2._deprecated import (
+    convert_list_of_tensors_input_to_list_of_dicts_input,
+    convert_tensor_input_to_list_of_dicts_input,
+    prepare_inputs,
+    validate_and_prepare_single_dict_input,
+)
 from chronos.chronos2.preprocess import PreparedInput
+
+__all__ = [
+    "Chronos2Dataset",
+    "DatasetMode",
+    "PreparedInput",
+    "convert_fev_window_to_list_of_dicts_input",
+    "left_pad_and_cat_2D",
+    "validate_prepared_schema",
+    # Deprecated re-exports — prefer chronos.chronos2.preprocess.from_* for new code.
+    "convert_list_of_tensors_input_to_list_of_dicts_input",
+    "convert_tensor_input_to_list_of_dicts_input",
+    "prepare_inputs",
+    "validate_and_prepare_single_dict_input",
+]
 
 if TYPE_CHECKING:
     import datasets
