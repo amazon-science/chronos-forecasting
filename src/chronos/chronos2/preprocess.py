@@ -5,7 +5,7 @@
 Preprocessing module for converting various input formats to list[PreparedInput] expected by Chronos2Dataset.
 """
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 import torch
@@ -48,8 +48,8 @@ def from_tensor(
         data = torch.from_numpy(data)
     if data.ndim != 3:
         raise ValueError(
-            f"When the input is a torch tensor or numpy array, it should be 3-d with shape "
-            f"(n_series, n_variates, history_length). Found shape: {tuple(data.shape)}."
+            f"Expected 3-d tensor with shape (n_series, n_variates, history_length), "
+            f"got shape {tuple(data.shape)}."
         )
 
     data = data.to(dtype=torch.float32)
@@ -95,9 +95,8 @@ def from_list_of_tensors(
             item = torch.from_numpy(item)
         if item.ndim > 2:
             raise ValueError(
-                f"When the input is a list of torch tensors or numpy arrays, the elements should either be 1-d "
-                f"with shape (history_length,) or 2-d with shape (n_variates, history_length). Found element "
-                f"at index {idx} with shape {tuple(item.shape)}."
+                f"Each element should be 1-d or 2-d, with shape (history_length,) or "
+                f"(n_variates, history_length). Found element at index {idx} with shape {tuple(item.shape)}."
             )
         context = item.view(-1, item.shape[-1]).to(dtype=torch.float32)
         n_targets = context.shape[0]
@@ -157,11 +156,12 @@ def from_dataframe(
         When True (default), use target encoding for categoricals (requires single target).
         When False, use ordinal encoding.
     validate_inputs
-        When True (default), validates and sorts dataframes. Set False to skip.
+        When True (default), validates schema and sorts both dataframes by (id_column, timestamp_column).
+        When False, skips both — caller is responsible for the assumptions listed above.
 
     Returns
     -------
-    list[PreparedInput], one per unique item_id (in original order)
+    list[PreparedInput], one per unique item_id, in the order in which item_ids first appear in `df`.
     """
     if future_df is not None and known_covariates_names is not None:
         raise ValueError("Cannot provide both future_df and known_covariates_names")
@@ -169,12 +169,15 @@ def from_dataframe(
     import pandas as pd
     import pandas.api.types as ptypes
 
+    # Capture order before sorting so the returned list mirrors df's first-appearance order.
+    original_order = df[id_column].drop_duplicates().tolist()
+
     if validate_inputs:
         df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
-        df.sort_values([id_column, timestamp_column], inplace=True)
+        df = df.sort_values([id_column, timestamp_column])
         if future_df is not None:
             future_df = future_df.assign(**{timestamp_column: pd.to_datetime(future_df[timestamp_column])})
-            future_df.sort_values([id_column, timestamp_column], inplace=True)
+            future_df = future_df.sort_values([id_column, timestamp_column])
         _validate_dataframe(
             df=df,
             future_df=future_df,
@@ -183,6 +186,11 @@ def from_dataframe(
             id_column=id_column,
             timestamp_column=timestamp_column,
         )
+
+    # Reindex rows so series appear in original_order, preserving in-series timestamp order.
+    df = df.set_index(id_column, drop=False).loc[original_order].reset_index(drop=True)
+    if future_df is not None:
+        future_df = future_df.set_index(id_column, drop=False).loc[original_order].reset_index(drop=True)
 
     covariate_columns = [
         c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns
@@ -201,7 +209,7 @@ def from_dataframe(
     if future_df is not None:
         for col in covariate_columns:
             if col in future_df.columns:
-                # dtype from df (not future_df) is source of truth
+                # dtype from df (not future_df) is the source of truth
                 if ptypes.is_numeric_dtype(df[col]):
                     future_covariates[col] = future_df[col].to_numpy(dtype=np.float32, na_value=np.nan)
                 else:
@@ -211,11 +219,13 @@ def from_dataframe(
             if col in past_covariates:
                 future_covariates[col] = None
 
+    series_lengths = df[id_column].value_counts(sort=False).reindex(original_order).tolist()
+
     return _build_prepared_inputs(
         target=target,
         past_covariates=past_covariates,
         future_covariates=future_covariates,
-        series_lengths=df[id_column].value_counts(sort=False).tolist(),
+        series_lengths=series_lengths,
         prediction_length=prediction_length,
         use_target_encoding=use_target_encoding,
     )
@@ -266,21 +276,15 @@ def from_list_of_dicts(
     if len(data) == 0:
         return []
 
-    first_future = data[0].get("future_covariates") or {}
-    if any(v is None or len(v) == 0 for v in first_future.values()):
-        known_covariates_names = list(first_future)
-        data = [d.copy() for d in data]
-        for d in data:
-            d.pop("future_covariates", None)
-
     if validate_inputs:
         _validate_list_of_dicts(data=data, prediction_length=prediction_length)
 
-    has_future_values = bool(data[0].get("future_covariates"))
-    if has_future_values and known_covariates_names is not None:
+    first_future_dict = data[0].get("future_covariates") or {}
+    if first_future_dict and known_covariates_names is not None:
         raise ValueError("Cannot provide both known_covariates_names and future_covariates in dicts")
 
     past_covariate_keys = sorted(data[0].get("past_covariates", {}).keys())
+    future_covariate_keys = sorted(first_future_dict.keys())
 
     # Stack targets: (n_targets, total_context_rows)
     target_arrays = []
@@ -293,23 +297,20 @@ def from_list_of_dicts(
         series_lengths.append(t.shape[-1])
     target = np.concatenate(target_arrays, axis=1)
 
-    past_covariates: dict[str, np.ndarray] = {}
-    for key in past_covariate_keys:
-        stacked = np.concatenate([np.asarray(d["past_covariates"][key]) for d in data])
-        if np.issubdtype(stacked.dtype, np.number):
-            past_covariates[key] = stacked.astype(np.float32)
-        else:
-            past_covariates[key] = stacked.astype(str)
+    past_covariates = {key: _stack_covariate(data, "past_covariates", key) for key in past_covariate_keys}
 
+    # Per-key handling: a future-covariate value of None/empty marks the column as
+    # known-future-but-values-unavailable (NaN-filled). The validator guarantees that
+    # all dicts agree per key, so checking the first dict is sufficient.
     future_covariates: dict[str, np.ndarray | None] = {}
-    if has_future_values:
-        for key in sorted(data[0]["future_covariates"].keys()):
-            stacked = np.concatenate([np.asarray(d["future_covariates"][key]) for d in data])
-            if np.issubdtype(stacked.dtype, np.number):
-                future_covariates[key] = stacked.astype(np.float32)
-            else:
-                future_covariates[key] = stacked.astype(str)
-    elif known_covariates_names is not None:
+    for key in future_covariate_keys:
+        first_value = data[0]["future_covariates"][key]
+        if first_value is None or len(first_value) == 0:
+            future_covariates[key] = None
+        else:
+            future_covariates[key] = _stack_covariate(data, "future_covariates", key)
+
+    if known_covariates_names is not None:
         for col in known_covariates_names:
             if col in past_covariates:
                 future_covariates[col] = None
@@ -322,6 +323,14 @@ def from_list_of_dicts(
         prediction_length=prediction_length,
         use_target_encoding=use_target_encoding,
     )
+
+
+def _stack_covariate(data: list[dict], group: str, key: str) -> np.ndarray:
+    """Concatenate a single covariate column across all dicts. Returns float32 if numeric, else str."""
+    stacked = np.concatenate([np.asarray(d[group][key]) for d in data])
+    if np.issubdtype(stacked.dtype, np.number):
+        return stacked.astype(np.float32)
+    return stacked.astype(str)
 
 
 def _build_prepared_inputs(
@@ -525,28 +534,22 @@ def _validate_list_of_dicts(
     Validate list[dict] structure. Raises ValueError on failure.
 
     Checks:
-    - All dicts have "target" key
-    - All targets have same n_targets
-    - All past_covariates have same column names
-    - All future_covariates have same column names and are subset of past_covariates
-    - future_covariates have length == prediction_length
-    - past_covariates have length == target length
+    - Each dict has only allowed keys, and "target" is present
+    - past_covariates / future_covariates (when present) are dicts
+    - All targets have the same n_targets and are 1-d or 2-d
+    - All past_covariates have the same column names across dicts
+    - All future_covariates have the same column names and are a subset of past_covariates
+    - future_covariates values are None, empty, or 1-d with length == prediction_length
+    - For a given future-covariate key, all dicts must agree on availability (None or non-None)
+    - past_covariates values are 1-d with length == target's history length
     """
     if len(data) == 0:
         return
 
     allowed_keys = {"target", "past_covariates", "future_covariates"}
-    first_past_keys = sorted(data[0].get("past_covariates", {}).keys())
-    first_future_keys = sorted(data[0].get("future_covariates", {}).keys())
-    first_target = np.asarray(data[0]["target"])
-    first_n_targets = 1 if first_target.ndim == 1 else first_target.shape[0]
 
-    if not set(first_future_keys).issubset(first_past_keys):
-        raise ValueError(
-            f"Expected keys in `future_covariates` to be a subset of `past_covariates` {first_past_keys}, "
-            f"but found {first_future_keys}"
-        )
-
+    # First pass: validate types and shapes per element so callers get actionable errors
+    # for any malformed dict, regardless of which one it is.
     for idx, d in enumerate(data):
         keys = set(d.keys())
         if not keys.issubset(allowed_keys):
@@ -559,16 +562,9 @@ def _validate_list_of_dicts(
         target = np.asarray(d["target"])
         if target.ndim > 2:
             raise ValueError(
-                f"When the input is a list of dicts, the `target` should either be 1-d with shape (history_length,) "
-                f"or 2-d with shape (n_variates, history_length). Found element at index {idx} "
-                f"with shape {tuple(target.shape)}."
-            )
-        n_targets = 1 if target.ndim == 1 else target.shape[0]
-        if n_targets != first_n_targets:
-            raise ValueError(
-                f"All targets must have the same n_targets. Expected {first_n_targets}, got {n_targets} "
-                f"at index {idx}. Heterogeneous lists with different target shapes are not supported — "
-                f"please loop over the inputs and call the model per-item instead."
+                f"Target must be 1-d or 2-d (got shape {tuple(target.shape)} at index {idx}). "
+                f"When the input is a list of dicts, the `target` should either be 1-d with shape "
+                f"(history_length,) or 2-d with shape (n_variates, history_length)."
             )
         history_length = target.shape[-1]
 
@@ -578,17 +574,12 @@ def _validate_list_of_dicts(
                 f"Found invalid type for `past_covariates` in element at index {idx}. "
                 f'Expected dict with {{"feat_1": tensor_1, ...}}, but found {type(past_covariates)}'
             )
-        if sorted(past_covariates.keys()) != first_past_keys:
-            raise ValueError(
-                f"All past_covariates must have same keys. Expected {first_past_keys}, "
-                f"got {sorted(past_covariates.keys())} at index {idx}. Heterogeneous lists are not supported."
-            )
         for key, val in past_covariates.items():
-            val = np.asarray(val)
-            if val.ndim != 1 or len(val) != history_length:
+            arr = np.asarray(val)
+            if arr.ndim != 1 or len(arr) != history_length:
                 raise ValueError(
                     f"Individual `past_covariates` must be 1-d with length equal to the length of `target` "
-                    f"(= {history_length}), found: {key} with shape {tuple(val.shape)} in element at index {idx}"
+                    f"(= {history_length}), found: {key} with shape {tuple(arr.shape)} in element at index {idx}"
                 )
 
         future_covariates = d.get("future_covariates", {})
@@ -597,19 +588,65 @@ def _validate_list_of_dicts(
                 f"Found invalid type for `future_covariates` in element at index {idx}. "
                 f'Expected dict with {{"feat_1": tensor_1, ...}}, but found {type(future_covariates)}'
             )
-        if sorted(future_covariates.keys()) != first_future_keys:
-            raise ValueError(
-                f"All future_covariates must have same keys. Expected {first_future_keys}, "
-                f"got {sorted(future_covariates.keys())} at index {idx}. Heterogeneous lists are not supported."
-            )
         for key, val in future_covariates.items():
-            val = np.asarray(val)
-            if val.ndim != 1 or len(val) != prediction_length:
+            if val is None or (hasattr(val, "__len__") and len(val) == 0):
+                continue
+            arr = np.asarray(val)
+            if arr.ndim != 1 or len(arr) != prediction_length:
                 raise ValueError(
                     f"Individual `future_covariates` must be 1-d with length equal to the "
-                    f"prediction_length={prediction_length}, "
-                    f"got shape {tuple(val.shape)} at index {idx}"
+                    f"prediction_length={prediction_length}, got shape {tuple(arr.shape)} at index {idx}"
                 )
+
+    # Second pass: cross-element consistency (homogeneous schema).
+    first_target = np.asarray(data[0]["target"])
+    first_n_targets = 1 if first_target.ndim == 1 else first_target.shape[0]
+    first_past_keys = sorted(data[0].get("past_covariates", {}).keys())
+    first_future_keys = sorted(data[0].get("future_covariates", {}).keys())
+    first_future_availability = {
+        k: _is_unavailable(data[0]["future_covariates"][k]) for k in first_future_keys
+    }
+
+    if not set(first_future_keys).issubset(first_past_keys):
+        raise ValueError(
+            f"Expected keys in `future_covariates` must be a subset of `past_covariates` {first_past_keys}, "
+            f"but found {first_future_keys}"
+        )
+
+    for idx, d in enumerate(data):
+        target = np.asarray(d["target"])
+        n_targets = 1 if target.ndim == 1 else target.shape[0]
+        if n_targets != first_n_targets:
+            raise ValueError(
+                f"All targets must have the same n_targets. Expected {first_n_targets}, got {n_targets} "
+                f"at index {idx}. Heterogeneous lists with different target shapes are not supported — "
+                f"please loop over the inputs and call the model per-item instead."
+            )
+
+        past_keys = sorted(d.get("past_covariates", {}).keys())
+        if past_keys != first_past_keys:
+            raise ValueError(
+                f"All past_covariates must have same keys. Expected {first_past_keys}, "
+                f"got {past_keys} at index {idx}. Heterogeneous lists are not supported."
+            )
+
+        future_dict = d.get("future_covariates", {})
+        if sorted(future_dict.keys()) != first_future_keys:
+            raise ValueError(
+                f"All future_covariates must have same keys. Expected {first_future_keys}, "
+                f"got {sorted(future_dict.keys())} at index {idx}. Heterogeneous lists are not supported."
+            )
+        for key in first_future_keys:
+            if _is_unavailable(future_dict[key]) != first_future_availability[key]:
+                raise ValueError(
+                    f"All dicts must agree on whether `future_covariates['{key}']` is available "
+                    f"(None/empty) or provided. Mismatch at index {idx}."
+                )
+
+
+def _is_unavailable(value: Any) -> bool:
+    """A future-covariate value is 'unavailable' if it is None or an empty sequence."""
+    return value is None or (hasattr(value, "__len__") and len(value) == 0)
 
 
 def _target_encode(
