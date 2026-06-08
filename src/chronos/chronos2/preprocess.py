@@ -169,15 +169,18 @@ def from_dataframe(
     import pandas as pd
     import pandas.api.types as ptypes
 
-    # Capture order before sorting so the returned list mirrors df's first-appearance order.
-    original_order = df[id_column].drop_duplicates().tolist()
+    # Group rows by id (in first-appearance order) and sort by timestamp within each group, in
+    # one lexsort over integer keys. Skip the sort entirely if rows are already in that layout.
+    df, codes = _group_and_sort(df, id_column, timestamp_column, coerce_timestamps=validate_inputs)
+    original_order = pd.unique(df[id_column])  # cheap: order is fixed by _group_and_sort
+
+    if future_df is not None:
+        future_df, _ = _group_and_sort(
+            future_df, id_column, timestamp_column, coerce_timestamps=validate_inputs,
+            order=original_order,
+        )
 
     if validate_inputs:
-        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
-        df = df.sort_values([id_column, timestamp_column])
-        if future_df is not None:
-            future_df = future_df.assign(**{timestamp_column: pd.to_datetime(future_df[timestamp_column])})
-            future_df = future_df.sort_values([id_column, timestamp_column])
         _validate_dataframe(
             df=df,
             future_df=future_df,
@@ -186,11 +189,6 @@ def from_dataframe(
             id_column=id_column,
             timestamp_column=timestamp_column,
         )
-
-    # Reindex rows so series appear in original_order, preserving in-series timestamp order.
-    df = df.set_index(id_column, drop=False).loc[original_order].reset_index(drop=True)
-    if future_df is not None:
-        future_df = future_df.set_index(id_column, drop=False).loc[original_order].reset_index(drop=True)
 
     covariate_columns = [
         c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns
@@ -203,7 +201,8 @@ def from_dataframe(
         if ptypes.is_numeric_dtype(df[col]):
             past_covariates[col] = df[col].to_numpy(dtype=np.float32, na_value=np.nan)
         else:
-            past_covariates[col] = df[col].to_numpy(dtype=str)
+            # Pass object dtype through; _build_prepared_inputs factorizes via pd.factorize.
+            past_covariates[col] = df[col].to_numpy()
 
     future_covariates: dict[str, np.ndarray | None] = {}
     if future_df is not None:
@@ -213,13 +212,15 @@ def from_dataframe(
                 if ptypes.is_numeric_dtype(df[col]):
                     future_covariates[col] = future_df[col].to_numpy(dtype=np.float32, na_value=np.nan)
                 else:
-                    future_covariates[col] = future_df[col].to_numpy(dtype=str)
+                    future_covariates[col] = future_df[col].to_numpy()
     elif known_covariates_names is not None:
         for col in known_covariates_names:
             if col in past_covariates:
                 future_covariates[col] = None
 
-    series_lengths = df[id_column].value_counts(sort=False).reindex(original_order).tolist()
+    # codes is already aligned with df rows and contiguous per group, so bincount gives lengths
+    # in original_order without another pass over id strings.
+    series_lengths = np.bincount(codes, minlength=len(original_order)).tolist()
 
     return _build_prepared_inputs(
         target=target,
@@ -326,11 +327,11 @@ def from_list_of_dicts(
 
 
 def _stack_covariate(data: list[dict], group: str, key: str) -> np.ndarray:
-    """Concatenate a single covariate column across all dicts. Returns float32 if numeric, else str."""
+    """Concatenate a single covariate column across all dicts. Returns float32 if numeric, else object."""
     stacked = np.concatenate([np.asarray(d[group][key]) for d in data])
     if np.issubdtype(stacked.dtype, np.number):
         return stacked.astype(np.float32)
-    return stacked.astype(str)
+    return stacked.astype(object)
 
 
 def _build_prepared_inputs(
@@ -394,19 +395,20 @@ def _build_prepared_inputs(
         is_known_future = key in future_covariates
         future_values = future_covariates.get(key)
 
-        if np.issubdtype(values.dtype, np.str_):
-            categories = np.unique(values)
-            cat_to_code = {cat: i for i, cat in enumerate(categories)}
-            n_categories = len(categories)
+        if not np.issubdtype(values.dtype, np.number):
+            import pandas as pd
 
-            past_codes = np.array([cat_to_code[v] for v in values], dtype=np.intp)
+            # use_na_sentinel=False keeps NaN/None as a real category (matches user intent:
+            # "missing is just another value"). pd.factorize is one C-level pass, no sort.
+            past_codes, categories = pd.factorize(values, use_na_sentinel=False)
+            past_codes = past_codes.astype(np.intp, copy=False)
+            n_categories = len(categories)
 
             future_codes = None
             if future_values is not None:
-                # unseen categories map to n_categories (the "unseen" slot in target encoding)
-                future_codes = np.array(
-                    [cat_to_code.get(v, n_categories) for v in future_values], dtype=np.intp
-                )
+                # get_indexer returns -1 for unseen; remap to n_categories (the "unseen" slot).
+                future_codes = pd.Index(categories).get_indexer(future_values)
+                future_codes = np.where(future_codes < 0, n_categories, future_codes).astype(np.intp)
 
             if use_target_encoding and n_targets == 1:
                 enc_past, enc_future = _target_encode(
@@ -473,6 +475,43 @@ def _build_prepared_inputs(
         )
 
     return results
+
+
+def _group_and_sort(
+    df: "pd.DataFrame",
+    id_column: str,
+    timestamp_column: str,
+    coerce_timestamps: bool,
+    order: "np.ndarray | None" = None,
+) -> "tuple[pd.DataFrame, np.ndarray]":
+    """
+    Return (df_reordered, codes) where rows are grouped by id (in first-appearance order, or the
+    `order` argument if given) and sorted by timestamp within each group. `codes[i]` is the
+    group index of row i. Skips the sort if the layout is already correct.
+    """
+    import pandas as pd
+    import pandas.api.types as ptypes
+
+    if coerce_timestamps and not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
+        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
+
+    if order is None:
+        codes, _ = pd.factorize(df[id_column])
+    else:
+        codes = pd.Index(order).get_indexer(df[id_column])
+        if (codes < 0).any():
+            missing = pd.unique(df[id_column][codes < 0])
+            raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
+
+    ts = df[timestamp_column].to_numpy()
+    code_diff = np.diff(codes)
+    grouped = bool(np.all(code_diff >= 0))
+    sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
+    if not sorted_within:
+        perm = np.lexsort([ts, codes])
+        df = df.iloc[perm].reset_index(drop=True)
+        codes = codes[perm]
+    return df, codes
 
 
 def _validate_dataframe(
