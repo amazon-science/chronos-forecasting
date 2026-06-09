@@ -443,18 +443,9 @@ def _build_prepared_inputs(
         if not is_known_future:
             encoded_future.append(nan_future)
 
-    # Cast covariate rows to float32 once (target rows are already float32) so per-series
-    # construction is plain slice + copy.
-    encoded_past = [row.astype(np.float32, copy=False) for row in encoded_past]
-    encoded_future = [row.astype(np.float32, copy=False) for row in encoded_future]
-
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype(np.intp)
     n_rows = n_targets + n_covariates
 
-    # Allocate each series' tensors independently. This keeps the working set per-series
-    # rather than one global block, so each torch tensor owns its storage (no shared buffer
-    # blows up pickling) and the memory footprint scales with the largest series, not the
-    # whole dataset.
     results: list[PreparedInput] = []
     for i in range(n_series):
         p_start, p_end = int(indptr[i]), int(indptr[i + 1])
