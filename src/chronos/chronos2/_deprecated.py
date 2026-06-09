@@ -3,12 +3,6 @@
 
 """
 Deprecated input-preparation helpers kept for backwards compatibility.
-
-These functions used to live in ``chronos.chronos2.dataset``. The new public API
-is in ``chronos.chronos2.preprocess`` (``from_tensor``, ``from_list_of_tensors``,
-``from_dataframe``, ``from_list_of_dicts``); prefer those for new code. The
-helpers here emit a ``DeprecationWarning`` on call and will be removed in a
-future release.
 """
 
 from __future__ import annotations
@@ -150,9 +144,9 @@ def validate_and_prepare_single_dict_input(
     )
 
     context_tensor = torch.cat([target, past_covariates_tensor], dim=0).to(dtype=torch.float32)
-    future_covariates_tensor = torch.cat(
-        [future_covariates_target_padding, future_covariates_tensor], dim=0
-    ).to(dtype=torch.float32)
+    future_covariates_tensor = torch.cat([future_covariates_target_padding, future_covariates_tensor], dim=0).to(
+        dtype=torch.float32
+    )
     n_targets = target.shape[0]
     n_covariates = past_covariates_tensor.shape[0]
     n_future_covariates = len(future_covariates_keys)
