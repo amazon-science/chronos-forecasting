@@ -392,17 +392,26 @@ def _build_prepared_inputs(
         if not np.issubdtype(values.dtype, np.number):
             import pandas as pd
 
-            # use_na_sentinel=False keeps NaN/None as a real category (matches user intent:
-            # "missing is just another value"). pd.factorize is one C-level pass, no sort.
-            past_codes, categories = pd.factorize(values, use_na_sentinel=False)
-            past_codes = past_codes.astype(np.intp, copy=False)
-            n_categories = len(categories)
-
-            future_codes = None
             if future_values is not None:
-                # get_indexer returns -1 for unseen; remap to n_categories (the "unseen" slot).
-                future_codes = pd.Index(categories).get_indexer(future_values)
-                future_codes = np.where(future_codes < 0, n_categories, future_codes).astype(np.intp)
+                all_codes, categories = pd.factorize(
+                    np.concatenate([values, future_values]), use_na_sentinel=False
+                )
+                all_codes = all_codes.astype(np.intp, copy=False)
+                past_codes = all_codes[: len(values)]
+                future_codes = all_codes[len(values) :]
+                n_categories = len(categories)
+                # Categories that appear only in the future go to the "unseen" slot:
+                # target-encoded → item mean, ordinal → NaN.
+                seen_in_past = np.zeros(n_categories, dtype=bool)
+                seen_in_past[past_codes] = True
+                future_codes = np.where(seen_in_past[future_codes], future_codes, n_categories).astype(
+                    np.intp, copy=False
+                )
+            else:
+                past_codes, categories = pd.factorize(values, use_na_sentinel=False)
+                past_codes = past_codes.astype(np.intp, copy=False)
+                n_categories = len(categories)
+                future_codes = None
 
             if use_target_encoding and n_targets == 1:
                 enc_past, enc_future = _target_encode(
@@ -434,33 +443,39 @@ def _build_prepared_inputs(
         if not is_known_future:
             encoded_future.append(nan_future)
 
-    # Stack all rows once into 2D arrays so per-series construction is just slicing.
-    # context_full layout: target rows on top, then encoded covariates (past-only first,
-    # known-future last). future_full layout: NaN padding for targets on top, then encoded_future.
-    if encoded_past:
-        past_block = np.stack(encoded_past).astype(np.float32, copy=False)
-        context_full = np.concatenate([target, past_block], axis=0)
-    else:
-        context_full = target  # already (n_targets, total_rows) float32
-
-    target_future_padding = np.full((n_targets, n_series * prediction_length), np.nan, dtype=np.float32)
-    if encoded_future:
-        future_block = np.stack(encoded_future).astype(np.float32, copy=False)
-        future_full_all = np.concatenate([target_future_padding, future_block], axis=0)
-    else:
-        future_full_all = target_future_padding
+    # Cast covariate rows to float32 once (target rows are already float32) so per-series
+    # construction is plain slice + copy.
+    encoded_past = [row.astype(np.float32, copy=False) for row in encoded_past]
+    encoded_future = [row.astype(np.float32, copy=False) for row in encoded_future]
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype(np.intp)
+    n_rows = n_targets + n_covariates
 
+    # Allocate each series' tensors independently. This keeps the working set per-series
+    # rather than one global block, so each torch tensor owns its storage (no shared buffer
+    # blows up pickling) and the memory footprint scales with the largest series, not the
+    # whole dataset.
     results: list[PreparedInput] = []
     for i in range(n_series):
-        p_start, p_end = indptr[i], indptr[i + 1]
+        p_start, p_end = int(indptr[i]), int(indptr[i + 1])
         f_start = i * prediction_length
         f_end = f_start + prediction_length
+        series_len = p_end - p_start
+
+        context = np.empty((n_rows, series_len), dtype=np.float32)
+        context[:n_targets] = target[:, p_start:p_end]
+        for j, row in enumerate(encoded_past):
+            context[n_targets + j] = row[p_start:p_end]
+
+        future = np.empty((n_rows, prediction_length), dtype=np.float32)
+        future[:n_targets] = np.nan
+        for j, row in enumerate(encoded_future):
+            future[n_targets + j] = row[f_start:f_end]
+
         results.append(
             PreparedInput(
-                context=torch.from_numpy(context_full[:, p_start:p_end]),
-                future_covariates=torch.from_numpy(future_full_all[:, f_start:f_end]),
+                context=torch.from_numpy(context),
+                future_covariates=torch.from_numpy(future),
                 n_targets=n_targets,
                 n_covariates=n_covariates,
                 n_future_covariates=n_future_covariates,
