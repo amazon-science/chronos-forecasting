@@ -362,11 +362,13 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
         from transformers import AutoConfig
 
-        # Handle both torch_dtype (deprecated) and dtype arguments
-        dtype_value = kwargs.pop("torch_dtype", None) or kwargs.pop("dtype", "auto")
-        if dtype_value != "auto" and isinstance(dtype_value, str):
-            dtype_value = cls.dtypes[dtype_value]
-        kwargs["dtype"] = dtype_value
+        # Handle both torch_dtype (deprecated in transformers v5) and dtype arguments
+        torch_dtype_value = kwargs.pop("torch_dtype", None)
+        dtype_value = kwargs.pop("dtype", None)
+        resolved_dtype = torch_dtype_value or dtype_value or "auto"
+        if resolved_dtype != "auto" and isinstance(resolved_dtype, str):
+            resolved_dtype = cls.dtypes[resolved_dtype]
+        kwargs["dtype"] = resolved_dtype
 
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(config, "chronos_config")
