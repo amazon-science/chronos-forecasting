@@ -19,7 +19,7 @@ from transformers.utils import ModelOutput
 _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 
 if _TRANSFORMERS_V5:
-    from transformers import initialization as init
+    from transformers import initialization as init  # type: ignore[no-redef]
 else:
     from torch.nn import init
 

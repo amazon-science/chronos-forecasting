@@ -17,7 +17,7 @@ try:
 except ImportError:
     from contextlib import contextmanager
 
-    @contextmanager
+    @contextmanager  # type: ignore[misc]
     def maybe_autocast(device_type=None, enabled=True):
         with torch.autocast(device_type=device_type, enabled=enabled):
             yield

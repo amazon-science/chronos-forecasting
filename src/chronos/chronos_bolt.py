@@ -34,7 +34,7 @@ _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 # In transformers v5, use guarded init functions that check _is_hf_initialized
 # to avoid re-initializing weights loaded from checkpoint
 if _TRANSFORMERS_V5:
-    from transformers import initialization as init
+    from transformers import initialization as init  # type: ignore[no-redef]
 else:
     from torch.nn import init
 
@@ -50,7 +50,7 @@ def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
     if _TRANSFORMERS_V5:
         return T5Stack(config)
     else:
-        return T5Stack(config, embed_tokens)
+        return T5Stack(config, embed_tokens)  # type: ignore[call-arg]
 
 
 @dataclass
