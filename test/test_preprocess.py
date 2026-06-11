@@ -492,38 +492,43 @@ def test_from_list_of_dicts_ordinal_encoding_when_multivariate():
     assert set(np.unique(future_cat_row).tolist()).issubset({0.0, 1.0})
 
 
-def test_from_list_of_dicts_nan_is_its_own_category_and_matches_across_past_future():
-    """NaN/None in a categorical covariate must factorize as a category that matches itself
-    in past and future — same code, same target encoding — not collapse to the unseen slot.
-    """
-    rng = np.random.default_rng(0)
-    target = rng.standard_normal(12).astype(np.float32)
-    # "x" alternates with NaN in the past; future is all NaN.
-    past_cat = np.array(["x", None, "x", None, "x", None, "x", None, "x", None, "x", None], dtype=object)
-    future_cat = np.array([None, None, None, None], dtype=object)
-
+def test_from_list_of_dicts_nan_is_its_own_target_encoded_category():
+    """NaN is a category with its own mean: distinct from "x", from the item mean, and matching
+    itself across past and future."""
+    target = np.array([10.0, 0.0] * 6, dtype=np.float32)  # "x" -> 10, NaN -> 0
     data = [
         {
             "target": target,
-            "past_covariates": {"cat": past_cat},
-            "future_covariates": {"cat": future_cat},
+            "past_covariates": {"cat": np.array(["x", None] * 6, dtype=object)},
+            "future_covariates": {"cat": np.array([None] * 4, dtype=object)},
         }
     ]
 
     out = from_list_of_dicts(data, prediction_length=4, use_target_encoding=True)
-    prepared = out[0]
+    x_enc, nan_enc = out[0]["context"][-1].numpy()[:2]
+    future_row = out[0]["future_covariates"][-1].numpy()
 
-    past_cat_row = prepared["context"][-1].numpy()
-    future_cat_row = prepared["future_covariates"][-1].numpy()
+    assert nan_enc < target.mean() < x_enc
+    np.testing.assert_array_almost_equal(future_row, np.full(4, nan_enc), decimal=5)
 
-    # Past NaN positions must share encoding with future (since future is all NaN,
-    # all future values must equal the NaN-category encoding seen in the past).
-    nan_encoding_in_past = past_cat_row[1]  # row 1 of past_cat is None
-    np.testing.assert_array_almost_equal(future_cat_row, np.full(4, nan_encoding_in_past), decimal=5)
 
-    # Sanity: NaN's encoding must differ from "x"'s — they are distinct categories.
-    x_encoding_in_past = past_cat_row[0]
-    assert not np.isclose(nan_encoding_in_past, x_encoding_in_past)
+def test_from_list_of_dicts_unseen_future_string_falls_back_to_item_mean():
+    """An unseen future string encodes to the item mean, not the NaN category."""
+    target = np.array([10.0, 0.0] * 6, dtype=np.float32)
+    data = [
+        {
+            "target": target,
+            "past_covariates": {"cat": np.array(["x", None] * 6, dtype=object)},
+            "future_covariates": {"cat": np.array(["zzz_unseen", None], dtype=object)},
+        }
+    ]
+
+    out = from_list_of_dicts(data, prediction_length=2, use_target_encoding=True)
+    future_row = out[0]["future_covariates"][-1].numpy()
+    nan_enc = out[0]["context"][-1].numpy()[1]
+
+    np.testing.assert_almost_equal(future_row[0], target.mean(), decimal=4)
+    np.testing.assert_almost_equal(future_row[1], nan_enc, decimal=4)
 
 
 def test_from_list_of_dicts_ordinal_encoding_unseen_future_is_nan():
