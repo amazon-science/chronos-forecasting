@@ -179,6 +179,17 @@ def test_from_list_of_dicts_does_not_mutate_caller_data():
     assert data[0]["future_covariates"]["feat"] is None
 
 
+def test_from_list_of_dicts_raises_for_unknown_known_covariates_names():
+    data = [
+        {
+            "target": np.random.randn(10).astype(np.float32),
+            "past_covariates": {"feat": np.random.randn(10).astype(np.float32)},
+        }
+    ]
+    with pytest.raises(ValueError, match="known_covariates_names must all be"):
+        from_list_of_dicts(data, prediction_length=5, known_covariates_names=["does_not_exist"])
+
+
 def test_from_list_of_dicts_raises_when_future_keys_not_subset_of_past():
     data = [
         {
@@ -275,6 +286,17 @@ def test_from_dataframe_raises_when_future_df_and_known_covariates_names_both_gi
             prediction_length=5,
             future_df=future_df,
             known_covariates_names=["cov1"],
+        )
+
+
+def test_from_dataframe_raises_for_unknown_known_covariates_names():
+    df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], covariates=["cov1"], freq="h")
+    with pytest.raises(ValueError, match="known_covariates_names contains columns not present"):
+        from_dataframe(
+            df=df,
+            target_columns=["target"],
+            prediction_length=5,
+            known_covariates_names=["does_not_exist"],
         )
 
 
