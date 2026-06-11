@@ -15,7 +15,8 @@
 
 
 ## 🚀 News
-- **30 Dec 2025**: ☁️ Deploy Chronos-2 to AWS with Amazon SageMaker: new guide covers real-time inference (GPU/CPU), serverless endpoints with automatic scaling, and batch transform for large-scale forecasting. See the [deployment tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb).
+- **5 Jun 2026**: ☁️ Deploy Chronos-2 to AWS with [AutoGluon-Cloud](https://github.com/autogluon/autogluon-cloud) — real-time, serverless, or batch inference in 3 lines of code, pandas DataFrames in, forecasts out. See the [new deployment guide](https://auto.gluon.ai/cloud/stable/tutorials/foundation-model-timeseries.html).
+- **30 Dec 2025**: 🧠 Deploy Chronos-2 to AWS with Amazon SageMaker JumpStart — production-ready real-time endpoints on CPU or GPU, ready to integrate into your existing AWS workflows. See the [deployment tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb).
 - **20 Oct 2025**: 🚀 [Chronos-2](https://huggingface.co/amazon/chronos-2) released. It offers _zero-shot_ support for univariate, multivariate, and covariate-informed forecasting tasks. Chronos-2 achieves the best performance on fev-bench, GIFT-Eval and Chronos Benchmark II amongst pretrained models. Check out [this notebook](notebooks/chronos-2-quickstart.ipynb) to get started with Chronos-2.
 - **12 Dec 2024**: 📊 We released [`fev`](https://github.com/autogluon/fev), a lightweight package for benchmarking time series forecasting models based on the [Hugging Face `datasets`](https://huggingface.co/docs/datasets/en/index) library.
 - **26 Nov 2024**: ⚡️ Chronos-Bolt models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos-Bolt models are more accurate (5% lower error), up to 250x faster and 20x more memory efficient than the original Chronos models of the same size!
@@ -59,7 +60,9 @@ pip install chronos-forecasting
 ```
 
 > [!TIP]
-> For reliable production use, we recommend using Chronos-2 models through [Amazon SageMaker JumpStart](https://aws.amazon.com/sagemaker/ai/jumpstart/). Check out [this tutorial](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos-2 inference endpoints to AWS with just a few lines of code.
+> For production use, we recommend deploying Chronos-2 to Amazon SageMaker. Two options:
+> - **[AutoGluon-Cloud](https://auto.gluon.ai/cloud/stable/tutorials/foundation-model-timeseries.html)** (recommended) — high-level Python API. Pandas DataFrames in, forecasts out. Real-time, serverless, and batch inference out of the box.
+> - **[SageMaker JumpStart](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)** — production-ready real-time endpoints on CPU or GPU, ready to integrate into your existing AWS workflows.
 
 
 ### Forecasting
@@ -125,7 +128,8 @@ plt.legend()
   <a href="https://colab.research.google.com/github/amazon-science/chronos-forecasting/blob/main/notebooks/chronos-2-quickstart.ipynb">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" height="18" align="absmiddle">
   </a>
-- [Deploy Chronos-2 on Amazon SageMaker](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
+- [Deploy Chronos-2 to AWS with AutoGluon-Cloud](https://auto.gluon.ai/cloud/stable/tutorials/foundation-model-timeseries.html) (recommended)
+- [Deploy Chronos-2 to AWS with SageMaker JumpStart](notebooks/deploy-chronos-to-amazon-sagemaker.ipynb)
 
 ## 📝 Citation
 
