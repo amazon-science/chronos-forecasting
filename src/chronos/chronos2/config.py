@@ -95,7 +95,10 @@ class Chronos2CoreConfig(PretrainedConfig):
         kwargs.pop("eos_token_id", None)
 
         super().__init__(
-            pad_token_id=pad_token_id, is_encoder_decoder=False, attn_implementation=attn_implementation, **kwargs
+            pad_token_id=pad_token_id,
+            is_encoder_decoder=False,
+            attn_implementation=attn_implementation,
+            **kwargs,  # type: ignore[call-arg]
         )
 
 

@@ -21,6 +21,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import IterableDataset, get_worker_info
 import transformers
+from packaging import version
 from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForCausalLM,
@@ -46,6 +47,7 @@ from gluonts.transform import (
 
 from chronos import ChronosConfig, ChronosTokenizer
 
+_TRANSFORMERS_V5 = version.parse(transformers.__version__) >= version.parse("5.0.0")
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
@@ -661,7 +663,7 @@ def main(
         per_device_train_batch_size=per_device_train_batch_size,
         learning_rate=learning_rate,
         lr_scheduler_type=lr_scheduler_type,
-        warmup_ratio=warmup_ratio,
+        **({"warmup_steps": round(warmup_ratio * max_steps)} if _TRANSFORMERS_V5 else {"warmup_ratio": warmup_ratio}),
         optim=optim,
         logging_strategy="steps",
         logging_steps=log_steps,
