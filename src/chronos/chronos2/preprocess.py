@@ -5,13 +5,12 @@
 Preprocessing module for converting various input formats to list[PreparedInput] expected by Chronos2Dataset.
 """
 
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import Any, TypedDict
 
 import numpy as np
+import pandas as pd
+import pandas.api.types as ptypes
 import torch
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 class PreparedInput(TypedDict):
@@ -48,8 +47,7 @@ def from_tensor(
         data = torch.from_numpy(data)
     if data.ndim != 3:
         raise ValueError(
-            f"Expected 3-d tensor with shape (n_series, n_variates, history_length), "
-            f"got shape {tuple(data.shape)}."
+            f"Expected 3-d tensor with shape (n_series, n_variates, history_length), got shape {tuple(data.shape)}."
         )
 
     data = data.to(dtype=torch.float32)
@@ -113,10 +111,10 @@ def from_list_of_tensors(
 
 
 def from_dataframe(
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     target_columns: list[str],
     prediction_length: int,
-    future_df: "pd.DataFrame | None" = None,
+    future_df: pd.DataFrame | None = None,
     known_covariates_names: list[str] | None = None,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
@@ -166,14 +164,13 @@ def from_dataframe(
     if future_df is not None and known_covariates_names is not None:
         raise ValueError("Cannot provide both future_df and known_covariates_names")
 
-    import pandas as pd
-    import pandas.api.types as ptypes
-
     if validate_inputs:
         df = _normalize_df(df, id_column, timestamp_column)
         if future_df is not None:
             future_df = _normalize_df(
-                future_df, id_column, timestamp_column,
+                future_df,
+                id_column,
+                timestamp_column,
                 order=pd.unique(df[id_column]),
             )
         _validate_dataframe(
@@ -185,18 +182,19 @@ def from_dataframe(
             timestamp_column=timestamp_column,
         )
 
-    covariate_columns = [
-        c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns
-    ]
+    covariate_columns = [c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns]
 
     target = df[target_columns].to_numpy(dtype=np.float32, na_value=np.nan).T
 
-    # df is the source of truth for whether a covariate is numeric (float32) or categorical (category dtype).
-    past_covariates = _to_covariate_dict(df, df, covariate_columns)
+    # Normalize each past covariate to float32 (numeric) or "category"; this dtype drives encoding.
+    # Future columns are passed through raw — _encode_categorical re-maps them onto the past categories.
+    past_covariates = {
+        c: df[c].astype(np.float32 if ptypes.is_numeric_dtype(df[c]) else "category") for c in covariate_columns
+    }
 
     if future_df is not None:
         known_future_columns = [c for c in covariate_columns if c in future_df.columns]
-        future_covariates = _to_covariate_dict(future_df, df, known_future_columns)
+        future_covariates = {c: future_df[c] for c in known_future_columns}
     elif known_covariates_names is not None:
         known_future_columns = [c for c in known_covariates_names if c in covariate_columns]
         future_covariates = {}  # values unavailable → NaN-filled
@@ -311,35 +309,16 @@ def from_list_of_dicts(
     )
 
 
-def _stack_covariate(data: list[dict], group: str, key: str) -> "pd.Series":
+def _stack_covariate(data: list[dict], group: str, key: str) -> pd.Series:
     """Concatenate a covariate column across dicts into a Series: float32 if numeric, else "category"."""
-    import pandas as pd
-
     stacked = np.concatenate([np.asarray(d[group][key]) for d in data])
     dtype = np.float32 if np.issubdtype(stacked.dtype, np.number) else "category"
     return pd.Series(stacked, dtype=dtype)
 
 
-def _to_covariate_dict(
-    source: "pd.DataFrame", numeric_ref: "pd.DataFrame", columns: list[str]
-) -> "dict[str, pd.Series]":
-    """
-    Extract `columns` from `source` into {name: Series} with float32 / "category" dtypes.
-
-    `numeric_ref` (the past df) decides each column's kind, so a future column is typed consistently
-    with its past counterpart even if its own values would infer a different dtype.
-    """
-    import pandas.api.types as ptypes
-
-    return {
-        col: source[col].astype(np.float32 if ptypes.is_numeric_dtype(numeric_ref[col]) else "category")
-        for col in columns
-    }
-
-
 def _encode_categorical(
-    past: "pd.Series",
-    future: "pd.Series | None",
+    past: pd.Series,
+    future: pd.Series | None,
     target: np.ndarray,
     id_codes: np.ndarray,
     future_id_codes: np.ndarray,
@@ -383,8 +362,8 @@ def _encode_categorical(
 
 def _build_prepared_inputs(
     target: np.ndarray,
-    past_covariates: "dict[str, pd.Series]",
-    future_covariates: "dict[str, pd.Series]",
+    past_covariates: dict[str, pd.Series],
+    future_covariates: dict[str, pd.Series],
     known_future_columns: list[str],
     series_lengths: list[int],
     prediction_length: int,
@@ -423,8 +402,6 @@ def _build_prepared_inputs(
     -------
     list[PreparedInput], one per series
     """
-    import pandas as pd
-
     n_series = len(series_lengths)
     n_targets = target.shape[0]
     n_covariates = len(past_covariates)
@@ -435,9 +412,8 @@ def _build_prepared_inputs(
     future_id_codes = np.repeat(np.arange(n_series), prediction_length)
 
     # past-only first, known-future last (Chronos2Dataset relies on this row order)
-    known_future_set = set(known_future_columns)
-    ordered_columns = [c for c in past_covariates if c not in known_future_set]
-    ordered_columns += [c for c in past_covariates if c in known_future_set]
+    ordered_columns = [c for c in past_covariates if c not in known_future_columns]
+    ordered_columns += [c for c in past_covariates if c in known_future_columns]
     n_future_covariates = len(known_future_columns)
 
     encoded_past: list[np.ndarray] = []
@@ -461,10 +437,7 @@ def _build_prepared_inputs(
             enc_future = future.to_numpy(dtype=np.float32, na_value=np.nan) if future is not None else None
 
         encoded_past.append(enc_past)
-        if col in known_future_set:
-            encoded_future.append(enc_future if enc_future is not None else nan_future)
-        else:
-            encoded_future.append(nan_future)
+        encoded_future.append(enc_future if enc_future is not None else nan_future)
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype(np.intp)
     n_rows = n_targets + n_covariates
@@ -500,19 +473,16 @@ def _build_prepared_inputs(
 
 
 def _normalize_df(
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     id_column: str,
     timestamp_column: str,
-    order: "np.ndarray | None" = None,
-) -> "pd.DataFrame":
+    order: np.ndarray | None = None,
+) -> pd.DataFrame:
     """
     Return a df with the timestamp column coerced to datetime, rows grouped by id (in
     first-appearance order, or `order` if given), and sorted by timestamp within each group.
     Skips the sort if rows are already in that layout.
     """
-    import pandas as pd
-    import pandas.api.types as ptypes
-
     if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
         df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
 
@@ -535,8 +505,8 @@ def _normalize_df(
 
 
 def _validate_dataframe(
-    df: "pd.DataFrame",
-    future_df: "pd.DataFrame | None",
+    df: pd.DataFrame,
+    future_df: pd.DataFrame | None,
     target_columns: list[str],
     prediction_length: int,
     id_column: str,
@@ -551,8 +521,6 @@ def _validate_dataframe(
     - All series have >= 3 points
     - future_df has same item_ids and exactly prediction_length rows per series
     """
-    import pandas.api.types as ptypes
-
     required = {id_column, timestamp_column} | set(target_columns)
     missing = required - set(df.columns)
     if missing:
@@ -565,9 +533,7 @@ def _validate_dataframe(
     series_sizes = df[id_column].value_counts(sort=False)
     short_series = series_sizes[series_sizes < 3]
     if len(short_series) > 0:
-        raise ValueError(
-            f"All series must have >= 3 points. Found {len(short_series)} series with fewer."
-        )
+        raise ValueError(f"All series must have >= 3 points. Found {len(short_series)} series with fewer.")
 
     if future_df is not None:
         if id_column not in future_df.columns:
@@ -662,9 +628,7 @@ def _validate_list_of_dicts(
     first_n_targets = 1 if first_target.ndim == 1 else first_target.shape[0]
     first_past_keys = sorted(data[0].get("past_covariates", {}).keys())
     first_future_keys = sorted(data[0].get("future_covariates", {}).keys())
-    first_future_availability = {
-        k: _is_unavailable(data[0]["future_covariates"][k]) for k in first_future_keys
-    }
+    first_future_availability = {k: _is_unavailable(data[0]["future_covariates"][k]) for k in first_future_keys}
 
     if not set(first_future_keys).issubset(first_past_keys):
         raise ValueError(
