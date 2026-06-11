@@ -191,27 +191,18 @@ def from_dataframe(
 
     target = df[target_columns].to_numpy(dtype=np.float32, na_value=np.nan).T
 
-    past_covariates: dict[str, np.ndarray] = {}
-    for col in covariate_columns:
-        if ptypes.is_numeric_dtype(df[col]):
-            past_covariates[col] = df[col].to_numpy(dtype=np.float32, na_value=np.nan)
-        else:
-            # Pass object dtype through; _build_prepared_inputs factorizes via pd.factorize.
-            past_covariates[col] = df[col].to_numpy()
+    # df is the source of truth for whether a covariate is numeric (float32) or categorical (category dtype).
+    past_covariates = _to_covariate_frame(df, df, covariate_columns)
 
-    future_covariates: dict[str, np.ndarray | None] = {}
     if future_df is not None:
-        for col in covariate_columns:
-            if col in future_df.columns:
-                # dtype from df (not future_df) is the source of truth
-                if ptypes.is_numeric_dtype(df[col]):
-                    future_covariates[col] = future_df[col].to_numpy(dtype=np.float32, na_value=np.nan)
-                else:
-                    future_covariates[col] = future_df[col].to_numpy()
+        known_future_columns = [c for c in covariate_columns if c in future_df.columns]
+        future_covariates = _to_covariate_frame(future_df, df, known_future_columns)
     elif known_covariates_names is not None:
-        for col in known_covariates_names:
-            if col in past_covariates:
-                future_covariates[col] = None
+        known_future_columns = [c for c in known_covariates_names if c in covariate_columns]
+        future_covariates = pd.DataFrame()  # values unavailable → NaN-filled
+    else:
+        known_future_columns = []
+        future_covariates = pd.DataFrame()
 
     # df is already grouped by id; value_counts(sort=False) returns lengths in that order.
     series_lengths = df[id_column].value_counts(sort=False).tolist()
@@ -220,6 +211,7 @@ def from_dataframe(
         target=target,
         past_covariates=past_covariates,
         future_covariates=future_covariates,
+        known_future_columns=known_future_columns,
         series_lengths=series_lengths,
         prediction_length=prediction_length,
         use_target_encoding=use_target_encoding,
@@ -271,6 +263,8 @@ def from_list_of_dicts(
     if len(data) == 0:
         return []
 
+    import pandas as pd
+
     if validate_inputs:
         _validate_list_of_dicts(data=data, prediction_length=prediction_length)
 
@@ -292,71 +286,138 @@ def from_list_of_dicts(
         series_lengths.append(t.shape[-1])
     target = np.concatenate(target_arrays, axis=1)
 
-    past_covariates = {key: _stack_covariate(data, "past_covariates", key) for key in past_covariate_keys}
+    past_covariates = pd.DataFrame(
+        {key: _stack_covariate(data, "past_covariates", key) for key in past_covariate_keys}
+    )
 
-    # Per-key handling: a future-covariate value of None/empty marks the column as
-    # known-future-but-values-unavailable (NaN-filled). The validator guarantees that
-    # all dicts agree per key, so checking the first dict is sufficient.
-    future_covariates: dict[str, np.ndarray | None] = {}
-    for key in future_covariate_keys:
-        first_value = data[0]["future_covariates"][key]
-        if first_value is None or len(first_value) == 0:
-            future_covariates[key] = None
-        else:
-            future_covariates[key] = _stack_covariate(data, "future_covariates", key)
-
+    # A future-covariate value of None/empty marks the column as known-future-but-values-unavailable
+    # (NaN-filled); a non-empty value provides the actual future data. The validator guarantees all
+    # dicts agree per key, so the first dict decides. known_covariates_names is the same NaN-filled case.
     if known_covariates_names is not None:
-        for col in known_covariates_names:
-            if col in past_covariates:
-                future_covariates[col] = None
+        known_future_columns = [c for c in known_covariates_names if c in past_covariates.columns]
+        future_covariates = pd.DataFrame()  # values unavailable → NaN-filled
+    else:
+        known_future_columns = future_covariate_keys
+        future_covariates = pd.DataFrame(
+            {
+                key: _stack_covariate(data, "future_covariates", key)
+                for key in future_covariate_keys
+                if not _is_unavailable(data[0]["future_covariates"][key])
+            }
+        )
 
     return _build_prepared_inputs(
         target=target,
         past_covariates=past_covariates,
         future_covariates=future_covariates,
+        known_future_columns=known_future_columns,
         series_lengths=series_lengths,
         prediction_length=prediction_length,
         use_target_encoding=use_target_encoding,
     )
 
 
-def _stack_covariate(data: list[dict], group: str, key: str) -> np.ndarray:
-    """Concatenate a single covariate column across all dicts. Returns float32 if numeric, else object."""
+def _stack_covariate(data: list[dict], group: str, key: str) -> "pd.Series":
+    """Concatenate a covariate column across dicts into a Series: float32 if numeric, else "category"."""
+    import pandas as pd
+
     stacked = np.concatenate([np.asarray(d[group][key]) for d in data])
-    if np.issubdtype(stacked.dtype, np.number):
-        return stacked.astype(np.float32)
-    return stacked.astype(object)
+    dtype = np.float32 if np.issubdtype(stacked.dtype, np.number) else "category"
+    return pd.Series(stacked, dtype=dtype)
+
+
+def _to_covariate_frame(source: "pd.DataFrame", numeric_ref: "pd.DataFrame", columns: list[str]) -> "pd.DataFrame":
+    """
+    Extract `columns` from `source` into a covariate frame with float32 / "category" dtypes.
+
+    `numeric_ref` (the past df) decides each column's kind, so a future frame is typed consistently
+    with its past counterpart even if its own values would infer a different dtype.
+    """
+    import pandas as pd
+    import pandas.api.types as ptypes
+
+    out = {
+        col: source[col].astype(np.float32 if ptypes.is_numeric_dtype(numeric_ref[col]) else "category")
+        for col in columns
+    }
+    return pd.DataFrame(out, index=source.index)
+
+
+def _encode_categorical(
+    past: "pd.Series",
+    future: "pd.Series | None",
+    target: np.ndarray,
+    id_codes: np.ndarray,
+    future_id_codes: np.ndarray,
+    n_series: int,
+    target_encode: bool,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """
+    Encode one categorical covariate to float32. The future series is mapped onto the past's
+    categories so codes line up; NaN and future-unseen values get code -1.
+
+    With `target_encode`, returns per-item target-encoded values (-1 codes fall back to item mean).
+    Otherwise returns ordinal codes as float, with -1 codes mapped to NaN.
+    """
+    n_categories = len(past.dtype.categories)
+    past_codes = past.cat.codes.to_numpy(dtype=np.intp)
+    future_codes = None
+    if future is not None:
+        future_codes = future.astype(past.dtype).cat.codes.to_numpy(dtype=np.intp)
+
+    if target_encode:
+        # Map the -1 ("missing"/unseen) code into the sentinel slot so it resolves to the item mean.
+        sentinel = n_categories
+        past_te = np.where(past_codes < 0, sentinel, past_codes)
+        future_te = np.where(future_codes < 0, sentinel, future_codes) if future_codes is not None else None
+        return _target_encode(
+            id_codes=id_codes,
+            cat_codes=past_te,
+            target=target[0],
+            n_items=n_series,
+            n_categories=n_categories,
+            future_id_codes=future_id_codes if future_te is not None else None,
+            future_cat_codes=future_te,
+        )
+
+    enc_past = np.where(past_codes < 0, np.nan, past_codes).astype(np.float32)
+    enc_future = None
+    if future_codes is not None:
+        enc_future = np.where(future_codes < 0, np.nan, future_codes).astype(np.float32)
+    return enc_past, enc_future
 
 
 def _build_prepared_inputs(
     target: np.ndarray,
-    past_covariates: dict[str, np.ndarray],
-    future_covariates: dict[str, np.ndarray | None],
+    past_covariates: "pd.DataFrame",
+    future_covariates: "pd.DataFrame",
+    known_future_columns: list[str],
     series_lengths: list[int],
     prediction_length: int,
     use_target_encoding: bool,
 ) -> list[PreparedInput]:
     """
-    Build list[PreparedInput] from stacked arrays. Handles categorical encoding.
+    Build list[PreparedInput] from stacked covariate frames. Handles categorical encoding.
 
     Assumptions
     -----------
-    - Arrays are stacked in item order (item 0's rows first, then item 1's, etc.)
-    - Categorical columns have str dtype; numeric columns have float32 dtype
-    - future_covariates keys are a subset of past_covariates keys
-    - Key present in future_covariates = known-future covariate
-    - Value is the actual future data (shape: n_series * prediction_length) or None if unavailable
+    - Rows are stacked in item order (item 0's rows first, then item 1's, etc.)
+    - Covariate columns are either float32 (numeric) or "category" dtype (categorical)
+    - known_future_columns is a subset of past_covariates' columns. A known-future column whose
+      future values are available also appears in future_covariates; otherwise it is NaN-filled.
 
     Parameters
     ----------
     target
         Shape: (n_targets, total_context_rows), dtype float32
     past_covariates
-        {name: values} for all covariates (past-only and known-future)
-        Each array shape: (total_context_rows,)
+        Covariate values for every series, one column per covariate (past-only and known-future).
+        Length total_context_rows.
     future_covariates
-        {name: values_or_None} for known-future covariates.
-        Each array shape: (n_series * prediction_length,), or None if values unavailable.
+        Future values for the known-future covariates whose values are available.
+        Length n_series * prediction_length.
+    known_future_columns
+        Covariates known into the future (NaN-filled when absent from future_covariates).
     series_lengths
         Context length of each series (sum = total_context_rows)
     prediction_length
@@ -368,79 +429,47 @@ def _build_prepared_inputs(
     -------
     list[PreparedInput], one per series
     """
+    import pandas as pd
+
     n_series = len(series_lengths)
     n_targets = target.shape[0]
-    n_covariates = len(past_covariates)
-    n_future_covariates = len(future_covariates)
+    n_covariates = past_covariates.shape[1]
     nan_future = np.full(n_series * prediction_length, np.nan, dtype=np.float32)
+    target_encode = use_target_encoding and n_targets == 1
 
     id_codes = np.repeat(np.arange(n_series), series_lengths)
     future_id_codes = np.repeat(np.arange(n_series), prediction_length)
 
+    # past-only first, known-future last (Chronos2Dataset relies on this row order)
+    known_future_set = set(known_future_columns)
+    ordered_columns = [c for c in past_covariates.columns if c not in known_future_set]
+    ordered_columns += [c for c in past_covariates.columns if c in known_future_set]
+    n_future_covariates = len(known_future_columns)
+
     encoded_past: list[np.ndarray] = []
     encoded_future: list[np.ndarray] = []
+    for col in ordered_columns:
+        past = past_covariates[col]
+        future = future_covariates[col] if col in future_covariates.columns else None
 
-    # past-only first, known-future last (Chronos2Dataset relies on this row order)
-    past_only = [k for k in past_covariates if k not in future_covariates]
-    known_future = [k for k in past_covariates if k in future_covariates]
-
-    for key in past_only + known_future:
-        values = past_covariates[key]
-        is_known_future = key in future_covariates
-        future_values = future_covariates.get(key)
-
-        if not np.issubdtype(values.dtype, np.number):
-            import pandas as pd
-
-            if future_values is not None:
-                all_codes, categories = pd.factorize(
-                    np.concatenate([values, future_values]), use_na_sentinel=False
-                )
-                all_codes = all_codes.astype(np.intp, copy=False)
-                past_codes = all_codes[: len(values)]
-                future_codes = all_codes[len(values) :]
-                n_categories = len(categories)
-                # Categories that appear only in the future go to the "unseen" slot:
-                # target-encoded → item mean, ordinal → NaN.
-                seen_in_past = np.zeros(n_categories, dtype=bool)
-                seen_in_past[past_codes] = True
-                future_codes = np.where(seen_in_past[future_codes], future_codes, n_categories).astype(
-                    np.intp, copy=False
-                )
-            else:
-                past_codes, categories = pd.factorize(values, use_na_sentinel=False)
-                past_codes = past_codes.astype(np.intp, copy=False)
-                n_categories = len(categories)
-                future_codes = None
-
-            if use_target_encoding and n_targets == 1:
-                enc_past, enc_future = _target_encode(
-                    id_codes=id_codes,
-                    cat_codes=past_codes,
-                    target=target[0],
-                    n_items=n_series,
-                    n_categories=n_categories,
-                    future_id_codes=future_id_codes if future_codes is not None else None,
-                    future_cat_codes=future_codes,
-                )
-                encoded_past.append(enc_past)
-                if is_known_future:
-                    encoded_future.append(enc_future if enc_future is not None else nan_future)
-            else:
-                encoded_past.append(past_codes.astype(np.float32))
-                if is_known_future:
-                    if future_codes is not None:
-                        encoded = future_codes.astype(np.float32)
-                        encoded[future_codes == n_categories] = np.nan
-                        encoded_future.append(encoded)
-                    else:
-                        encoded_future.append(nan_future)
+        if isinstance(past.dtype, pd.CategoricalDtype):
+            enc_past, enc_future = _encode_categorical(
+                past=past,
+                future=future,
+                target=target,
+                id_codes=id_codes,
+                future_id_codes=future_id_codes,
+                n_series=n_series,
+                target_encode=target_encode,
+            )
         else:
-            encoded_past.append(values)
-            if is_known_future:
-                encoded_future.append(future_values if future_values is not None else nan_future)
+            enc_past = past.to_numpy(dtype=np.float32, na_value=np.nan)
+            enc_future = future.to_numpy(dtype=np.float32, na_value=np.nan) if future is not None else None
 
-        if not is_known_future:
+        encoded_past.append(enc_past)
+        if col in known_future_set:
+            encoded_future.append(enc_future if enc_future is not None else nan_future)
+        else:
             encoded_future.append(nan_future)
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype(np.intp)
