@@ -10,8 +10,17 @@ from einops import rearrange
 from torch import nn
 from transformers.activations import ACT2FN
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
-from transformers.utils.generic import maybe_autocast
 from transformers.utils import ModelOutput
+
+try:
+    from transformers.utils.generic import maybe_autocast
+except ImportError:
+    from contextlib import contextmanager
+
+    @contextmanager
+    def maybe_autocast(device_type=None, enabled=True):
+        with torch.autocast(device_type=device_type, enabled=enabled):
+            yield
 
 from .config import Chronos2CoreConfig
 
