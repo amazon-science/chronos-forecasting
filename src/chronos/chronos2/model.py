@@ -21,7 +21,7 @@ _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 if _TRANSFORMERS_V5:
     from transformers import initialization as init  # type: ignore[no-redef]
 else:
-    from torch.nn import init
+    from torch.nn import init  # type: ignore[no-redef]
 
 from chronos.chronos_bolt import InstanceNorm, Patch
 

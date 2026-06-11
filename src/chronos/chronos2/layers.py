@@ -17,10 +17,11 @@ try:
 except ImportError:
     from contextlib import contextmanager
 
-    @contextmanager  # type: ignore[misc]
-    def maybe_autocast(device_type=None, enabled=True):
+    @contextmanager
+    def maybe_autocast(device_type=None, enabled=True):  # type: ignore[misc]
         with torch.autocast(device_type=device_type, enabled=enabled):
             yield
+
 
 from .config import Chronos2CoreConfig
 
@@ -319,7 +320,9 @@ class MHA(nn.Module):
             value_states = shape(self.v(hidden_states))
             if self.use_rope:
                 cos, sin = self.rope_embed(value_states, position_ids)
-                query_states, key_states = Chronos2RotaryEmbedding.apply_rotary_pos_emb(query_states, key_states, cos, sin)
+                query_states, key_states = Chronos2RotaryEmbedding.apply_rotary_pos_emb(
+                    query_states, key_states, cos, sin
+                )
 
         if attn_implementation == "sdpa":
             attn_output, attn_weights = self._sdpa_attention(query_states, key_states, value_states, mask)

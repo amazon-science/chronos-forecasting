@@ -36,7 +36,7 @@ _TRANSFORMERS_V5 = version.parse(transformers_version) >= version.parse("5.0.0")
 if _TRANSFORMERS_V5:
     from transformers import initialization as init  # type: ignore[no-redef]
 else:
-    from torch.nn import init
+    from torch.nn import init  # type: ignore[no-redef]
 
 
 def _create_t5_stack(config: T5Config, embed_tokens: nn.Embedding) -> T5Stack:
@@ -175,11 +175,8 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
     ]
     _keys_to_ignore_on_load_unexpected = [r"lm_head.weight"]  # type: ignore
     # In transformers v5, _tied_weights_keys changed from list to dict {target: source}
-    _tied_weights_keys = (  # type: ignore
-        {
-            "encoder.embed_tokens.weight": "shared.weight",
-            "decoder.embed_tokens.weight": "shared.weight",
-        }
+    _tied_weights_keys = (
+        {"encoder.embed_tokens.weight": "shared.weight", "decoder.embed_tokens.weight": "shared.weight"}  # type: ignore[assignment]
         if _TRANSFORMERS_V5
         else ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
     )

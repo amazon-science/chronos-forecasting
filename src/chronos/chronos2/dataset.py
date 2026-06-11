@@ -199,9 +199,9 @@ def validate_and_prepare_single_dict_input(
     )
 
     context_tensor = torch.cat([target, past_covariates_tensor], dim=0).to(dtype=torch.float32)
-    future_covariates_tensor = torch.cat(
-        [future_covariates_target_padding, future_covariates_tensor], dim=0
-    ).to(dtype=torch.float32)
+    future_covariates_tensor = torch.cat([future_covariates_target_padding, future_covariates_tensor], dim=0).to(
+        dtype=torch.float32
+    )
     n_targets = target.shape[0]
     n_covariates = past_covariates_tensor.shape[0]
     # number of known-future covariates
@@ -580,9 +580,7 @@ class Chronos2Dataset(IterableDataset):
 
             if n_future_covariates > 0:
                 # the last n_future_covariates elements in context_tensor are the known covariates
-                future_covariates = past_tensor[
-                    -n_future_covariates:, slice_idx : slice_idx + self.prediction_length
-                ]
+                future_covariates = past_tensor[-n_future_covariates:, slice_idx : slice_idx + self.prediction_length]
             else:
                 # zero-length tensor for easy concatenation later
                 future_covariates = torch.zeros((0, self.prediction_length))
