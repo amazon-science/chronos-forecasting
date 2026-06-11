@@ -177,6 +177,7 @@ def from_dataframe(
             df=df,
             future_df=future_df,
             target_columns=target_columns,
+            known_covariates_names=known_covariates_names,
             prediction_length=prediction_length,
             id_column=id_column,
             timestamp_column=timestamp_column,
@@ -196,7 +197,7 @@ def from_dataframe(
         known_future_columns = [c for c in covariate_columns if c in future_df.columns]
         future_covariates = {c: future_df[c] for c in known_future_columns}
     elif known_covariates_names is not None:
-        known_future_columns = [c for c in known_covariates_names if c in covariate_columns]
+        known_future_columns = known_covariates_names
         future_covariates = {}  # values unavailable → NaN-filled
     else:
         known_future_columns = []
@@ -262,7 +263,9 @@ def from_list_of_dicts(
         return []
 
     if validate_inputs:
-        _validate_list_of_dicts(data=data, prediction_length=prediction_length)
+        _validate_list_of_dicts(
+            data=data, prediction_length=prediction_length, known_covariates_names=known_covariates_names
+        )
 
     first_future_dict = data[0].get("future_covariates") or {}
     if first_future_dict and known_covariates_names is not None:
@@ -288,7 +291,7 @@ def from_list_of_dicts(
     # (NaN-filled); a non-empty value provides the actual future data. The validator guarantees all
     # dicts agree per key, so the first dict decides. known_covariates_names is the same NaN-filled case.
     if known_covariates_names is not None:
-        known_future_columns = [c for c in known_covariates_names if c in past_covariates]
+        known_future_columns = known_covariates_names
         future_covariates = {}  # values unavailable → NaN-filled
     else:
         known_future_columns = future_covariate_keys
@@ -508,6 +511,7 @@ def _validate_dataframe(
     df: pd.DataFrame,
     future_df: pd.DataFrame | None,
     target_columns: list[str],
+    known_covariates_names: list[str] | None,
     prediction_length: int,
     id_column: str,
     timestamp_column: str,
@@ -518,6 +522,7 @@ def _validate_dataframe(
     Checks:
     - Required columns exist
     - Target columns are numeric
+    - known_covariates_names are all covariate columns
     - All series have >= 3 points
     - future_df has same item_ids and exactly prediction_length rows per series
     """
@@ -529,6 +534,12 @@ def _validate_dataframe(
     for col in target_columns:
         if not ptypes.is_numeric_dtype(df[col]):
             raise ValueError(f"Target column '{col}' must be numeric, got dtype {df[col].dtype}")
+
+    if known_covariates_names is not None:
+        covariate_columns = set(df.columns) - {id_column, timestamp_column} - set(target_columns)
+        unknown = set(known_covariates_names) - covariate_columns
+        if unknown:
+            raise ValueError(f"known_covariates_names contains columns not present in df: {unknown}")
 
     series_sizes = df[id_column].value_counts(sort=False)
     short_series = series_sizes[series_sizes < 3]
@@ -554,6 +565,7 @@ def _validate_dataframe(
 def _validate_list_of_dicts(
     data: list[dict],
     prediction_length: int,
+    known_covariates_names: list[str] | None = None,
 ) -> None:
     """
     Validate list[dict] structure. Raises ValueError on failure.
@@ -564,6 +576,7 @@ def _validate_list_of_dicts(
     - All targets have the same n_targets and are 1-d or 2-d
     - All past_covariates have the same column names across dicts
     - All future_covariates have the same column names and are a subset of past_covariates
+    - known_covariates_names are all past_covariates keys
     - future_covariates values are None, empty, or 1-d with length == prediction_length
     - For a given future-covariate key, all dicts must agree on availability (None or non-None)
     - past_covariates values are 1-d with length == target's history length
@@ -635,6 +648,14 @@ def _validate_list_of_dicts(
             f"Expected keys in `future_covariates` must be a subset of `past_covariates` {first_past_keys}, "
             f"but found {first_future_keys}"
         )
+
+    if known_covariates_names is not None:
+        unknown = set(known_covariates_names) - set(first_past_keys)
+        if unknown:
+            raise ValueError(
+                f"known_covariates_names must all be `past_covariates` keys {first_past_keys}, "
+                f"but found unknown columns: {unknown}"
+            )
 
     for idx, d in enumerate(data):
         target = np.asarray(d["target"])
