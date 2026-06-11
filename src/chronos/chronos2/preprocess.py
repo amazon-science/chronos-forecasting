@@ -330,36 +330,42 @@ def _encode_categorical(
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """
     Encode one categorical covariate to float32. The future series is mapped onto the past's
-    categories so codes line up; NaN and future-unseen values get code -1.
+    categories so codes line up. NaN is its own category (slot `n_real`); future values unseen in
+    the past go to the sentinel slot above it.
 
-    With `target_encode`, returns per-item target-encoded values (-1 codes fall back to item mean).
-    Otherwise returns ordinal codes as float, with -1 codes mapped to NaN.
+    With `target_encode`, returns per-item target-encoded values (the NaN slot gets its own mean;
+    the sentinel slot falls back to item mean). Otherwise returns ordinal codes as float, with the
+    sentinel mapped to NaN.
     """
-    n_categories = len(past.dtype.categories)
+    n_real = len(past.dtype.categories)
+    nan_slot = n_real  # NaN is a real category: it accumulates its own per-item mean / ordinal code
+    n_categories = n_real + 1  # _target_encode adds the unseen sentinel slot above these
+
+    # .cat.codes gives -1 for missing; in the past, -1 can only be NaN → fold it into nan_slot.
     past_codes = past.cat.codes.to_numpy(dtype=np.intp)
+    past_codes = np.where(past_codes < 0, nan_slot, past_codes)
+
     future_codes = None
     if future is not None:
-        future_codes = future.astype(past.dtype).cat.codes.to_numpy(dtype=np.intp)
+        codes = future.astype(past.dtype).cat.codes.to_numpy(dtype=np.intp)
+        # -1 means either NaN (→ nan_slot) or a string unseen in the past (→ sentinel).
+        future_codes = np.where(codes < 0, np.where(future.isna().to_numpy(), nan_slot, n_categories), codes)
 
     if target_encode:
-        # Map the -1 ("missing"/unseen) code into the sentinel slot so it resolves to the item mean.
-        sentinel = n_categories
-        past_te = np.where(past_codes < 0, sentinel, past_codes)
-        future_te = np.where(future_codes < 0, sentinel, future_codes) if future_codes is not None else None
         return _target_encode(
             id_codes=id_codes,
-            cat_codes=past_te,
+            cat_codes=past_codes,
             target=target[0],
             n_items=n_series,
             n_categories=n_categories,
-            future_id_codes=future_id_codes if future_te is not None else None,
-            future_cat_codes=future_te,
+            future_id_codes=future_id_codes if future_codes is not None else None,
+            future_cat_codes=future_codes,
         )
 
-    enc_past = np.where(past_codes < 0, np.nan, past_codes).astype(np.float32)
+    enc_past = past_codes.astype(np.float32)  # past codes are always valid slots, never the sentinel
     enc_future = None
     if future_codes is not None:
-        enc_future = np.where(future_codes < 0, np.nan, future_codes).astype(np.float32)
+        enc_future = np.where(future_codes == n_categories, np.nan, future_codes).astype(np.float32)
     return enc_past, enc_future
 
 
