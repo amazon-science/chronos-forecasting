@@ -368,7 +368,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         resolved_dtype = torch_dtype_value or dtype_value or "auto"
         if resolved_dtype != "auto" and isinstance(resolved_dtype, str):
             resolved_dtype = cls.dtypes[resolved_dtype]
-        kwargs["dtype"] = resolved_dtype
+        kwargs["torch_dtype"] = resolved_dtype
 
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         is_valid_config = hasattr(config, "chronos_pipeline_class") or hasattr(config, "chronos_config")
