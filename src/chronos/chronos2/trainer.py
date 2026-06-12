@@ -74,6 +74,28 @@ class Chronos2Trainer(Trainer):
 
         return DataLoader(train_dataset, **dataloader_params)  # type: ignore
 
+    def _move_model_to_device(self, model, device):
+        """
+        Keep the model on its existing CUDA device when fine-tuning a single-device model.
+
+        `Trainer` may otherwise move a model loaded on e.g. `cuda:5` to `args.device` (often `cuda:0`).
+        """
+        model_device = getattr(model, "device", None)
+        model_device_type = getattr(model_device, "type", None)
+        target_device_type = getattr(device, "type", None)
+        has_hf_device_map = getattr(model, "hf_device_map", None) is not None
+
+        if (
+            not has_hf_device_map
+            and model_device is not None
+            and model_device_type == "cuda"
+            and target_device_type == "cuda"
+            and model_device != device
+        ):
+            device = model_device
+
+        super()._move_model_to_device(model, device)
+
     def get_eval_dataloader(self, eval_dataset: str | Dataset | None = None) -> DataLoader:
         if self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
