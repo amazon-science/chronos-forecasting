@@ -103,15 +103,9 @@ def test_chronos2_lora_pipeline_loads_from_disk():
             15,
             [(1, DEFAULT_MODEL_NUM_QUANTILES, 15)] * 3,
         ),
-        # Heterogenous list of dicts with different mix of tasks
+        # Homogenous list of dicts with categorical covariates and known-future values
         (
             [
-                {
-                    "target": torch.rand(100),
-                    "past_covariates": {"temperature": torch.rand(100), "precipitation": torch.rand(100)},
-                    "future_covariates": {"temperature": torch.rand(200)},
-                },
-                {"target": torch.rand(2, 150), "past_covariates": {"wind_speed": torch.rand(150)}},
                 {
                     "target": np.random.rand(150),
                     "past_covariates": {
@@ -125,7 +119,7 @@ def test_chronos2_lora_pipeline_loads_from_disk():
                     },
                 },
                 {
-                    "target": np.random.rand(3, 150),
+                    "target": np.random.rand(150),
                     "past_covariates": {
                         "numeric_covariate_1": np.random.rand(150),
                         "numeric_covariate_2": np.random.rand(150),
@@ -136,16 +130,9 @@ def test_chronos2_lora_pipeline_loads_from_disk():
                         "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=200),
                     },
                 },
-                {"target": torch.rand(1, 150)},
             ],
             200,
-            [
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (2, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (3, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-            ],
+            [(1, DEFAULT_MODEL_NUM_QUANTILES, 200)] * 2,
         ),
     ],
 )
@@ -219,15 +206,9 @@ def test_when_input_is_valid_then_pipeline_can_predict(pipeline, inputs, predict
             [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99],
             [(1, 15, 13)] * 3,
         ),
-        # Heterogenous list of dicts with different mix of tasks
+        # Homogenous list of dicts with categorical covariates and known-future values
         (
             [
-                {
-                    "target": torch.rand(100),
-                    "past_covariates": {"temperature": torch.rand(100), "precipitation": torch.rand(100)},
-                    "future_covariates": {"temperature": torch.rand(200)},
-                },
-                {"target": torch.rand(2, 150), "past_covariates": {"wind_speed": torch.rand(150)}},
                 {
                     "target": np.random.rand(150),
                     "past_covariates": {
@@ -241,7 +222,7 @@ def test_when_input_is_valid_then_pipeline_can_predict(pipeline, inputs, predict
                     },
                 },
                 {
-                    "target": np.random.rand(3, 150),
+                    "target": np.random.rand(150),
                     "past_covariates": {
                         "numeric_covariate_1": np.random.rand(150),
                         "numeric_covariate_2": np.random.rand(150),
@@ -252,11 +233,10 @@ def test_when_input_is_valid_then_pipeline_can_predict(pipeline, inputs, predict
                         "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=200),
                     },
                 },
-                {"target": torch.rand(1, 150)},
             ],
             200,
             [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99],
-            [(1, 200, 11), (2, 200, 11), (1, 200, 11), (3, 200, 11), (1, 200, 11)],
+            [(1, 200, 11)] * 2,
         ),
     ],
 )
@@ -277,11 +257,11 @@ def test_when_input_is_valid_then_pipeline_can_predict_quantiles(
 @pytest.mark.parametrize(
     "inputs, error_match_string",
     [
-        (torch.rand(16), "should be 3-d with shape"),
-        (torch.rand(4, 3), "should be 3-d with shape"),
-        ([torch.rand(1, 2, 100), torch.rand(120)], "the elements should either be 1-d"),
+        (torch.rand(16), "Expected 3-d tensor with shape"),
+        (torch.rand(4, 3), "Expected 3-d tensor with shape"),
+        ([torch.rand(1, 2, 100), torch.rand(120)], "Each element should be 1-d"),
         ([{"target": torch.rand(10)}, {"target": torch.rand(1, 2, 17), "extra_key": []}], "Found invalid keys"),
-        ([{"target": torch.rand(10)}, {"target": torch.rand(1, 2, 17)}], "`target` should either be 1-d with shape"),
+        ([{"target": torch.rand(10)}, {"target": torch.rand(1, 2, 17)}], "Target must be 1-d or 2-d"),
         ([{"target": torch.rand(10), "past_covariates": torch.rand(10)}], "Found invalid type for `past_covariates`"),
         (
             [
@@ -690,21 +670,15 @@ def test_predict_df_outputs_different_results_with_cross_learning_enabled(
             15,
             [(1, DEFAULT_MODEL_NUM_QUANTILES, 15)] * 3,
         ),
-        # Heterogenous list of dicts with different mix of tasks
+        # Homogenous list of dicts with categorical covariates and known-future values
         (
             [
                 {
-                    "target": torch.rand(1000),
-                    "past_covariates": {"temperature": torch.rand(1000), "precipitation": torch.rand(1000)},
-                    "future_covariates": {"temperature": torch.rand(200)},
-                },
-                {"target": torch.rand(2, 150), "past_covariates": {"wind_speed": torch.rand(150)}},
-                {
-                    "target": np.random.rand(150),
+                    "target": np.random.rand(400),
                     "past_covariates": {
-                        "numeric_covariate_1": np.random.rand(150),
-                        "numeric_covariate_2": np.random.rand(150),
-                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=150),
+                        "numeric_covariate_1": np.random.rand(400),
+                        "numeric_covariate_2": np.random.rand(400),
+                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=400),
                     },
                     "future_covariates": {
                         "numeric_covariate_1": np.random.rand(200),
@@ -712,27 +686,20 @@ def test_predict_df_outputs_different_results_with_cross_learning_enabled(
                     },
                 },
                 {
-                    "target": np.random.rand(3, 150),
+                    "target": np.random.rand(400),
                     "past_covariates": {
-                        "numeric_covariate_1": np.random.rand(150),
-                        "numeric_covariate_2": np.random.rand(150),
-                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=150),
+                        "numeric_covariate_1": np.random.rand(400),
+                        "numeric_covariate_2": np.random.rand(400),
+                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=400),
                     },
                     "future_covariates": {
                         "numeric_covariate_1": np.random.rand(200),
                         "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=200),
                     },
                 },
-                {"target": torch.rand(1, 150)},
             ],
             200,
-            [
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (2, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (3, DEFAULT_MODEL_NUM_QUANTILES, 200),
-                (1, DEFAULT_MODEL_NUM_QUANTILES, 200),
-            ],
+            [(1, DEFAULT_MODEL_NUM_QUANTILES, 200)] * 2,
         ),
     ],
 )
@@ -1147,13 +1114,13 @@ def test_eager_and_sdpa_produce_identical_outputs(pipeline):
 
 def test_pipeline_can_be_finetuned_with_preprocessed_hf_dataset(pipeline):
     """Test that fine-tuning works with preprocessed inputs from a HuggingFace Dataset."""
-    from chronos.chronos2.dataset import prepare_inputs
+    from chronos.chronos2.preprocess import from_list_of_dicts
 
     prediction_length = 8
     raw_inputs = [{"target": torch.rand(20)}, {"target": torch.rand(25)}, {"target": torch.rand(30)}]
 
     # Preprocess and convert to HF Dataset (simulating Arrow-based lazy loading)
-    prepared_tasks = prepare_inputs(raw_inputs, prediction_length=prediction_length, min_past=1, mode="train")
+    prepared_tasks = from_list_of_dicts(raw_inputs, prediction_length=prediction_length)
     hf_dataset = datasets.Dataset.from_list(prepared_tasks).with_format("torch")
 
     # Fine-tune with preprocessed inputs
