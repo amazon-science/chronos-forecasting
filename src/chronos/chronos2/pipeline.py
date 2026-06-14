@@ -165,7 +165,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             If True, ensures that DataParallel is disabled and training happens on a single GPU
         convert_inputs
             If True (default), preprocess raw inputs (convert tensors, encode categoricals, validate).
-            If False, inputs are expected to be already preprocessed using `chronos.chronos2.dataset.prepare_inputs`.
+            If False, inputs are expected to be already preprocessed using `chronos.chronos2.preprocess.from_*`.
             This allows for efficient training on large datasets that don't fit in memory.
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
@@ -489,6 +489,10 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 covariates and values must be 1-d `torch.Tensor` or `np.ndarray` with length equal to the `prediction_length`. All keys in
                 `future_covariates` must be a subset of the keys in `past_covariates`.
 
+              All dictionaries in the list must share the same schema: the same `target` shape (`n_variates`) and the same
+              `past_covariates` / `future_covariates` keys (the `history_length` may differ across dictionaries). To forecast
+              inputs with different schemas, loop over them and call the model once per schema.
+
             Examples:
             ```python
 
@@ -498,46 +502,29 @@ class Chronos2Pipeline(BaseChronosPipeline):
             # Batch of multivariate time series
             inputs = torch.randn(32, 3, 100)
 
-            # List of time series with different lengths and n_variates
+            # List of univariate time series with different lengths
             inputs = [
-                torch.randn(100),  # univariate series of length 100
-                torch.randn(2, 150),  # bivariate series of length 150
-                torch.randn(120),  # univariate series of length 120
+                torch.randn(100),
+                torch.randn(150),
+                torch.randn(120),
             ]
 
-            # List of dictionaries with covariates
+            # List of dictionaries with covariates (one numeric and one categorical covariate known into the future).
+            # Note: categorical covariates are only supported as numpy arrays as torch does not support str dtype.
             prediction_length = 24
             inputs = [
                 {
-                    # task with 1-d target, one past-only covariate and one known future covariate
-                    "target": torch.randn(100),
-                    "past_covariates": {"temperature": torch.randn(100), "precipitation": torch.randn(100)},
-                    "future_covariates": {"temperature": torch.randn(prediction_length)},
-                },
-                {
-                    # task with 2-d target and one past-only covariate
-                    "target": torch.randn(2, 150),
-                    "past_covariates": {"wind_speed": torch.randn(150)},
-                },
-                {
-                    # task with 1-d target, two numeric covariates one of which is known into the future
-                    # and one categorical covariate known into the future
-                    # Note: categorical covariates are only supported as numpy arrays as torch does not support str dtype
-                    "target": np.random.randn(150),
+                    "target": np.random.randn(history_length),
                     "past_covariates": {
-                        "numeric_covariate_1": np.random.rand(150),
-                        "numeric_covariate_2": np.random.rand(150),
-                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=150),
+                        "temperature": np.random.rand(history_length),
+                        "weather_type": np.random.choice(["sunny", "cloudy", "rainy"], size=history_length),
                     },
                     "future_covariates": {
-                        "numeric_covariate_1": np.random.rand(prediction_length),
-                        "cat_covariate": np.random.choice(["A", "B", "C", "D", "E"], size=prediction_length),
+                        "temperature": np.random.rand(prediction_length),
+                        "weather_type": np.random.choice(["sunny", "cloudy", "rainy"], size=prediction_length),
                     },
-                },
-                {
-                    # task with only a 1-d target
-                    "target": torch.randn(1, 150)
-                },
+                }
+                for history_length in [100, 150, 120]
             ]
             ```
         prediction_length

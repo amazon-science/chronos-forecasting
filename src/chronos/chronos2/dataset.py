@@ -5,12 +5,34 @@
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence, TypeAlias, cast
 
 import numpy as np
 import torch
-from sklearn.preprocessing import OrdinalEncoder, TargetEncoder
 from torch.utils.data import IterableDataset
+
+from chronos.chronos2 import preprocess
+from chronos.chronos2._deprecated import (
+    convert_list_of_tensors_input_to_list_of_dicts_input,
+    convert_tensor_input_to_list_of_dicts_input,
+    prepare_inputs,
+    validate_and_prepare_single_dict_input,
+)
+from chronos.chronos2.preprocess import PreparedInput
+
+__all__ = [
+    "Chronos2Dataset",
+    "DatasetMode",
+    "PreparedInput",
+    "convert_fev_window_to_list_of_dicts_input",
+    "left_pad_and_cat_2D",
+    "validate_prepared_schema",
+    # Deprecated re-exports — prefer chronos.chronos2.preprocess.from_* for new code.
+    "convert_list_of_tensors_input_to_list_of_dicts_input",
+    "convert_tensor_input_to_list_of_dicts_input",
+    "prepare_inputs",
+    "validate_and_prepare_single_dict_input",
+]
 
 if TYPE_CHECKING:
     import datasets
@@ -18,16 +40,6 @@ if TYPE_CHECKING:
 
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
-
-
-class PreparedInput(TypedDict):
-    """A preprocessed time series input ready for model training/inference."""
-
-    context: torch.Tensor  # (n_variates, history_length), float32
-    future_covariates: torch.Tensor  # (n_variates, prediction_length), float32
-    n_targets: int
-    n_covariates: int
-    n_future_covariates: int
 
 
 def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
@@ -45,219 +57,6 @@ def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
         padded.append(tensor)
 
     return torch.cat(padded, dim=0)
-
-
-def validate_and_prepare_single_dict_input(
-    raw_input: Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]], idx: int, prediction_length: int
-) -> PreparedInput:
-    """Validates and prepares a single dictionary input for Chronos2Model.
-
-    Parameters
-    ----------
-    raw_input
-        A dictionary representing a time series that contains:
-        - `target` (required): a 1-d or 2-d `torch.Tensor` or `np.ndarray` of shape (history_length,) or (n_variates, history_length).
-        Forecasts will be generated for items in `target`.
-        - `past_covariates` (optional): a dict of past-only covariates or past values of known future covariates. The keys of the dict
-        must be names of the covariates and values must be 1-d `torch.Tensor` or `np.ndarray` with length equal to the `history_length`
-        of `target`.
-        - `future_covariates` (optional): a dict of future values of known future covariates. The keys of the dict must be names of the
-        covariates and values must be 1-d `torch.Tensor` or `np.ndarray` with length equal to the `prediction_length`. All keys in
-        `future_covariates` must be a subset of the keys in `past_covariates`.
-    idx
-        Index of this input in the list of inputs, used for error messages
-    prediction_length
-        Number of future time steps to predict, used to validate future covariates
-
-    Returns
-    ------
-    A PreparedInput containing:
-    - context: Concatenated tensor of target and past covariates of shape (group_size, history_length),
-        the first `n_targets` items along the first axis contain the target variables and the remaining items contain past-only covariates
-        and past values of known future covariates.
-    - future_covariates: Tensor of future covariates of shape (group_size, prediction_length). The last `n_future_covariates`
-        items along the first axis contain future covariates. All the remaining elements corresponding to target and past-only covariates are NaNs.
-    - n_targets: Number of target variables
-    - n_covariates: Total number of covariates (sum of past-only and known future covariates)
-    - n_future_covariates: Number of known future covariates
-    """
-
-    allowed_keys = {"target", "past_covariates", "future_covariates"}
-
-    # validate keys
-    keys = set(raw_input.keys())
-    if not keys.issubset(allowed_keys):
-        raise ValueError(
-            f"Found invalid keys in element at index {idx}. Allowed keys are {allowed_keys}, but found {keys}"
-        )
-    if "target" not in keys:
-        raise ValueError(f"Element at index {idx} does not contain the required key 'target'")
-
-    # validate target
-    target = raw_input["target"]
-    if isinstance(target, np.ndarray):
-        target = torch.from_numpy(target)
-    assert isinstance(target, torch.Tensor)
-    if target.ndim > 2:
-        raise ValueError(
-            "When the input is a list of dicts, the `target` should either be 1-d with shape (history_length,) "
-            f" or 2-d with shape (n_variates, history_length). Found element at index {idx} with shape {tuple(target.shape)}."
-        )
-    history_length = target.shape[-1]
-    target = target.view(-1, history_length)
-
-    # validate past_covariates
-    cat_encoders: dict = {}
-    past_covariates = raw_input.get("past_covariates", {})
-    if not isinstance(past_covariates, dict):
-        raise ValueError(
-            f"Found invalid type for `past_covariates` in element at index {idx}. "
-            f'Expected dict with {{"feat_1": tensor_1, "feat_2": tensor_2, ...}}, but found {type(past_covariates)}'
-        )
-
-    # gather keys and ensure known-future keys come last to match downstream assumptions
-    covariates_keys = sorted(past_covariates.keys())
-
-    future_covariates = raw_input.get("future_covariates", {})
-    if not isinstance(future_covariates, dict):
-        raise ValueError(
-            f"Found invalid type for `future_covariates` in element at index {idx}. "
-            f'Expected dict with {{"feat_1": tensor_1, "feat_2": tensor_2, ...}}, but found {type(future_covariates)}'
-        )
-    future_covariates_keys = sorted(future_covariates.keys())
-    if not set(future_covariates_keys).issubset(covariates_keys):
-        raise ValueError(
-            f"Expected keys in `future_covariates` to be a subset of `past_covariates` {covariates_keys}, "
-            f"but found {future_covariates_keys} in element at index {idx}"
-        )
-
-    # create ordered keys: past-only first, then known-future (so known-future are the last rows)
-    past_only_keys = [k for k in covariates_keys if k not in future_covariates_keys]
-    ordered_covariate_keys = past_only_keys + future_covariates_keys
-
-    past_covariates_list: list[torch.Tensor] = []
-    for key in ordered_covariate_keys:
-        tensor = past_covariates[key]
-        if isinstance(tensor, np.ndarray):
-            # apply encoding to categorical variates
-            if not np.issubdtype(tensor.dtype, np.number):
-                # target encoding, if the target is 1-d
-                if target.shape[0] == 1:
-                    cat_encoder = TargetEncoder(target_type="continuous", smooth=1.0)
-                    X = tensor.astype(str).reshape(-1, 1)
-                    y = target.view(-1).numpy()
-                    mask = np.isfinite(y)
-                    X = X[mask]
-                    y = y[mask]
-                    cat_encoder.fit(X, y)
-                # ordinal encoding, if the target is > 1-d
-                else:
-                    cat_encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=np.nan)
-                    cat_encoder.fit(tensor.astype(str).reshape(-1, 1))
-                tensor = cat_encoder.transform(tensor.astype(str).reshape(-1, 1)).reshape(tensor.shape)
-                cat_encoders[key] = cat_encoder
-            tensor = torch.from_numpy(tensor)
-        assert isinstance(tensor, torch.Tensor)
-        if tensor.ndim != 1 or len(tensor) != history_length:
-            raise ValueError(
-                f"Individual `past_covariates` must be 1-d with length equal to the length of `target` (= {history_length}), "
-                f"found: {key} with shape {tuple(tensor.shape)} in element at index {idx}"
-            )
-        past_covariates_list.append(tensor)
-    past_covariates_tensor = (
-        torch.stack(past_covariates_list, dim=0)
-        if past_covariates_list
-        else torch.zeros((0, history_length), device=target.device)
-    )
-
-    # validate future_covariates (build rows in the same ordered_covariate_keys order)
-    future_covariates_list: list[torch.Tensor] = []
-    for key in ordered_covariate_keys:
-        # future values of past-only covariates are filled with NaNs
-        tensor = future_covariates.get(key, torch.full((prediction_length,), fill_value=torch.nan))
-        if isinstance(tensor, np.ndarray):
-            # apply encoding to categorical variates
-            if not np.issubdtype(tensor.dtype, np.number):
-                cat_encoder = cat_encoders[key]
-                tensor = cat_encoder.transform(tensor.astype(str).reshape(-1, 1)).reshape(tensor.shape)
-            tensor = torch.from_numpy(tensor)
-        assert isinstance(tensor, torch.Tensor)
-        if tensor.ndim != 1 or len(tensor) != prediction_length:
-            raise ValueError(
-                f"Individual `future_covariates` must be 1-d with length equal to the {prediction_length=}, "
-                f"found: {key} with shape {tuple(tensor.shape)} in element at index {idx}"
-            )
-        future_covariates_list.append(tensor)
-    future_covariates_tensor = (
-        torch.stack(future_covariates_list, dim=0)
-        if future_covariates_list
-        else torch.zeros((0, prediction_length), device=target.device)
-    )
-    # future values of target series are filled with NaNs
-    future_covariates_target_padding = torch.full(
-        (target.shape[0], prediction_length), fill_value=torch.nan, device=target.device
-    )
-
-    context_tensor = torch.cat([target, past_covariates_tensor], dim=0).to(dtype=torch.float32)
-    future_covariates_tensor = torch.cat([future_covariates_target_padding, future_covariates_tensor], dim=0).to(
-        dtype=torch.float32
-    )
-    n_targets = target.shape[0]
-    n_covariates = past_covariates_tensor.shape[0]
-    # number of known-future covariates
-    n_future_covariates = len(future_covariates_keys)
-
-    return PreparedInput(
-        context=context_tensor,
-        future_covariates=future_covariates_tensor,
-        n_targets=n_targets,
-        n_covariates=n_covariates,
-        n_future_covariates=n_future_covariates,
-    )
-
-
-def prepare_inputs(
-    raw_inputs: Iterable[Mapping[str, Any]],
-    prediction_length: int,
-    min_past: int = 1,
-    mode: "DatasetMode | str" = "train",
-) -> list[PreparedInput]:
-    """Prepare multiple time series inputs for training/inference.
-
-    This function handles mode-specific preprocessing (e.g., filtering short series)
-    and calls validate_and_prepare_single_dict_input for each input.
-    """
-    inputs: list[PreparedInput] = []
-
-    for idx, raw_input in enumerate(raw_inputs):
-        # For non-TEST modes, fix future_covariates (replace None/empty with NaN arrays)
-        if mode != DatasetMode.TEST:
-            raw_future_covariates = raw_input.get("future_covariates", {})
-            if raw_future_covariates:
-                raw_future_covariates = cast(dict[str, TensorOrArray | None], raw_future_covariates)
-                fixed_future_covariates = {}
-                for key, value in raw_future_covariates.items():
-                    fixed_future_covariates[key] = (
-                        np.full(prediction_length, np.nan) if value is None or len(value) == 0 else value
-                    )
-                raw_input = {**raw_input, "future_covariates": fixed_future_covariates}
-
-        raw_input = cast(dict[str, TensorOrArray | Mapping[str, TensorOrArray]], raw_input)
-        prepared = validate_and_prepare_single_dict_input(raw_input, idx, prediction_length)
-
-        # Filter by minimum length (except in TEST mode)
-        if mode != DatasetMode.TEST and prepared["context"].shape[-1] < min_past + prediction_length:
-            continue
-
-        inputs.append(prepared)
-
-    if len(inputs) == 0:
-        raise ValueError(
-            "The dataset is empty after filtering based on the length of the time series (length >= min_past + prediction_length). "
-            "Please provide longer time series or reduce `min_past` or `prediction_length`. "
-        )
-
-    return inputs
 
 
 def validate_prepared_schema(prepared_input: Any) -> None:
@@ -297,74 +96,6 @@ def validate_prepared_schema(prepared_input: Any) -> None:
             f"got {context.shape[0]} and {future_covariates.shape[0]}. "
             "Set convert_inputs=True when calling fit() to preprocess raw inputs."
         )
-
-
-def convert_list_of_tensors_input_to_list_of_dicts_input(
-    list_of_tensors: Sequence[TensorOrArray],
-) -> list[dict[str, torch.Tensor]]:
-    """Convert a list of tensors input format to a list of dictionaries input format.
-
-
-    Parameters
-    ----------
-    list_of_tensors
-        A sequence of tensors or numpy arrays, where each element represents a time series.
-        Each element should be either 1-d with shape (history_length,) or 2-d with shape
-        (n_variates, history_length).
-
-    Returns
-    -------
-    A list of dictionaries, where each dictionary represents a time series and contains:
-    - `target`: a 1-d or 2-d torch.Tensor of shape (history_length,) or (n_variates, history_length).
-    """
-
-    output: list[dict[str, torch.Tensor]] = []
-    for idx, tensor in enumerate(list_of_tensors):
-        if isinstance(tensor, np.ndarray):
-            tensor = torch.from_numpy(tensor)
-        if tensor.ndim > 2:
-            raise ValueError(
-                "When the input is a list of torch tensors or numpy arrays, the elements should either be 1-d with shape (history_length,) "
-                f" or 2-d with shape (n_variates, history_length). Found element at index {idx} with shape {tuple(tensor.shape)}."
-            )
-        length = tensor.shape[-1]
-        tensor = tensor.view(-1, length)
-
-        output.append({"target": tensor})
-
-    return output
-
-
-def convert_tensor_input_to_list_of_dicts_input(tensor: TensorOrArray) -> list[dict[str, torch.Tensor]]:
-    """
-    Convert a tensor input format to a list of dictionaries input format.
-
-    Parameters
-    ----------
-    tensor
-        A tensor or numpy array representing multiple time series.
-        Should be 3-d with shape (n_series, n_variates, history_length).
-
-    Returns
-    -------
-    A list of dictionaries, where each dictionary represents a time series and contains:
-    - `target`: a 2-d torch.Tensor of shape (n_variates, history_length).
-    """
-
-    if isinstance(tensor, np.ndarray):
-        tensor = torch.from_numpy(tensor)
-    if tensor.ndim != 3:
-        raise ValueError(
-            "When the input is a torch tensor or numpy array, it should be 3-d with shape (n_series, n_variates, history_length). "
-            f" Found shape: {tuple(tensor.shape)}."
-        )
-
-    output: list[dict[str, torch.Tensor]] = []
-    n_series = len(tensor)
-    for i in range(n_series):
-        output.append({"target": tensor[i]})
-
-    return output
 
 
 def _cast_fev_features(
@@ -486,9 +217,12 @@ class Chronos2Dataset(IterableDataset):
              covariates.
            - `future_covariates` (optional): a dict of future values of known future covariates.
 
+           All dictionaries must share the same schema: the same `target` shape (`n_variates`) and the same
+           `past_covariates` / `future_covariates` keys (the `history_length` may differ across dictionaries).
+
         2. Pre-processed inputs (when `convert_inputs=False`): A sequence of `PreparedInput` dicts with keys:
            `context`, `future_covariates`, `n_targets`, `n_covariates`, `n_future_covariates`.
-           Use `prepare_inputs()` to create pre-processed inputs.
+           Use the `chronos.chronos2.preprocess.from_*` functions to create pre-processed inputs.
     context_length
         The maximum context length used for training or inference
     prediction_length
@@ -525,15 +259,29 @@ class Chronos2Dataset(IterableDataset):
         self.inputs: Sequence[PreparedInput]
         if convert_inputs:
             if isinstance(inputs, (torch.Tensor, np.ndarray)):
-                inputs = convert_tensor_input_to_list_of_dicts_input(inputs)
+                self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
             elif (
                 isinstance(inputs, Sequence) and len(inputs) > 0 and isinstance(inputs[0], (torch.Tensor, np.ndarray))
             ):
-                inputs = convert_list_of_tensors_input_to_list_of_dicts_input(cast(Sequence[TensorOrArray], inputs))
-            self.inputs = prepare_inputs(cast(Iterable[Mapping[str, Any]], inputs), prediction_length, min_past, mode)
+                self.inputs = preprocess.from_list_of_tensors(
+                    cast("list[TensorOrArray]", inputs), prediction_length=prediction_length
+                )
+            else:
+                self.inputs = preprocess.from_list_of_dicts(
+                    cast(list[dict], inputs), prediction_length=prediction_length
+                )
         else:
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
+
+        if mode != DatasetMode.TEST:
+            self.inputs = [x for x in self.inputs if x["context"].shape[-1] >= min_past + prediction_length]
+            if len(self.inputs) == 0:
+                raise ValueError(
+                    "The dataset is empty after filtering based on the length of the time series "
+                    "(length >= min_past + prediction_length). Please provide longer time series or "
+                    "reduce `min_past` or `prediction_length`."
+                )
 
         self.context_length = context_length
         self.prediction_length = prediction_length
