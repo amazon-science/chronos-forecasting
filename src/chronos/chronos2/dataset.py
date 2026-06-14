@@ -217,6 +217,9 @@ class Chronos2Dataset(IterableDataset):
              covariates.
            - `future_covariates` (optional): a dict of future values of known future covariates.
 
+           All dictionaries must share the same schema: the same `target` shape (`n_variates`) and the same
+           `past_covariates` / `future_covariates` keys (the `history_length` may differ across dictionaries).
+
         2. Pre-processed inputs (when `convert_inputs=False`): A sequence of `PreparedInput` dicts with keys:
            `context`, `future_covariates`, `n_targets`, `n_covariates`, `n_future_covariates`.
            Use the `chronos.chronos2.preprocess.from_*` functions to create pre-processed inputs.
