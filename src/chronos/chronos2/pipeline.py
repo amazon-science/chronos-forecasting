@@ -809,7 +809,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
     def predict_df(
         self,
         df: pd.DataFrame,
-        future_df: "pd.DataFrame | None" = None,
+        future_df: pd.DataFrame | None = None,
         id_column: str = "item_id",
         timestamp_column: str = "timestamp",
         target: str | list[str] = "target",
