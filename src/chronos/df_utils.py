@@ -8,6 +8,126 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import pandas.api.types as ptypes
+
+
+def normalize_df(
+    df: "pd.DataFrame",
+    id_column: str = "item_id",
+    timestamp_column: str = "timestamp",
+    order: "np.ndarray | None" = None,
+) -> "pd.DataFrame":
+    """
+    Return a df with the timestamp column coerced to datetime, rows grouped by id (in
+    first-appearance order, or `order` if given), and sorted by timestamp within each group.
+    Skips the sort if rows are already in that layout.
+    """
+    if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
+        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
+
+    if order is None:
+        codes, _ = pd.factorize(df[id_column])
+    else:
+        codes = pd.Index(order).get_indexer(df[id_column])
+        if (codes < 0).any():
+            missing = pd.unique(df[id_column][codes < 0])
+            raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
+
+    ts = df[timestamp_column].to_numpy()
+    code_diff = np.diff(codes)
+    grouped = bool(np.all(code_diff >= 0))
+    sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
+    if not sorted_within:
+        perm = np.lexsort([ts, codes])
+        df = df.iloc[perm].reset_index(drop=True)
+    return df
+
+
+def infer_freq_from_df(
+    df: "pd.DataFrame",
+    id_column: str = "item_id",
+    timestamp_column: str = "timestamp",
+) -> str:
+    """
+    Infer the (shared) frequency of the time series in a normalized df.
+
+    ``pd.infer_freq`` requires at least 3 observations, so series shorter than that are
+    skipped (they cannot pin down a frequency on their own). Every series with >= 3 points
+    must have a regular, inferrable frequency, and all such series must agree. Raises
+    ValueError if any qualifying series is irregular, if they disagree, or if no series has
+    >= 3 points — in the last case the caller must provide an explicit ``freq``.
+
+    Assumes ``df`` is already grouped by id (e.g. via ``normalize_df``).
+    """
+    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    item_ids = df[id_column].to_numpy()
+    timestamp_index = pd.DatetimeIndex(df[timestamp_column])
+
+    freqs: set[str] = set()
+    start_idx = 0
+    for length in series_lengths:
+        if length >= 3:
+            freq = pd.infer_freq(timestamp_index[start_idx : start_idx + length])
+            if freq is None:
+                raise ValueError(f"Could not infer frequency for series {item_ids[start_idx]}")
+            freqs.add(freq)
+        start_idx += length
+
+    if len(freqs) > 1:
+        raise ValueError("All time series must have the same frequency")
+    if not freqs:
+        raise ValueError(
+            "Could not infer frequency: no time series has at least 3 regularly-spaced observations. "
+            "Please provide an explicit `freq`."
+        )
+    return freqs.pop()
+
+
+def make_future_dataframe(
+    df: "pd.DataFrame",
+    prediction_length: int,
+    freq: "str | None" = None,
+    id_column: str = "item_id",
+    timestamp_column: str = "timestamp",
+) -> "pd.DataFrame":
+    """
+    Build the forecast-horizon timestamps for each series in a normalized df.
+
+    For each item, generates the timestamps for the next ``prediction_length`` steps
+    after the item's last observed timestamp. Returns a long-format DataFrame with
+    columns ``[id_column, timestamp_column]`` and ``n_series * prediction_length`` rows,
+    in the df's first-appearance item order with timestamps ascending within each item.
+
+    Assumes ``df`` is already normalized (grouped by id in first-appearance order, sorted
+    by timestamp within each group, e.g. via ``normalize_df``). If ``freq`` is None, it is
+    inferred via ``infer_freq_from_df``.
+    """
+    if freq is None:
+        freq = infer_freq_from_df(df, id_column=id_column, timestamp_column=timestamp_column)
+
+    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
+    last_idx = indptr[1:] - 1
+    last_ts = pd.DatetimeIndex(df[timestamp_column].to_numpy()[last_idx])  # (n_series,)
+    item_ids = df[id_column].to_numpy()[indptr[:-1]]  # first-appearance order
+
+    offset = pd.tseries.frequencies.to_offset(freq)
+    with warnings.catch_warnings():
+        # Silence PerformanceWarning for non-vectorized offsets (e.g. BusinessDay)
+        # https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
+        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+        # Stack offsets into shape (n_series, prediction_length) then ravel to row-major
+        # (item 0's horizon first, ascending), matching np.repeat(item_ids, prediction_length).
+        future_ts = np.stack(
+            [last_ts + step * offset for step in range(1, prediction_length + 1)], axis=1
+        ).ravel()
+
+    return pd.DataFrame(
+        {
+            id_column: np.repeat(item_ids, prediction_length),
+            timestamp_column: pd.DatetimeIndex(future_ts),
+        }
+    )
 
 
 def _validate_df_types_and_cast(
@@ -267,17 +387,7 @@ def convert_df_input_to_list_of_dicts_input(
 
         # If freq is not provided, infer from the first series with >= 3 points
         if freq is None:
-            timestamp_index = pd.DatetimeIndex(df[timestamp_column])
-            start_idx = 0
-            for length in series_lengths:
-                if length < 3:
-                    start_idx += length
-                    continue
-                timestamps = timestamp_index[start_idx : start_idx + length]
-                freq = pd.infer_freq(timestamps)
-                break
-
-            assert freq is not None, "validate_inputs is False, but could not infer frequency from the dataframe"
+            freq = infer_freq_from_df(df, id_column=id_column, timestamp_column=timestamp_column)
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
@@ -285,15 +395,11 @@ def convert_df_input_to_list_of_dicts_input(
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     target_array = df[target_columns].to_numpy().T  # Shape: (n_targets, len(df))
-    last_ts = pd.DatetimeIndex(df[timestamp_column].iloc[indptr[1:] - 1])  # Shape: (n_series,)
-    offset = pd.tseries.frequencies.to_offset(freq)
-    with warnings.catch_warnings():
-        # Silence PerformanceWarning for non-vectorized offsets https://github.com/pandas-dev/pandas/blob/95624ca2e99b0/pandas/core/arrays/datetimes.py#L822
-        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-        # Generate all prediction timestamps at once by stacking offsets into shape (n_series * prediction_length)
-        prediction_timestamps_array = pd.DatetimeIndex(
-            np.dstack([last_ts + step * offset for step in range(1, prediction_length + 1)]).ravel()
-        )
+    # Generate all prediction timestamps at once, in df item order (prediction_length per item)
+    future_frame = make_future_dataframe(
+        df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
+    )
+    prediction_timestamps_array = pd.DatetimeIndex(future_frame[timestamp_column])
 
     past_covariates_dict = {
         col: df[col].to_numpy() for col in df.columns if col not in [id_column, timestamp_column] + target_columns

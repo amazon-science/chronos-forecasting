@@ -310,10 +310,12 @@ def test_from_dataframe_does_not_mutate_caller_dataframes():
     pd.testing.assert_frame_equal(df, df_copy)
 
 
-def test_from_dataframe_raises_for_short_series():
+def test_from_dataframe_accepts_short_series():
+    """Series with fewer than 3 points are no longer rejected (freq inference happens elsewhere)."""
     df = create_df(series_ids=["A", "B"], n_points=[10, 2], target_cols=["target"], freq="h")
-    with pytest.raises(ValueError, match=">= 3 points"):
-        from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+    out = from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+    assert len(out) == 2
+    assert out[1]["context"].shape[-1] == 2  # the 2-point series is preserved as-is
 
 
 def test_from_dataframe_raises_for_non_numeric_target():
