@@ -43,6 +43,7 @@ extras = [
   "boto3>=1.10,<2",
   "peft>=0.18.1,<1",
   "fev>=0.6.1",
+  "pandas[pyarrow]>=2.0,<2.4",
 ]
 test = [
   "pytest~=8.0",
