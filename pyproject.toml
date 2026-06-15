@@ -60,7 +60,6 @@ dev = [
   "joblib",
   "fev>=0.6.1",
   "rich",
-  "pandas>=2.0,<2.4",
 ]
 
 [project.urls]
