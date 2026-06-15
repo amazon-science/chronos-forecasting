@@ -27,7 +27,7 @@ from chronos.chronos2 import Chronos2Model
 from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
 from chronos.chronos2.model import _TRANSFORMERS_V5
 from chronos.chronos2.preprocess import from_data_frame
-from chronos.df_utils import make_future_df, normalize_df
+from chronos.df_utils import make_future_df, validate_and_normalize_df
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
@@ -894,6 +894,17 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if not isinstance(target, list):
             target = [target]
 
+        if validate_inputs:
+            df, future_df = validate_and_normalize_df(
+                df=df,
+                future_df=future_df,
+                target_columns=target,
+                prediction_length=prediction_length,
+                id_column=id_column,
+                timestamp_column=timestamp_column,
+            )
+
+        # df/future_df are already validated and normalized above, so skip re-doing it inside from_data_frame.
         prepared = from_data_frame(
             df,
             target_columns=target,
@@ -901,15 +912,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             future_df=future_df,
             id_column=id_column,
             timestamp_column=timestamp_column,
-            validate_inputs=validate_inputs,
+            validate_inputs=False,
         )
-
-        if validate_inputs:
-            df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
-            if future_df is not None:
-                future_df = normalize_df(
-                    future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
-                )
 
         future = make_future_df(
             df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column

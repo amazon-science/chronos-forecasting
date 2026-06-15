@@ -15,6 +15,7 @@ __all__ = [
     "infer_freq_from_df",
     "make_future_df",
     "validate_df",
+    "validate_and_normalize_df",
     "convert_df_input_to_list_of_dicts_input",
 ]
 
@@ -193,6 +194,40 @@ def validate_df(
             )
 
 
+def validate_and_normalize_df(
+    df: pd.DataFrame,
+    future_df: pd.DataFrame | None,
+    target_columns: list[str],
+    prediction_length: int,
+    known_covariates_names: list[str] | None = None,
+    id_column: str = "item_id",
+    timestamp_column: str = "timestamp",
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """
+    Validate and normalize df (and future_df) for the DataFrame-based prediction paths.
+
+    Runs ``validate_df`` then ``normalize_df`` so that the returned frames are grouped by id
+    (first-appearance order) and sorted by timestamp within each group. This is the single
+    source of truth for df preparation; callers that have already prepared their inputs pass
+    them straight to ``from_data_frame``/``make_future_df`` without repeating this step.
+    """
+    validate_df(
+        df=df,
+        future_df=future_df,
+        target_columns=target_columns,
+        known_covariates_names=known_covariates_names,
+        prediction_length=prediction_length,
+        id_column=id_column,
+        timestamp_column=timestamp_column,
+    )
+    df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
+    if future_df is not None:
+        future_df = normalize_df(
+            future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
+        )
+    return df, future_df
+
+
 def convert_df_input_to_list_of_dicts_input(
     df: pd.DataFrame,
     future_df: pd.DataFrame | None,
@@ -255,20 +290,14 @@ def convert_df_input_to_list_of_dicts_input(
         )
 
     if validate_inputs:
-        validate_df(
+        df, future_df = validate_and_normalize_df(
             df=df,
             future_df=future_df,
             target_columns=target_columns,
-            known_covariates_names=None,
             prediction_length=prediction_length,
             id_column=id_column,
             timestamp_column=timestamp_column,
         )
-        df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
-        if future_df is not None:
-            future_df = normalize_df(
-                future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
-            )
 
     # Original order of time series IDs and series lengths (df is grouped by id after normalize_df)
     original_order = pd.unique(df[id_column])
