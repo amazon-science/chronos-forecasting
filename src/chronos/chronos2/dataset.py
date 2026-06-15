@@ -423,3 +423,32 @@ class Chronos2Dataset(IterableDataset):
                 yield batch
         else:
             yield from self._generate_sequential_batches()
+
+    @classmethod
+    def convert_inputs(cls, *args, **kwargs):
+        raise RuntimeError(
+            "`Chronos2Dataset.convert_inputs` has been deprecated. "
+            "Please use the `chronos.chronos2.preprocess` module instead."
+        )
+
+
+# Deprecated methods
+def validate_and_prepare_single_dict_task(*args, **kwargs):
+    raise RuntimeError(
+        "`validate_and_prepare_single_dict_task` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_list_of_dicts` instead."
+    )
+
+
+def convert_list_of_tensors_input_to_list_of_dicts_input(*args, **kwargs):
+    raise RuntimeError(
+        "`convert_list_of_tensors_input_to_list_of_dicts_input` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_list_of_tensors` instead."
+    )
+
+
+def convert_tensor_input_to_list_of_dicts_input(*args, **kwargs):
+    raise RuntimeError(
+        "`convert_tensor_input_to_list_of_dicts_input` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_tensor` instead."
+    )
