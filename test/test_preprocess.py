@@ -8,7 +8,7 @@ import torch
 
 from chronos.chronos2.preprocess import (
     _target_encode,
-    from_dataframe,
+    from_data_frame,
     from_list_of_dicts,
     from_list_of_tensors,
     from_tensor,
@@ -232,13 +232,13 @@ def test_from_list_of_dicts_preserves_numeric_covariate_values():
         assert torch.isnan(out[i]["future_covariates"][0]).all()  # target row stays NaN
 
 
-# Tests for from_dataframe
+# Tests for from_data_frame
 
 
-def test_from_dataframe_with_single_target():
+def test_from_data_frame_with_single_target():
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], freq="h")
 
-    out = from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+    out = from_data_frame(df=df, target_columns=["target"], prediction_length=5)
 
     assert len(out) == 2
     assert out[0]["context"].shape == (1, 10)
@@ -248,7 +248,7 @@ def test_from_dataframe_with_single_target():
         assert prepared["n_covariates"] == 0
 
 
-def test_from_dataframe_with_past_and_future_covariates():
+def test_from_data_frame_with_past_and_future_covariates():
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], covariates=["cov1"], freq="h")
     forecast_start_times = get_forecast_start_times(df, freq="h")
     future_df = create_future_df(
@@ -259,7 +259,7 @@ def test_from_dataframe_with_past_and_future_covariates():
         freq="h",
     )
 
-    out = from_dataframe(df=df, target_columns=["target"], prediction_length=5, future_df=future_df)
+    out = from_data_frame(df=df, target_columns=["target"], prediction_length=5, future_df=future_df)
 
     for prepared in out:
         assert prepared["n_targets"] == 1
@@ -270,7 +270,7 @@ def test_from_dataframe_with_past_and_future_covariates():
         assert torch.isnan(prepared["future_covariates"][0]).all()
 
 
-def test_from_dataframe_raises_when_future_df_and_known_covariates_names_both_given():
+def test_from_data_frame_raises_when_future_df_and_known_covariates_names_both_given():
     df = create_df(series_ids=["A"], n_points=[10], target_cols=["target"], covariates=["cov1"], freq="h")
     future_df = create_future_df(
         forecast_start_times=get_forecast_start_times(df, freq="h"),
@@ -280,7 +280,7 @@ def test_from_dataframe_raises_when_future_df_and_known_covariates_names_both_gi
         freq="h",
     )
     with pytest.raises(ValueError, match="Cannot provide both"):
-        from_dataframe(
+        from_data_frame(
             df=df,
             target_columns=["target"],
             prediction_length=5,
@@ -289,10 +289,10 @@ def test_from_dataframe_raises_when_future_df_and_known_covariates_names_both_gi
         )
 
 
-def test_from_dataframe_raises_for_unknown_known_covariates_names():
+def test_from_data_frame_raises_for_unknown_known_covariates_names():
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], covariates=["cov1"], freq="h")
     with pytest.raises(ValueError, match="known_covariates_names contains columns not present"):
-        from_dataframe(
+        from_data_frame(
             df=df,
             target_columns=["target"],
             prediction_length=5,
@@ -300,32 +300,32 @@ def test_from_dataframe_raises_for_unknown_known_covariates_names():
         )
 
 
-def test_from_dataframe_does_not_mutate_caller_dataframes():
+def test_from_data_frame_does_not_mutate_caller_dataframes():
     df = create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], freq="h")
     df["timestamp"] = df["timestamp"].astype(str)  # force non-datetime input
     df_copy = df.copy()
 
-    from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+    from_data_frame(df=df, target_columns=["target"], prediction_length=5)
 
     pd.testing.assert_frame_equal(df, df_copy)
 
 
-def test_from_dataframe_accepts_short_series():
+def test_from_data_frame_accepts_short_series():
     """Series with fewer than 3 points are no longer rejected (freq inference happens elsewhere)."""
     df = create_df(series_ids=["A", "B"], n_points=[10, 2], target_cols=["target"], freq="h")
-    out = from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+    out = from_data_frame(df=df, target_columns=["target"], prediction_length=5)
     assert len(out) == 2
     assert out[1]["context"].shape[-1] == 2  # the 2-point series is preserved as-is
 
 
-def test_from_dataframe_raises_for_non_numeric_target():
+def test_from_data_frame_raises_for_non_numeric_target():
     df = create_df(series_ids=["A"], n_points=[10], target_cols=["target"], freq="h")
     df["target"] = df["target"].astype(str)
     with pytest.raises(ValueError, match="must be numeric"):
-        from_dataframe(df=df, target_columns=["target"], prediction_length=5)
+        from_data_frame(df=df, target_columns=["target"], prediction_length=5)
 
 
-def test_from_dataframe_with_categorical_covariate_target_encoding():
+def test_from_data_frame_with_categorical_covariate_target_encoding():
     """Target encoding with single target should produce finite, per-item-aware encodings."""
     rng = np.random.default_rng(0)
     df = pd.DataFrame(
@@ -337,7 +337,7 @@ def test_from_dataframe_with_categorical_covariate_target_encoding():
         }
     )
 
-    out = from_dataframe(df=df, target_columns=["target"], prediction_length=3, known_covariates_names=["cat"])
+    out = from_data_frame(df=df, target_columns=["target"], prediction_length=3, known_covariates_names=["cat"])
 
     assert len(out) == 2
     for prepared in out:
