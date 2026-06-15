@@ -879,7 +879,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if not isinstance(target, list):
             target = [target]
 
-        # Vectorized preprocessing straight from the DataFrame columns.
         prepared = from_dataframe(
             df,
             target_columns=target,
@@ -890,8 +889,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
             validate_inputs=validate_inputs,
         )
 
-        # Match `prepared`'s item ordering for the forecast timestamps below (skipped when
-        # validate_inputs=False, where the caller guarantees the layout).
         if validate_inputs:
             df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
             if future_df is not None:
@@ -899,7 +896,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
                     future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
                 )
 
-        # Forecast-horizon timestamps, one block of `prediction_length` per item in df item order.
         future = make_future_dataframe(
             df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
         )
@@ -921,29 +917,24 @@ class Chronos2Pipeline(BaseChronosPipeline):
             cross_learning=cross_learning,
             **predict_kwargs,
         )
-        # since predict_df tasks are homogenous by input design, we can safely stack the list of tensors into a single tensor
         quantiles_np = torch.stack(quantiles).numpy()  # [n_tasks, n_variates, horizon, num_quantiles]
         mean_np = torch.stack(mean).numpy()  # [n_tasks, n_variates, horizon]
 
         n_inputs = len(prepared)
         n_variates = len(target)
 
-        # `future` and the predictions are both in df item order, so they align without reordering.
-        series_ids = future[id_column].to_numpy()[::prediction_length]  # (n_inputs,)
-        future_ts = future[timestamp_column].to_numpy().reshape(n_inputs, prediction_length)
-
-        data = {
-            id_column: np.repeat(series_ids, n_variates * prediction_length),
-            timestamp_column: np.tile(future_ts, (1, n_variates)).ravel(),
-            "target_name": np.tile(np.repeat(target, prediction_length), n_inputs),
-            "predictions": mean_np.ravel(),
-        }
+        # Predictions are ordered (item, target, step); `future` has prediction_length rows per item.
+        # Repeat each item's block of rows once per target column so the two line up.
+        item_rows = np.arange(len(future)).reshape(n_inputs, prediction_length)
+        result = future.iloc[np.repeat(item_rows, n_variates, axis=0).ravel()].reset_index(drop=True)
+        result["target_name"] = np.tile(np.repeat(target, prediction_length), n_inputs)
+        result["predictions"] = mean_np.ravel()
 
         quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
         for q_idx, q_level in enumerate(quantile_levels):
-            data[str(q_level)] = quantiles_flat[:, q_idx]
+            result[str(q_level)] = quantiles_flat[:, q_idx]
 
-        return pd.DataFrame(data)
+        return result
 
     def _predict_fev_window(
         self,
