@@ -134,7 +134,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
 
     def predict_df(
         self,
-        df: "pd.DataFrame",
+        df: pd.DataFrame,
         *,
         id_column: str = "item_id",
         timestamp_column: str = "timestamp",
@@ -144,7 +144,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         validate_inputs: bool = True,
         freq: str | None = None,
         **predict_kwargs,
-    ) -> "pd.DataFrame":
+    ) -> pd.DataFrame:
         """
         Perform forecasting on time series data in a long-format pandas DataFrame.
 

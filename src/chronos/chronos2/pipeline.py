@@ -23,8 +23,8 @@ from transformers.utils.peft_utils import find_adapter_config_file
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
-from chronos.chronos2.model import _TRANSFORMERS_V5
 from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
+from chronos.chronos2.model import _TRANSFORMERS_V5
 from chronos.df_utils import convert_df_input_to_list_of_dicts_input
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
@@ -808,7 +808,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
     def predict_df(
         self,
-        df: "pd.DataFrame",
+        df: pd.DataFrame,
         future_df: "pd.DataFrame | None" = None,
         id_column: str = "item_id",
         timestamp_column: str = "timestamp",
@@ -821,7 +821,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         validate_inputs: bool = True,
         freq: str | None = None,
         **predict_kwargs,
-    ) -> "pd.DataFrame":
+    ) -> pd.DataFrame:
         """
         Perform forecasting on time series data in a long-format pandas DataFrame.
 

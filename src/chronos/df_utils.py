@@ -11,12 +11,12 @@ import pandas as pd
 
 
 def _validate_df_types_and_cast(
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     future_df: "pd.DataFrame | None",
     target_columns: list[str],
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-) -> tuple["pd.DataFrame", "pd.DataFrame | None"]:
+) -> tuple[pd.DataFrame, "pd.DataFrame | None"]:
     astype_dict = {}
     future_astype_dict = {}
     for col in df.columns.drop([id_column, timestamp_column]):
@@ -52,13 +52,13 @@ def _validate_df_types_and_cast(
 
 
 def validate_df_inputs(
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     future_df: "pd.DataFrame | None",
     target_columns: list[str],
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-) -> tuple["pd.DataFrame", "pd.DataFrame | None", str, list[int], np.ndarray]:
+) -> tuple[pd.DataFrame, "pd.DataFrame | None", str, list[int], np.ndarray]:
     """
     Validates and prepares dataframe inputs
 
@@ -189,7 +189,7 @@ def validate_df_inputs(
 
 
 def convert_df_input_to_list_of_dicts_input(
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     future_df: "pd.DataFrame | None",
     target_columns: list[str],
     prediction_length: int,
