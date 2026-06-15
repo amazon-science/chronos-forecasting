@@ -26,7 +26,8 @@ from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
 from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
 from chronos.chronos2.model import _TRANSFORMERS_V5
-from chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from chronos.chronos2.preprocess import from_dataframe
+from chronos.df_utils import make_future_dataframe, normalize_df
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
@@ -117,7 +118,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
         callbacks: list["TrainerCallback"] | None = None,
         remove_printer_callback: bool = False,
         disable_data_parallel: bool = True,
-        convert_inputs: bool = True,
         **extra_trainer_kwargs,
     ) -> "Chronos2Pipeline":
         """
@@ -164,10 +164,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
             If True, all instances of `PrinterCallback` are removed from callbacks
         disable_data_parallel
             If True, ensures that DataParallel is disabled and training happens on a single GPU
-        convert_inputs
-            If True (default), preprocess raw inputs (convert tensors, encode categoricals, validate).
-            If False, inputs are expected to be already preprocessed using `chronos.chronos2.preprocess.from_*`.
-            This allows for efficient training on large datasets that don't fit in memory.
         **extra_trainer_kwargs
             Extra kwargs are directly forwarded to `TrainingArguments`
 
@@ -244,7 +240,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
             output_patch_size=self.model_output_patch_size,
             min_past=min_past,
             mode=DatasetMode.TRAIN,
-            convert_inputs=convert_inputs,
         )
 
         if output_dir is None:
@@ -305,7 +300,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 batch_size=batch_size,
                 output_patch_size=self.model_output_patch_size,
                 mode=DatasetMode.VALIDATION,
-                convert_inputs=convert_inputs,
             )
 
             # set validation parameters
@@ -900,20 +894,40 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if not isinstance(target, list):
             target = [target]
 
-        inputs, original_order, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
-            df=df,
+        # Vectorized preprocessing straight from the DataFrame columns.
+        prepared = from_dataframe(
+            df,
+            target_columns=target,
+            prediction_length=prediction_length,
             future_df=future_df,
             id_column=id_column,
             timestamp_column=timestamp_column,
-            target_columns=target,
-            prediction_length=prediction_length,
-            freq=freq,
             validate_inputs=validate_inputs,
         )
 
+        # Match `prepared`'s item ordering for the forecast timestamps below (skipped when
+        # validate_inputs=False, where the caller guarantees the layout).
+        if validate_inputs:
+            df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
+            if future_df is not None:
+                future_df = normalize_df(
+                    future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
+                )
+
+        # Forecast-horizon timestamps, one block of `prediction_length` per item in df item order.
+        future = make_future_dataframe(
+            df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
+        )
+        if validate_inputs and future_df is not None:
+            if (pd.DatetimeIndex(future_df[timestamp_column]) != pd.DatetimeIndex(future[timestamp_column])).any():
+                raise ValueError(
+                    "future_df timestamps do not match the expected prediction timestamps. "
+                    "You can disable this check by setting `validate_inputs=False`"
+                )
+
         # Generate forecasts
         quantiles, mean = self.predict_quantiles(
-            inputs=inputs,
+            inputs=prepared,
             prediction_length=prediction_length,
             quantile_levels=quantile_levels,
             limit_prediction_length=False,
@@ -926,16 +940,17 @@ class Chronos2Pipeline(BaseChronosPipeline):
         quantiles_np = torch.stack(quantiles).numpy()  # [n_tasks, n_variates, horizon, num_quantiles]
         mean_np = torch.stack(mean).numpy()  # [n_tasks, n_variates, horizon]
 
-        n_tasks = len(prediction_timestamps)
+        n_inputs = len(prepared)
         n_variates = len(target)
 
-        series_ids = list(prediction_timestamps.keys())
-        future_ts = list(prediction_timestamps.values())
+        # `future` and the predictions are both in df item order, so they align without reordering.
+        series_ids = future[id_column].to_numpy()[::prediction_length]  # (n_inputs,)
+        future_ts = future[timestamp_column].to_numpy().reshape(n_inputs, prediction_length)
 
         data = {
             id_column: np.repeat(series_ids, n_variates * prediction_length),
-            timestamp_column: np.concatenate([np.tile(ts, n_variates) for ts in future_ts]),
-            "target_name": np.tile(np.repeat(target, prediction_length), n_tasks),
+            timestamp_column: np.tile(future_ts, (1, n_variates)).ravel(),
+            "target_name": np.tile(np.repeat(target, prediction_length), n_inputs),
             "predictions": mean_np.ravel(),
         }
 
@@ -943,14 +958,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         for q_idx, q_level in enumerate(quantile_levels):
             data[str(q_level)] = quantiles_flat[:, q_idx]
 
-        predictions_df = pd.DataFrame(data)
-        # If validate_inputs=False, the df is used as-is without sorting by item_id, no reordering required
-        if validate_inputs:
-            predictions_df.set_index(id_column, inplace=True)
-            predictions_df = predictions_df.loc[original_order]
-            predictions_df.reset_index(inplace=True)
-
-        return predictions_df
+        return pd.DataFrame(data)
 
     def _predict_fev_window(
         self,

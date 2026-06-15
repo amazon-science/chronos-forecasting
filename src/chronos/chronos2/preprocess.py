@@ -12,6 +12,8 @@ import pandas as pd
 import pandas.api.types as ptypes
 import torch
 
+from chronos.df_utils import normalize_df
+
 
 class PreparedInput(TypedDict):
     """A preprocessed time series input ready for model training/inference."""
@@ -165,14 +167,7 @@ def from_dataframe(
         raise ValueError("Cannot provide both future_df and known_covariates_names")
 
     if validate_inputs:
-        df = _normalize_df(df, id_column, timestamp_column)
-        if future_df is not None:
-            future_df = _normalize_df(
-                future_df,
-                id_column,
-                timestamp_column,
-                order=pd.unique(df[id_column]),
-            )
+        # Validate before normalize_df touches the id/timestamp columns.
         _validate_dataframe(
             df=df,
             future_df=future_df,
@@ -182,6 +177,14 @@ def from_dataframe(
             id_column=id_column,
             timestamp_column=timestamp_column,
         )
+        df = normalize_df(df, id_column, timestamp_column)
+        if future_df is not None:
+            future_df = normalize_df(
+                future_df,
+                id_column,
+                timestamp_column,
+                order=pd.unique(df[id_column]),
+            )
 
     covariate_columns = [c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns]
 
@@ -481,38 +484,6 @@ def _build_prepared_inputs(
     return results
 
 
-def _normalize_df(
-    df: pd.DataFrame,
-    id_column: str,
-    timestamp_column: str,
-    order: np.ndarray | None = None,
-) -> pd.DataFrame:
-    """
-    Return a df with the timestamp column coerced to datetime, rows grouped by id (in
-    first-appearance order, or `order` if given), and sorted by timestamp within each group.
-    Skips the sort if rows are already in that layout.
-    """
-    if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
-        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
-
-    if order is None:
-        codes, _ = pd.factorize(df[id_column])
-    else:
-        codes = pd.Index(order).get_indexer(df[id_column])
-        if (codes < 0).any():
-            missing = pd.unique(df[id_column][codes < 0])
-            raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
-
-    ts = df[timestamp_column].to_numpy()
-    code_diff = np.diff(codes)
-    grouped = bool(np.all(code_diff >= 0))
-    sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
-    if not sorted_within:
-        perm = np.lexsort([ts, codes])
-        df = df.iloc[perm].reset_index(drop=True)
-    return df
-
-
 def _validate_dataframe(
     df: pd.DataFrame,
     future_df: pd.DataFrame | None,
@@ -529,13 +500,13 @@ def _validate_dataframe(
     - Required columns exist
     - Target columns are numeric
     - known_covariates_names are all covariate columns
-    - All series have >= 3 points
-    - future_df has same item_ids and exactly prediction_length rows per series
+    - future_df has the expected columns (id + timestamp, no targets, no columns absent from df)
+    - future_df has the same item_ids and exactly prediction_length rows per series
     """
     required = {id_column, timestamp_column} | set(target_columns)
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"DataFrame is missing required columns: {missing}")
+        raise ValueError(f"df does not contain all expected columns. Missing columns: {missing}")
 
     for col in target_columns:
         if not ptypes.is_numeric_dtype(df[col]):
@@ -547,24 +518,28 @@ def _validate_dataframe(
         if unknown:
             raise ValueError(f"known_covariates_names contains columns not present in df: {unknown}")
 
-    series_sizes = df[id_column].value_counts(sort=False)
-    short_series = series_sizes[series_sizes < 3]
-    if len(short_series) > 0:
-        raise ValueError(f"All series must have >= 3 points. Found {len(short_series)} series with fewer.")
-
     if future_df is not None:
-        if id_column not in future_df.columns:
-            raise ValueError(f"future_df is missing required column: {id_column}")
+        missing_future = {id_column, timestamp_column} - set(future_df.columns)
+        if missing_future:
+            raise ValueError(f"future_df does not contain all expected columns. Missing columns: {missing_future}")
+
+        targets_in_future = [c for c in future_df.columns if c in target_columns]
+        if targets_in_future:
+            raise ValueError(f"future_df cannot contain target columns. Target columns found: {targets_in_future}")
+
+        extra_future = [c for c in future_df.columns if c not in df.columns]
+        if extra_future:
+            raise ValueError(f"future_df cannot contain columns not present in df. Extra columns: {extra_future}")
 
         if not np.array_equal(np.sort(df[id_column].unique()), np.sort(future_df[id_column].unique())):
-            raise ValueError("future_df must have the same item IDs as df")
+            raise ValueError("future_df must have the same time series IDs as df")
 
         future_sizes = future_df[id_column].value_counts(sort=False)
         wrong_length = future_sizes[future_sizes != prediction_length]
         if len(wrong_length) > 0:
             raise ValueError(
-                f"future_df must have exactly {prediction_length} rows per item. "
-                f"Found {len(wrong_length)} items with wrong length."
+                f"future_df must contain prediction_length={prediction_length} rows per item. "
+                f"Found {len(wrong_length)} items with a different number of rows."
             )
 
 
