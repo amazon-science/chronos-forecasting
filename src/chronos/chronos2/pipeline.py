@@ -26,8 +26,8 @@ from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
 from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
 from chronos.chronos2.model import _TRANSFORMERS_V5
-from chronos.chronos2.preprocess import from_dataframe
-from chronos.df_utils import make_future_dataframe, normalize_df
+from chronos.chronos2.preprocess import from_data_frame
+from chronos.df_utils import make_future_df, normalize_df
 from chronos.utils import interpolate_quantiles, weighted_quantile
 
 if TYPE_CHECKING:
@@ -894,7 +894,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if not isinstance(target, list):
             target = [target]
 
-        prepared = from_dataframe(
+        prepared = from_data_frame(
             df,
             target_columns=target,
             prediction_length=prediction_length,
@@ -911,7 +911,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
                     future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
                 )
 
-        future = make_future_dataframe(
+        future = make_future_df(
             df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
         )
         if validate_inputs and future_df is not None:

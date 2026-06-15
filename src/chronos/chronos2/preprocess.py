@@ -12,7 +12,7 @@ import pandas as pd
 import pandas.api.types as ptypes
 import torch
 
-from chronos.df_utils import normalize_df
+from chronos.df_utils import validate_df, normalize_df
 
 
 class PreparedInput(TypedDict):
@@ -112,7 +112,7 @@ def from_list_of_tensors(
     return results
 
 
-def from_dataframe(
+def from_data_frame(
     df: pd.DataFrame,
     target_columns: list[str],
     prediction_length: int,
@@ -168,7 +168,7 @@ def from_dataframe(
 
     if validate_inputs:
         # Validate before normalize_df touches the id/timestamp columns.
-        _validate_dataframe(
+        validate_df(
             df=df,
             future_df=future_df,
             target_columns=target_columns,
@@ -482,65 +482,6 @@ def _build_prepared_inputs(
         )
 
     return results
-
-
-def _validate_dataframe(
-    df: pd.DataFrame,
-    future_df: pd.DataFrame | None,
-    target_columns: list[str],
-    known_covariates_names: list[str] | None,
-    prediction_length: int,
-    id_column: str,
-    timestamp_column: str,
-) -> None:
-    """
-    Validate DataFrame structure. Raises ValueError on failure.
-
-    Checks:
-    - Required columns exist
-    - Target columns are numeric
-    - known_covariates_names are all covariate columns
-    - future_df has the expected columns (id + timestamp, no targets, no columns absent from df)
-    - future_df has the same item_ids and exactly prediction_length rows per series
-    """
-    required = {id_column, timestamp_column} | set(target_columns)
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"df does not contain all expected columns. Missing columns: {missing}")
-
-    for col in target_columns:
-        if not ptypes.is_numeric_dtype(df[col]):
-            raise ValueError(f"Target column '{col}' must be numeric, got dtype {df[col].dtype}")
-
-    if known_covariates_names is not None:
-        covariate_columns = set(df.columns) - {id_column, timestamp_column} - set(target_columns)
-        unknown = set(known_covariates_names) - covariate_columns
-        if unknown:
-            raise ValueError(f"known_covariates_names contains columns not present in df: {unknown}")
-
-    if future_df is not None:
-        missing_future = {id_column, timestamp_column} - set(future_df.columns)
-        if missing_future:
-            raise ValueError(f"future_df does not contain all expected columns. Missing columns: {missing_future}")
-
-        targets_in_future = [c for c in future_df.columns if c in target_columns]
-        if targets_in_future:
-            raise ValueError(f"future_df cannot contain target columns. Target columns found: {targets_in_future}")
-
-        extra_future = [c for c in future_df.columns if c not in df.columns]
-        if extra_future:
-            raise ValueError(f"future_df cannot contain columns not present in df. Extra columns: {extra_future}")
-
-        if not np.array_equal(np.sort(df[id_column].unique()), np.sort(future_df[id_column].unique())):
-            raise ValueError("future_df must have the same time series IDs as df")
-
-        future_sizes = future_df[id_column].value_counts(sort=False)
-        wrong_length = future_sizes[future_sizes != prediction_length]
-        if len(wrong_length) > 0:
-            raise ValueError(
-                f"future_df must contain prediction_length={prediction_length} rows per item. "
-                f"Found {len(wrong_length)} items with a different number of rows."
-            )
 
 
 def _validate_list_of_dicts(
