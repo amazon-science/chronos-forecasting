@@ -12,12 +12,6 @@ import torch
 from torch.utils.data import IterableDataset
 
 from chronos.chronos2 import preprocess
-from chronos.chronos2._deprecated import (
-    convert_list_of_tensors_input_to_list_of_dicts_input,
-    convert_tensor_input_to_list_of_dicts_input,
-    prepare_inputs,
-    validate_and_prepare_single_dict_input,
-)
 from chronos.chronos2.preprocess import PreparedInput
 
 __all__ = [
@@ -27,11 +21,6 @@ __all__ = [
     "convert_fev_window_to_list_of_dicts_input",
     "left_pad_and_cat_2D",
     "validate_prepared_schema",
-    # Deprecated re-exports — prefer chronos.chronos2.preprocess.from_* for new code.
-    "convert_list_of_tensors_input_to_list_of_dicts_input",
-    "convert_tensor_input_to_list_of_dicts_input",
-    "prepare_inputs",
-    "validate_and_prepare_single_dict_input",
 ]
 
 if TYPE_CHECKING:
@@ -434,3 +423,32 @@ class Chronos2Dataset(IterableDataset):
                 yield batch
         else:
             yield from self._generate_sequential_batches()
+
+    @classmethod
+    def convert_inputs(cls, *args, **kwargs):
+        raise RuntimeError(
+            "`Chronos2Dataset.convert_inputs` has been deprecated. "
+            "Please use the `chronos.chronos2.preprocess` module instead."
+        )
+
+
+# Deprecated methods
+def validate_and_prepare_single_dict_task(*args, **kwargs):
+    raise RuntimeError(
+        "`validate_and_prepare_single_dict_task` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_list_of_dicts` instead."
+    )
+
+
+def convert_list_of_tensors_input_to_list_of_dicts_input(*args, **kwargs):
+    raise RuntimeError(
+        "`convert_list_of_tensors_input_to_list_of_dicts_input` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_list_of_tensors` instead."
+    )
+
+
+def convert_tensor_input_to_list_of_dicts_input(*args, **kwargs):
+    raise RuntimeError(
+        "`convert_tensor_input_to_list_of_dicts_input` has been deprecated. "
+        "Please use `chronos.chronos2.preprocess.from_tensor` instead."
+    )

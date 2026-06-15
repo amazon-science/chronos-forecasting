@@ -5,23 +5,18 @@
 
 
 import warnings
-from typing import TYPE_CHECKING
 
 import numpy as np
-
-if TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 
 def _validate_df_types_and_cast(
-    df: "pd.DataFrame",
-    future_df: "pd.DataFrame | None",
+    df: pd.DataFrame,
+    future_df: pd.DataFrame | None,
     target_columns: list[str],
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-) -> tuple["pd.DataFrame", "pd.DataFrame | None"]:
-    import pandas as pd
-
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
     astype_dict = {}
     future_astype_dict = {}
     for col in df.columns.drop([id_column, timestamp_column]):
@@ -57,13 +52,13 @@ def _validate_df_types_and_cast(
 
 
 def validate_df_inputs(
-    df: "pd.DataFrame",
-    future_df: "pd.DataFrame | None",
+    df: pd.DataFrame,
+    future_df: pd.DataFrame | None,
     target_columns: list[str],
     prediction_length: int,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-) -> tuple["pd.DataFrame", "pd.DataFrame | None", str, list[int], np.ndarray]:
+) -> tuple[pd.DataFrame, pd.DataFrame | None, str, list[int], np.ndarray]:
     """
     Validates and prepares dataframe inputs
 
@@ -109,9 +104,6 @@ def validate_df_inputs(
         - Mismatched series between df and future_df
         - Invalid future_df lengths
     """
-
-    import pandas as pd
-
     required_cols = [id_column, timestamp_column] + target_columns
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
@@ -197,8 +189,8 @@ def validate_df_inputs(
 
 
 def convert_df_input_to_list_of_dicts_input(
-    df: "pd.DataFrame",
-    future_df: "pd.DataFrame | None",
+    df: pd.DataFrame,
+    future_df: pd.DataFrame | None,
     target_columns: list[str],
     prediction_length: int,
     id_column: str = "item_id",
@@ -247,9 +239,6 @@ def convert_df_input_to_list_of_dicts_input(
     - Original order of time series IDs
     - Dictionary mapping series IDs to future time index
     """
-
-    import pandas as pd
-
     if freq is not None and validate_inputs:
         raise ValueError(
             "freq can only be provided when validate_inputs=False. "
