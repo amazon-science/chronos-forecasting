@@ -12,7 +12,7 @@ import pandas as pd
 import pandas.api.types as ptypes
 import torch
 
-from chronos.df_utils import validate_df, normalize_df
+from chronos.df_utils import validate_and_normalize_df
 
 
 class PreparedInput(TypedDict):
@@ -167,24 +167,15 @@ def from_data_frame(
         raise ValueError("Cannot provide both future_df and known_covariates_names")
 
     if validate_inputs:
-        # Validate before normalize_df touches the id/timestamp columns.
-        validate_df(
+        df, future_df = validate_and_normalize_df(
             df=df,
             future_df=future_df,
             target_columns=target_columns,
-            known_covariates_names=known_covariates_names,
             prediction_length=prediction_length,
+            known_covariates_names=known_covariates_names,
             id_column=id_column,
             timestamp_column=timestamp_column,
         )
-        df = normalize_df(df, id_column, timestamp_column)
-        if future_df is not None:
-            future_df = normalize_df(
-                future_df,
-                id_column,
-                timestamp_column,
-                order=pd.unique(df[id_column]),
-            )
 
     covariate_columns = [c for c in df.columns if c not in {id_column, timestamp_column} and c not in target_columns]
 
