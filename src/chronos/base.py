@@ -222,19 +222,17 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         quantiles_np = quantiles.numpy()  # [n_series, horizon, num_quantiles]
         mean_np = mean.numpy()  # [n_series, horizon]
 
-        # `future` and the predictions are both in df item order, so they align without reordering.
-        data = {
-            id_column: future[id_column].to_numpy(),
-            timestamp_column: future[timestamp_column].to_numpy(),
-            "target_name": target,
-            "predictions": mean_np.ravel(),
-        }
+        # `future` has prediction_length rows per item, in the same item order as the predictions,
+        # so it lines up with `mean` / `quantiles` directly (single target, no per-variate repeat).
+        result = future.copy()
+        result["target_name"] = target
+        result["predictions"] = mean_np.ravel()
 
         quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
         for q_idx, q_level in enumerate(quantile_levels):
-            data[str(q_level)] = quantiles_flat[:, q_idx]
+            result[str(q_level)] = quantiles_flat[:, q_idx]
 
-        return pd.DataFrame(data)
+        return result
 
     def predict_fev(
         self, task: "fev.Task", batch_size: int = 32, **kwargs
