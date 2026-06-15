@@ -236,24 +236,17 @@ class Chronos2Dataset(IterableDataset):
         super().__init__()
         assert mode in {DatasetMode.TRAIN, DatasetMode.VALIDATION, DatasetMode.TEST}, f"Invalid mode: {mode}"
 
-        # Auto-detect the input kind from its structure (see class docstring). Note: HF `Dataset`
-        # objects are sequence-like (support len() and indexing) but are not `collections.abc.Sequence`,
-        # so the dict branches below only require indexing, not a `Sequence` instance check.
         self.inputs: Sequence[PreparedInput]
         if isinstance(inputs, (torch.Tensor, np.ndarray)):
             self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
-        elif len(inputs) == 0:
-            self.inputs = []
         elif isinstance(inputs[0], (torch.Tensor, np.ndarray)):
             self.inputs = preprocess.from_list_of_tensors(
                 cast("list[TensorOrArray]", inputs), prediction_length=prediction_length
             )
         elif "context" in inputs[0]:
-            # Already-preprocessed PreparedInput dicts (detected by the `context` key)
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
         else:
-            # Raw list of dicts with a `target` key (and optional covariates)
             self.inputs = preprocess.from_list_of_dicts(cast(list[dict], inputs), prediction_length=prediction_length)
 
         if mode != DatasetMode.TEST:
