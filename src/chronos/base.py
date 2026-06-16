@@ -172,8 +172,10 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             has the same item IDs as df with exactly prediction_length rows of future timestamps per item; (3) all
             timestamps are regularly spaced (e.g., with hourly frequency).
         freq
-            Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used when
-            validate_inputs=False. When provided, skips frequency inference from the data.
+            Frequency string for timestamp generation (e.g., "h", "D", "W"). When provided, skips
+            frequency inference from the data and uses this frequency to generate the forecast timestamps.
+            Note: the provided `freq` is used as-is and is not checked against the data, even when
+            validate_inputs=True.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 

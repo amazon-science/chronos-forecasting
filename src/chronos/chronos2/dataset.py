@@ -236,6 +236,9 @@ class Chronos2Dataset(IterableDataset):
         super().__init__()
         assert mode in {DatasetMode.TRAIN, DatasetMode.VALIDATION, DatasetMode.TEST}, f"Invalid mode: {mode}"
 
+        if len(inputs) == 0:
+            raise ValueError("`inputs` is empty. Please provide at least one time series.")
+
         self.inputs: Sequence[PreparedInput]
         if isinstance(inputs, (torch.Tensor, np.ndarray)):
             self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
