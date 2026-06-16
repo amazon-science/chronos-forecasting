@@ -242,25 +242,69 @@ def convert_df_input_to_list_of_dicts_input(
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
     validate_inputs: bool = True,
-    freq: str | None = None,
-) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], None, None]:
-    # We only keep the implementation around for compatibility with AutoGluon
-    # https://github.com/autogluon/autogluon/blob/v1.5.0/timeseries/src/autogluon/timeseries/models/chronos/chronos2.py#L314-L320
-    # For all other users, raise RuntimeError and redirect to the new method
+) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, pd.DatetimeIndex]]:
+    """
+    [DEPRECATED] Convert from dataframe input format to a list of dictionaries input format.
+
+    .. deprecated:: 2.3.0
+        Use :func:`chronos.chronos2.preprocess.from_data_frame` instead. This function is kept for
+        backwards compatibility and will be removed in 2.4.0.
+    """
     if validate_inputs:
-        raise RuntimeError(
-            "`convert_df_input_to_list_of_dicts_input` has been deprecated. "
-            "Please use `chronos.chronos2.preprocess.from_data_frame` instead."
+        warnings.warn(
+            "`convert_df_input_to_list_of_dicts_input` is deprecated and will be removed in 2.4.0. "
+            "Please use `chronos.chronos2.preprocess.from_data_frame` instead.",
+            category=FutureWarning,
+            stacklevel=2,
         )
+        validate_df(
+            df=df,
+            future_df=future_df,
+            target_columns=target_columns,
+            known_covariates_names=None,
+            prediction_length=prediction_length,
+            id_column=id_column,
+            timestamp_column=timestamp_column,
+        )
+        df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
+        freq = infer_freq_from_df(df, id_column=id_column, timestamp_column=timestamp_column)
+        if future_df is not None:
+            future_df = normalize_df(
+                future_df, id_column=id_column, timestamp_column=timestamp_column, order=pd.unique(df[id_column])
+            )
+    else:
+        # Lightweight path (no validation): assume df is already grouped by id and sorted by timestamp
+        # within each group. Infer the frequency from the first series with at least 3 points.
+        freq = None
+        timestamp_index = pd.DatetimeIndex(df[timestamp_column])
+        start = 0
+        for length in df[id_column].value_counts(sort=False).to_list():
+            if length < 3:
+                start += length
+                continue
+            freq = pd.infer_freq(timestamp_index[start : start + length])
+            break
+        assert freq is not None, "validate_inputs is False, but could not infer frequency from the dataframe"
 
-    # Original order of time series IDs and series lengths (df is grouped by id after normalize_df)
+    # df is now grouped by id (in first-appearance order); series_lengths follow that order.
+    original_order = pd.unique(df[id_column])
     series_lengths = df[id_column].value_counts(sort=False).to_list()
-
-    # Convert to list of dicts format
-    inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
-
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     target_array = df[target_columns].to_numpy().T  # Shape: (n_targets, len(df))
+
+    # Future timestamps for every series, one block of prediction_length rows per series, in the same
+    # first-appearance order as df.
+    future = make_future_df(
+        df, prediction_length=prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
+    )
+    future_timestamps_array = pd.DatetimeIndex(future[timestamp_column])
+
+    if validate_inputs and future_df is not None:
+        if (pd.DatetimeIndex(future_df[timestamp_column]) != future_timestamps_array).any():
+            raise ValueError(
+                "future_df timestamps do not match the expected prediction timestamps. "
+                "You can disable this check by setting `validate_inputs=False`"
+            )
 
     past_covariates_dict = {
         col: df[col].to_numpy() for col in df.columns if col not in [id_column, timestamp_column] + target_columns
@@ -270,9 +314,15 @@ def convert_df_input_to_list_of_dicts_input(
         for col in future_df.columns.drop([id_column, timestamp_column]):
             future_covariates_dict[col] = future_df[col].to_numpy()
 
+    # Convert to list of dicts format
+    inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
+    prediction_timestamps: dict[str, pd.DatetimeIndex] = {}
     for i in range(len(series_lengths)):
         start_idx, end_idx = indptr[i], indptr[i + 1]
         future_start_idx, future_end_idx = i * prediction_length, (i + 1) * prediction_length
+
+        series_id = df[id_column].iloc[start_idx]
+        prediction_timestamps[series_id] = future_timestamps_array[future_start_idx:future_end_idx]
         task: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_array[:, start_idx:end_idx]}
 
         if len(past_covariates_dict) > 0:
@@ -282,4 +332,5 @@ def convert_df_input_to_list_of_dicts_input(
                     col: values[future_start_idx:future_end_idx] for col, values in future_covariates_dict.items()
                 }
         inputs.append(task)
-    return inputs, None, None
+
+    return inputs, original_order, prediction_timestamps
