@@ -43,9 +43,48 @@ def make_prediction_length_dynamic(model: onnx.ModelProto, dim_name: str = "pred
     return model
 
 
-def fix_gather_indices(model_path: str, output_path: str, make_dynamic: bool = True):
+def _input_dim(model: onnx.ModelProto, input_name: str, axis: int) -> int | None:
+    for input_ in model.graph.input:
+        if input_.name != input_name or not input_.type.tensor_type.HasField("shape"):
+            continue
+        shape = input_.type.tensor_type.shape
+        if len(shape.dim) <= axis:
+            return None
+        dim = shape.dim[axis]
+        if dim.HasField("dim_value"):
+            return dim.dim_value
+    return None
+
+
+def make_prediction_length_static(model: onnx.ModelProto, prediction_length: int | None = None):
     """
-    Fix Gather operation index type issues in ONNX model and optionally make prediction_length dynamic.
+    Make the output prediction_length metadata static when the traced length is known.
+    """
+    if prediction_length is None:
+        prediction_length = _input_dim(model, "future_covariates", 1)
+
+    if prediction_length is None:
+        return model
+
+    print(f"\nSetting prediction_length output metadata to static value {prediction_length}...")
+    for output in model.graph.output:
+        if output.type.tensor_type.HasField("shape"):
+            shape = output.type.tensor_type.shape
+            if len(shape.dim) == 3:
+                shape.dim[2].Clear()
+                shape.dim[2].dim_value = prediction_length
+
+    return model
+
+
+def fix_gather_indices(
+    model_path: str,
+    output_path: str,
+    make_dynamic: bool = False,
+    prediction_length: int | None = None,
+):
+    """
+    Fix Gather operation index type issues in ONNX model.
 
     The indices may be represented as float tensors in the graph but Gather
     requires int64. This function inserts Cast operations to convert float
@@ -54,7 +93,12 @@ def fix_gather_indices(model_path: str, output_path: str, make_dynamic: bool = T
     Args:
         model_path: Path to input ONNX model
         output_path: Path to save fixed ONNX model
-        make_dynamic: If True, also make the prediction_length dimension dynamic
+        make_dynamic: If True, also mark the output prediction_length dimension
+            dynamic in model metadata. This does not change the traced graph, whose
+            executable horizon remains fixed by export.
+        prediction_length: Optional fixed output horizon to write into output
+            metadata when make_dynamic is False. If omitted, the fixer infers it
+            from the fixed future_covariates input when available.
     """
     print(f"Loading ONNX model from {model_path}")
     model = onnx.load(model_path)
@@ -155,9 +199,10 @@ def fix_gather_indices(model_path: str, output_path: str, make_dynamic: bool = T
 
     print(f"Added {concat_cast_count} Cast operations before Concat nodes")
 
-    # Make prediction_length dimension dynamic
     if make_dynamic:
         model = make_prediction_length_dynamic(model)
+    else:
+        model = make_prediction_length_static(model, prediction_length=prediction_length)
 
     # Validate and save
     print("\nValidating fixed model...")
@@ -181,11 +226,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fix ONNX model type issues")
     parser.add_argument("input", help="Input ONNX model path")
     parser.add_argument("output", help="Output ONNX model path")
+    parser.add_argument(
+        "--dynamic_prediction_length",
+        action="store_true",
+        help=(
+            "Mark the output prediction_length dimension dynamic in metadata. "
+            "This does not make the traced ONNX graph accept different horizons."
+        ),
+    )
+    parser.add_argument(
+        "--prediction_length",
+        type=int,
+        default=None,
+        help="Fixed output prediction length to write into output metadata.",
+    )
 
     args = parser.parse_args()
 
     try:
-        fix_gather_indices(args.input, args.output)
+        fix_gather_indices(
+            args.input,
+            args.output,
+            make_dynamic=args.dynamic_prediction_length,
+            prediction_length=args.prediction_length,
+        )
         print("\n✓ Model fixed successfully!")
         sys.exit(0)
     except Exception as e:

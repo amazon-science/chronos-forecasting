@@ -3,22 +3,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Export Chronos-2 models to ONNX format for use with transformers.js
+Export Chronos-2 models to ONNX format.
 
 This script:
 1. Loads a pretrained Chronos-2 model
-2. Exports it to ONNX format with proper dynamic axes
+2. Exports it to ONNX format with dynamic batch size
 3. Validates the ONNX export by comparing outputs with PyTorch
 4. Optionally quantizes the model for smaller size
 
 Usage:
     python export_chronos2_to_onnx.py \
-        --model_id amazon/chronos-2-small \
-        --output_dir ./chronos2-small-onnx \
+        --model_id amazon/chronos-2 \
+        --output_dir ./chronos2-onnx \
         --validate
 
 Requirements:
-    pip install torch onnx onnxruntime transformers chronos-forecasting
+    pip install torch onnx onnxruntime onnxscript transformers chronos-forecasting
 """
 
 import argparse
@@ -82,12 +82,11 @@ class Chronos2ONNXWrapper(nn.Module):
             group_ids: Group IDs tensor of shape (batch_size,)
             attention_mask: Optional attention mask of shape (batch_size, context_length)
             future_covariates: Optional future covariates of shape (batch_size, future_length)
-            num_output_patches: Number of output patches to generate (int, will be symbolic in ONNX)
+            num_output_patches: Number of output patches to generate
 
         Returns:
             quantile_preds: Tensor of shape (batch_size, num_quantiles, prediction_length)
         """
-        # Prepare kwargs - num_output_patches is now directly an int that ONNX can trace symbolically
         kwargs = {
             "context": context,
             "group_ids": group_ids,
@@ -133,7 +132,7 @@ def create_dummy_inputs(
         "context": torch.randn(batch_size, context_length, device=device, dtype=torch.float32),
         "group_ids": torch.arange(batch_size, device=device, dtype=torch.long),
         "attention_mask": torch.ones(batch_size, context_length, device=device, dtype=torch.float32),
-        "num_output_patches": num_output_patches,  # int value, will be fixed in ONNX
+        "num_output_patches": num_output_patches,
     }
 
     if include_future_covariates:
@@ -149,7 +148,10 @@ def export_to_onnx(
     opset_version: int = 17,
     use_fp16: bool = False,
     include_future_covariates: bool = True,
+    context_length: int | None = None,
+    num_output_patches: int = 4,
     device: str = None,
+    onnx_filename: str = "model_raw.onnx",
 ) -> Path:
     """
     Export Chronos-2 model to ONNX format.
@@ -160,7 +162,10 @@ def export_to_onnx(
         opset_version: ONNX opset version (17 recommended for best compatibility)
         use_fp16: Whether to use FP16 precision
         include_future_covariates: Whether to support future covariates in export
+        context_length: Context length to trace into the model. If omitted, uses min(512, model context length).
+        num_output_patches: Number of output patches to trace into the model.
         device: Device to use ('cuda' or 'cpu')
+        onnx_filename: File name for the raw exported ONNX model
 
     Returns:
         Path to exported ONNX model
@@ -203,11 +208,25 @@ def export_to_onnx(
 
     # Create dummy inputs
     batch_size = 2
-    context_length = min(512, chronos_config.context_length)  # Use smaller context for export
-    # Export with num_output_patches=4 to support up to 64-step predictions (4 * 16 = 64)
-    # ONNX models have fixed output shapes - transformers.js will truncate to requested prediction_length
-    # This matches how the original chronos2 Python code works with dynamic num_output_patches
-    num_output_patches = 4
+    if context_length is None:
+        context_length = min(512, chronos_config.context_length)
+
+    if context_length <= 0:
+        raise ValueError(f"context_length must be positive, found {context_length}")
+
+    if context_length > chronos_config.context_length:
+        raise ValueError(
+            f"context_length={context_length} exceeds model context length {chronos_config.context_length}"
+        )
+
+    if num_output_patches <= 0:
+        raise ValueError(f"num_output_patches must be positive, found {num_output_patches}")
+
+    if num_output_patches > chronos_config.max_output_patches:
+        raise ValueError(
+            f"num_output_patches={num_output_patches} exceeds model maximum "
+            f"{chronos_config.max_output_patches}"
+        )
 
     dummy_inputs = create_dummy_inputs(
         batch_size=batch_size,
@@ -218,17 +237,19 @@ def export_to_onnx(
         device=device,
     )
 
-    # Define dynamic axes for variable batch size and context length
-    # Note: prediction_length is fixed based on num_output_patches=4 (64 steps)
+    prediction_length = num_output_patches * chronos_config.output_patch_size
+
+    # Keep sequence lengths fixed because legacy ONNX export cannot lower the patching path
+    # when the patched sequence dimension is symbolic. Batch remains dynamic.
     dynamic_axes = {
-        "context": {0: "batch_size", 1: "context_length"},
+        "context": {0: "batch_size"},
         "group_ids": {0: "batch_size"},
-        "attention_mask": {0: "batch_size", 1: "context_length"},
-        "quantile_preds": {0: "batch_size"},  # prediction_length (dim 2) is fixed at 64
+        "attention_mask": {0: "batch_size"},
+        "quantile_preds": {0: "batch_size"},
     }
 
     if include_future_covariates:
-        dynamic_axes["future_covariates"] = {0: "batch_size", 1: "future_length"}
+        dynamic_axes["future_covariates"] = {0: "batch_size"}
 
     # Prepare ONNX export args based on whether future_covariates are included
     if include_future_covariates:
@@ -238,7 +259,7 @@ def export_to_onnx(
             dummy_inputs["group_ids"],
             dummy_inputs["attention_mask"],
             dummy_inputs["future_covariates"],
-            dummy_inputs["num_output_patches"],  # Passed to wrapper but not an ONNX input
+            dummy_inputs["num_output_patches"],
         )
     else:
         input_names = ["context", "group_ids", "attention_mask"]
@@ -247,17 +268,18 @@ def export_to_onnx(
             dummy_inputs["group_ids"],
             dummy_inputs["attention_mask"],
             None,  # No future_covariates
-            dummy_inputs["num_output_patches"],  # Passed to wrapper but not an ONNX input
+            dummy_inputs["num_output_patches"],
         )
 
     output_names = ["quantile_preds"]
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    onnx_path = output_dir / "model.onnx"
+    onnx_path = output_dir / onnx_filename
 
     logger.info(f"Exporting model to ONNX format at {onnx_path}")
     logger.info(f"Dynamic axes: {dynamic_axes}")
+    logger.info(f"Fixed context_length={context_length}, prediction_length={prediction_length}")
 
     # Export to ONNX
     try:
@@ -297,6 +319,7 @@ def export_to_onnx(
                     opset_version=opset_version,
                     do_constant_folding=True,
                     export_params=True,
+                    dynamo=False,
                     verbose=False,
                 )
                 logger.info("Used legacy TorchScript-based ONNX exporter")
@@ -317,6 +340,23 @@ def export_to_onnx(
         logger.info(f"Saved generation config to {generation_config_path}")
 
     return onnx_path
+
+
+def fix_onnx_export(raw_onnx_path: Path, fixed_onnx_path: Path) -> Path:
+    """
+    Run the mandatory Chronos-2 ONNX post-processing pass.
+
+    The legacy exporter emits some Gather indices with the wrong dtype. ONNX Runtime
+    rejects the raw graph until those indices are cast back to int64.
+    """
+    from fix_onnx_model import fix_gather_indices
+
+    logger.info("Fixing exported ONNX graph")
+    logger.info(f"  Raw:   {raw_onnx_path}")
+    logger.info(f"  Fixed: {fixed_onnx_path}")
+
+    fix_gather_indices(str(raw_onnx_path), str(fixed_onnx_path), make_dynamic=False)
+    return fixed_onnx_path
 
 
 def quantize_model(onnx_path: Path) -> Path:
@@ -420,9 +460,17 @@ def generate_readme(output_dir: Path, model_id: str, quantized: bool = False):
         config = json.load(f)
 
     chronos_config = config.get("chronos_config", {})
+    output_patch_size = chronos_config.get("output_patch_size", 16)
+    quantiles = chronos_config.get("quantiles", [])
+    quantized_line = ""
+    if quantized and (output_dir / "model_quantized.onnx").exists():
+        quantized_line = (
+            f"- `model_quantized.onnx` - INT8 dynamic-quantized ONNX model "
+            f"({(output_dir / 'model_quantized.onnx').stat().st_size / (1024**2):.1f} MB)\n"
+        )
 
     readme_content = f"""---
-library_name: transformers.js
+library_name: onnx
 tags:
   - time-series
   - forecasting
@@ -433,15 +481,16 @@ pipeline_tag: time-series-forecasting
 
 # Chronos-2 ONNX
 
-This is an ONNX export of the [Chronos-2]({model_id}) time series forecasting model, optimized for use with [transformers.js](https://huggingface.co/docs/transformers.js).
+This is a tensor-level ONNX export of the [Chronos-2]({model_id}) time series forecasting model.
 
 ## Model Details
 
 - **Model Type:** Time Series Forecasting
-- **Architecture:** T5-based encoder-decoder with patching
-- **Context Length:** {chronos_config.get("context_length", 8192)} timesteps
-- **Output Patch Size:** {chronos_config.get("input_patch_size", 16)} timesteps
-- **Quantile Levels:** {len(chronos_config.get("quantiles", []))} levels (0.01, 0.05, ..., 0.95, 0.99)
+- **Architecture:** Chronos-2 encoder-decoder with patching
+- **Maximum Model Context Length:** {chronos_config.get("context_length", 8192)} timesteps
+- **Input Patch Size:** {chronos_config.get("input_patch_size", 16)} timesteps
+- **Output Patch Size:** {output_patch_size} timesteps
+- **Quantile Levels:** {len(quantiles)} levels
 - **Model Dimension:** {config.get("d_model", 768)}
 - **Layers:** {config.get("num_layers", 12)}
 - **Attention Heads:** {config.get("num_heads", 12)}
@@ -449,89 +498,58 @@ This is an ONNX export of the [Chronos-2]({model_id}) time series forecasting mo
 ## Files
 
 - `model.onnx` - FP32 ONNX model ({(output_dir / "model.onnx").stat().st_size / (1024**2):.1f} MB)
-{"- `model_quantized.onnx` - INT8 quantized model (" + f"{(output_dir / 'model_quantized.onnx').stat().st_size / (1024**2):.1f}" + " MB, 72% size reduction)" if quantized and (output_dir / "model_quantized.onnx").exists() else ""}
+{quantized_line.rstrip()}
 - `config.json` - Model configuration
 - `generation_config.json` - Generation parameters
-- `onnx/` - transformers.js-compatible directory structure
 
 ## Usage
 
-### JavaScript (transformers.js)
+Run the exported model with ONNX Runtime:
 
-```javascript
-import {{ pipeline }} from '@huggingface/transformers';
+```python
+import numpy as np
+import onnxruntime as ort
 
-// Load the forecasting pipeline
-const forecaster = await pipeline('time-series-forecasting', 'kashif/chronos-2-onnx');
+session = ort.InferenceSession("model.onnx", providers=["CPUExecutionProvider"])
+input_names = {{input_.name for input_ in session.get_inputs()}}
 
-// Your historical time series data
-const timeSeries = [605, 586, 586, 559, 511, 487, 484, 458, ...];  // 100+ timesteps
+batch_size = 1
+context_length = 512
+num_output_patches = 4
+prediction_length = num_output_patches * {output_patch_size}
 
-// Generate 16-step forecast with quantiles
-const output = await forecaster(timeSeries, {{
-    prediction_length: 16,
-    quantile_levels: [0.1, 0.5, 0.9],  // 10th, 50th (median), 90th percentiles
-}});
-
-// Output format: {{ forecast: [[t1_q1, t1_q2, t1_q3], ...], quantile_levels: [...] }}
-console.log('Median forecast:', output.forecast.map(row => row[1]));  // Extract median
-
-// Clean up
-await forecaster.dispose();
-```
-
-### Batch Forecasting
-
-```javascript
-const batch = [
-    [100, 110, 105, 115, 120, ...],  // Series 1
-    [50, 55, 52, 58, 60, ...],       // Series 2
-];
-
-const outputs = await forecaster(batch);
-// Returns array of forecasts, one per input series
-```
-
-## Performance
-
-- **Inference Time:** ~35-80ms per series (CPU, Node.js)
-- **Speedup vs PyTorch:** 3-8x faster
-- **Accuracy:** <1% error vs PyTorch reference
-
-## Technical Details
-
-### Preprocessing
-
-Chronos-2 uses automatic preprocessing:
-1. **Repeat-padding:** Input is padded to be divisible by patch_size (16)
-2. **Instance normalization:** Per-series z-score normalization
-3. **arcsinh transformation:** Nonlinear transformation for better modeling
-
-All preprocessing is handled automatically by the pipeline.
-
-### Output Format
-
-The model outputs quantile forecasts:
-
-```typescript
-interface Chronos2Output {{
-    forecast: number[][];        // [prediction_length, num_quantiles]
-    quantile_levels: number[];   // The quantile levels for each column
+inputs = {{
+    "context": np.random.randn(batch_size, context_length).astype(np.float32),
+    "group_ids": np.arange(batch_size, dtype=np.int64),
+    "attention_mask": np.ones((batch_size, context_length), dtype=np.float32),
 }}
+
+if "future_covariates" in input_names:
+    inputs["future_covariates"] = np.random.randn(batch_size, prediction_length).astype(np.float32)
+
+if "num_output_patches" in input_names:
+    inputs["num_output_patches"] = np.array(num_output_patches, dtype=np.int64)
+
+quantile_preds = session.run(None, inputs)[0]
+print(quantile_preds.shape)
 ```
 
-Extract specific quantiles:
-```javascript
-const median = output.forecast.map(row => row[1]);    // 50th percentile
-const lower = output.forecast.map(row => row[0]);     // 10th percentile (lower bound)
-const upper = output.forecast.map(row => row[2]);     // 90th percentile (upper bound)
-```
+## Tensor Interface
+
+- `context`: float32 tensor shaped `[batch, context_length]`.
+- `group_ids`: int64 tensor shaped `[batch]`. Equal IDs allow time series in the same group to attend to each other.
+- `attention_mask`: float32 tensor shaped `[batch, context_length]`, with `1` for observed context positions and `0` for masked positions.
+- `future_covariates`: optional float32 tensor shaped `[batch, prediction_length]` when the model was exported with future covariates.
+- `num_output_patches`: optional int64 scalar if the exported graph exposes it. Use the same value passed at export time.
+- `quantile_preds`: float32 output shaped `[batch, num_quantiles, prediction_length]`.
 
 ## Limitations
 
-- **Maximum context:** {chronos_config.get("context_length", 8192)} timesteps
-- **Fixed prediction length:** 16 timesteps (for now; autoregressive unrolling coming soon)
-- **Univariate only:** Single time series per input (multivariate support coming)
+- Batch size is dynamic.
+- Context length, future covariate length, and prediction length are fixed by the traced export.
+- The default export traces `context_length=512` and `num_output_patches=4`, which gives a `{4 * output_patch_size}` step horizon for this model.
+- This artifact exposes the model's tensor interface. Any serving API, preprocessing wrapper, or browser runtime integration is separate from the export.
+- Validate PyTorch vs ONNX parity with `validate_chronos2_onnx.py` after export and before relying on a quantized model.
 
 ## Citation
 
@@ -552,7 +570,6 @@ Apache 2.0
 
 - [Chronos-2 Paper](https://arxiv.org/abs/2403.07815)
 - [Chronos GitHub](https://github.com/amazon-science/chronos-forecasting)
-- [transformers.js Documentation](https://huggingface.co/docs/transformers.js)
 """
 
     readme_path = output_dir / "README.md"
@@ -635,6 +652,9 @@ def validate_onnx_export(
     onnx_path: Path,
     model_id: str,
     device: str = None,
+    include_future_covariates: bool = True,
+    context_length: int = 512,
+    num_output_patches: int = 4,
     rtol: float = 1e-3,
     atol: float = 1e-3,
 ) -> bool:
@@ -645,6 +665,9 @@ def validate_onnx_export(
         onnx_path: Path to ONNX model
         model_id: Original model ID
         device: Device to use
+        include_future_covariates: Whether to validate the future covariate input
+        context_length: Context length expected by the exported model
+        num_output_patches: Number of output patches expected by the exported model
         rtol: Relative tolerance for comparison
         atol: Absolute tolerance for comparison
 
@@ -670,17 +693,15 @@ def validate_onnx_export(
     logger.info(f"Loading ONNX model from {onnx_path}")
     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
     ort_session = ort.InferenceSession(str(onnx_path), providers=providers)
+    input_names = {input_.name for input_ in ort_session.get_inputs()}
 
-    # Create test inputs
     batch_size = 4
-    context_length = 256
-    num_output_patches = 2
 
     dummy_inputs = create_dummy_inputs(
         batch_size=batch_size,
         context_length=context_length,
         num_output_patches=num_output_patches,
-        include_future_covariates=False,
+        include_future_covariates=include_future_covariates,
         output_patch_size=model.chronos_config.output_patch_size,
         device=device,
     )
@@ -693,17 +714,22 @@ def validate_onnx_export(
             context=dummy_inputs["context"],
             group_ids=dummy_inputs["group_ids"],
             attention_mask=dummy_inputs["attention_mask"],
-            future_covariates=None,
+            future_covariates=dummy_inputs.get("future_covariates"),
             num_output_patches=dummy_inputs["num_output_patches"],
         )
 
-    # Run ONNX inference (num_output_patches is fixed in the model, not an input)
+    # Run ONNX inference. Some PyTorch versions expose num_output_patches as a
+    # scalar graph input even when it is passed as a Python int during tracing.
     logger.info("Running ONNX inference...")
     ort_inputs = {
         "context": dummy_inputs["context"].cpu().numpy(),
         "group_ids": dummy_inputs["group_ids"].cpu().numpy(),
         "attention_mask": dummy_inputs["attention_mask"].cpu().numpy(),
     }
+    if "future_covariates" in input_names:
+        ort_inputs["future_covariates"] = dummy_inputs["future_covariates"].cpu().numpy()
+    if "num_output_patches" in input_names:
+        ort_inputs["num_output_patches"] = np.array(dummy_inputs["num_output_patches"], dtype=np.int64)
 
     onnx_output = ort_session.run(None, ort_inputs)[0]
 
@@ -739,11 +765,23 @@ def main():
     parser.add_argument(
         "--model_id",
         type=str,
-        default="amazon/chronos-2-small",
-        help="HuggingFace model ID or local path (e.g., 'amazon/chronos-2-small')",
+        default="amazon/chronos-2",
+        help="HuggingFace model ID or local path (e.g., 'amazon/chronos-2')",
     )
     parser.add_argument("--output_dir", type=str, default="./chronos2-onnx", help="Output directory for ONNX model")
     parser.add_argument("--opset_version", type=int, default=17, help="ONNX opset version (default: 17)")
+    parser.add_argument(
+        "--context_length",
+        type=int,
+        default=512,
+        help="Fixed context length to export (default: 512; batch size remains dynamic)",
+    )
+    parser.add_argument(
+        "--num_output_patches",
+        type=int,
+        default=4,
+        help="Number of output patches to export (default: 4; with Chronos-2 output_patch_size=16 this gives 64 steps)",
+    )
     parser.add_argument("--fp16", action="store_true", help="Export model in FP16 precision")
     parser.add_argument(
         "--validate", action="store_true", help="Validate ONNX export by comparing with PyTorch outputs"
@@ -753,6 +791,21 @@ def main():
     )
     parser.add_argument(
         "--device", type=str, default=None, choices=["cpu", "cuda"], help="Device to use (default: auto-detect)"
+    )
+    parser.add_argument(
+        "--no_fix_onnx",
+        action="store_true",
+        help="Skip the mandatory post-export ONNX graph fix pass (not recommended; raw graph may not load in ONNX Runtime)",
+    )
+    parser.add_argument(
+        "--keep_raw_onnx",
+        action="store_true",
+        help="Keep model_raw.onnx after writing the fixed model.onnx",
+    )
+    parser.add_argument(
+        "--setup_transformersjs",
+        action="store_true",
+        help="Also create the legacy onnx/ symlink layout used by the original browser demo.",
     )
     parser.add_argument("--quantize", action="store_true", help="Quantize the model to INT8 after export")
     parser.add_argument(
@@ -773,14 +826,26 @@ def main():
         logger.info("Chronos-2 ONNX Export Pipeline")
         logger.info("=" * 60 + "\n")
 
-        onnx_path = export_to_onnx(
+        raw_or_final_onnx_path = export_to_onnx(
             model_id=args.model_id,
             output_dir=output_dir,
             opset_version=args.opset_version,
             use_fp16=args.fp16,
             include_future_covariates=not args.no_future_covariates,
+            context_length=args.context_length,
+            num_output_patches=args.num_output_patches,
             device=args.device,
+            onnx_filename="model.onnx" if args.no_fix_onnx else "model_raw.onnx",
         )
+
+        if args.no_fix_onnx:
+            onnx_path = raw_or_final_onnx_path
+            logger.warning("Skipping ONNX fix pass; the raw graph may not load in ONNX Runtime")
+        else:
+            onnx_path = fix_onnx_export(raw_or_final_onnx_path, output_dir / "model.onnx")
+            if not args.keep_raw_onnx:
+                raw_or_final_onnx_path.unlink(missing_ok=True)
+                logger.info(f"Removed intermediate raw ONNX model: {raw_or_final_onnx_path}")
 
         # Validate if requested
         if args.validate:
@@ -792,6 +857,9 @@ def main():
                 onnx_path=onnx_path,
                 model_id=args.model_id,
                 device=args.device,
+                include_future_covariates=not args.no_future_covariates,
+                context_length=args.context_length,
+                num_output_patches=args.num_output_patches,
             )
 
             if not validation_passed:
@@ -807,12 +875,13 @@ def main():
 
             quantized_path = quantize_model(onnx_path)
 
-        # Setup transformers.js directory structure
-        logger.info("\n" + "=" * 60)
-        logger.info("transformers.js Setup")
-        logger.info("=" * 60 + "\n")
+        if args.setup_transformersjs:
+            # Setup transformers.js directory structure
+            logger.info("\n" + "=" * 60)
+            logger.info("transformers.js Setup")
+            logger.info("=" * 60 + "\n")
 
-        setup_transformersjs_structure(output_dir)
+            setup_transformersjs_structure(output_dir)
 
         # Generate README
         logger.info("\n" + "=" * 60)

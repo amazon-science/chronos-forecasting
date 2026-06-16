@@ -64,7 +64,10 @@ class Patch(nn.Module):
             padding = torch.full(size=padding_size, fill_value=torch.nan, dtype=x.dtype, device=x.device)
             x = torch.concat((padding, x), dim=-1)
 
-        x = x.unfold(dimension=-1, size=self.patch_size, step=self.patch_stride)
+        if self.patch_stride == self.patch_size:
+            x = x.reshape(*x.shape[:-1], -1, self.patch_size)
+        else:
+            x = x.unfold(dimension=-1, size=self.patch_size, step=self.patch_stride)
         return x
 
 
@@ -78,14 +81,22 @@ class InstanceNorm(nn.Module):
         self.eps = eps
         self.use_arcsinh = use_arcsinh
 
+    @staticmethod
+    def _nanmean(x: torch.Tensor, dim: int, keepdim: bool, empty_value: float) -> torch.Tensor:
+        finite_mask = torch.isnan(x).logical_not()
+        finite_x = torch.where(finite_mask, x, torch.zeros_like(x))
+        count = finite_mask.to(x.dtype).sum(dim=dim, keepdim=keepdim)
+        mean = finite_x.sum(dim=dim, keepdim=keepdim) / count.clamp_min(1)
+        return torch.where(count > 0, mean, torch.full_like(mean, empty_value))
+
     def forward(
         self, x: torch.Tensor, loc_scale: tuple[torch.Tensor, torch.Tensor] | None = None
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         orig_dtype = x.dtype
         x = x.to(torch.float32)
         if loc_scale is None:
-            loc = torch.nan_to_num(torch.nanmean(x, dim=-1, keepdim=True), nan=0.0)
-            scale = torch.nan_to_num((x - loc).square().nanmean(dim=-1, keepdim=True).sqrt(), nan=1.0)
+            loc = self._nanmean(x, dim=-1, keepdim=True, empty_value=0.0)
+            scale = self._nanmean((x - loc).square(), dim=-1, keepdim=True, empty_value=1.0).sqrt()
             scale = torch.where(scale == 0, self.eps, scale)
         else:
             loc, scale = loc_scale

@@ -18,6 +18,7 @@ Quantization Modes:
 """
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -25,6 +26,59 @@ import numpy as np
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _static_dim(value, default: int) -> int:
+    return value if isinstance(value, int) and value > 0 else default
+
+
+def _input_dim(session, input_name: str, axis: int, default: int) -> int:
+    for input_ in session.get_inputs():
+        if input_.name == input_name and len(input_.shape) > axis:
+            return _static_dim(input_.shape[axis], default)
+    return default
+
+
+def _output_dim(session, axis: int, default: int) -> int:
+    outputs = session.get_outputs()
+    if outputs and len(outputs[0].shape) > axis:
+        return _static_dim(outputs[0].shape[axis], default)
+    return default
+
+
+def _infer_num_output_patches(model_path: str, prediction_length: int, default: int = 4) -> int:
+    config_path = Path(model_path).parent / "config.json"
+    if not config_path.exists():
+        return default
+
+    with open(config_path) as f:
+        config = json.load(f)
+
+    output_patch_size = config.get("chronos_config", {}).get("output_patch_size")
+    if not isinstance(output_patch_size, int) or output_patch_size <= 0:
+        return default
+
+    return max(1, prediction_length // output_patch_size)
+
+
+def _make_test_inputs(
+    input_names: set[str],
+    batch_size: int,
+    context_length: int,
+    prediction_length: int,
+    num_output_patches: int,
+) -> dict[str, np.ndarray]:
+    inputs = {
+        "context": np.random.randn(batch_size, context_length).astype(np.float32),
+        "group_ids": np.arange(batch_size, dtype=np.int64),
+        "attention_mask": np.ones((batch_size, context_length), dtype=np.float32),
+    }
+    if "future_covariates" in input_names:
+        inputs["future_covariates"] = np.random.randn(batch_size, prediction_length).astype(np.float32)
+    if "num_output_patches" in input_names:
+        inputs["num_output_patches"] = np.array(num_output_patches, dtype=np.int64)
+
+    return inputs
 
 
 def dynamic_quantization(model_path: str, output_path: str):
@@ -78,9 +132,16 @@ def static_quantization(model_path: str, output_path: str, calibration_data_path
     - More complex setup
     - Potential accuracy loss if calibration data not representative
     """
+    import onnxruntime as ort
     from onnxruntime.quantization import quantize_static, QuantType, CalibrationDataReader
 
     logger.info(f"Loading model from {model_path}")
+
+    session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+    input_names = {input_.name for input_ in session.get_inputs()}
+    context_length = _input_dim(session, "context", 1, 512)
+    prediction_length = _input_dim(session, "future_covariates", 1, _output_dim(session, 2, 64))
+    num_output_patches = _infer_num_output_patches(model_path, prediction_length)
 
     # Create calibration data reader
     if calibration_data_path:
@@ -95,24 +156,20 @@ def static_quantization(model_path: str, output_path: str, calibration_data_path
                 self.num_samples = num_samples
                 self.current_sample = 0
                 self.batch_size = 1
-                self.context_length = 512
 
             def get_next(self):
                 if self.current_sample >= self.num_samples:
                     return None
 
-                # Generate synthetic time series data
-                context = np.random.randn(self.batch_size, self.context_length).astype(np.float32)
-                group_ids = np.array([0], dtype=np.int64)
-                attention_mask = np.ones((self.batch_size, self.context_length), dtype=np.float32)
-
                 self.current_sample += 1
 
-                return {
-                    "context": context,
-                    "group_ids": group_ids,
-                    "attention_mask": attention_mask,
-                }
+                return _make_test_inputs(
+                    input_names=input_names,
+                    batch_size=self.batch_size,
+                    context_length=context_length,
+                    prediction_length=prediction_length,
+                    num_output_patches=num_output_patches,
+                )
 
         calibration_data_reader = SyntheticCalibrationDataReader()
 
@@ -157,16 +214,21 @@ def validate_quantized_model(model_path: str):
 
         # Load model
         session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        input_names = {input_.name for input_ in session.get_inputs()}
 
         # Create test input
         batch_size = 1
-        context_length = 256
+        context_length = _input_dim(session, "context", 1, 512)
+        prediction_length = _input_dim(session, "future_covariates", 1, _output_dim(session, 2, 64))
+        num_output_patches = _infer_num_output_patches(model_path, prediction_length)
 
-        inputs = {
-            "context": np.random.randn(batch_size, context_length).astype(np.float32),
-            "group_ids": np.array([0], dtype=np.int64),
-            "attention_mask": np.ones((batch_size, context_length), dtype=np.float32),
-        }
+        inputs = _make_test_inputs(
+            input_names=input_names,
+            batch_size=batch_size,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            num_output_patches=num_output_patches,
+        )
 
         # Run inference
         logger.info("  Running test inference...")
