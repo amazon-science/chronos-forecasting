@@ -865,6 +865,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         freq
             Frequency string for timestamp generation (e.g., "h", "D", "W"). When provided, skips
             frequency inference from the data and uses this frequency to generate the forecast timestamps.
+            Note: the provided `freq` is used as-is and is not checked against the data, even when
+            validate_inputs=True.
         **predict_kwargs
             Additional arguments passed to predict_quantiles
 

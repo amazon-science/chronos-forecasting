@@ -62,7 +62,7 @@ def infer_freq_from_df(
 def make_future_df(
     df: pd.DataFrame,
     prediction_length: int,
-    freq: "str | None" = None,
+    freq: str | None = None,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
 ) -> pd.DataFrame:
@@ -106,7 +106,7 @@ def normalize_df(
     df: pd.DataFrame,
     id_column: str = "item_id",
     timestamp_column: str = "timestamp",
-    order: "np.ndarray | None" = None,
+    order: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """
     Return a df with the timestamp column coerced to datetime, rows grouped by id (in
