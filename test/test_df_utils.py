@@ -1,11 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from chronos.df_utils import (
+    convert_df_input_to_list_of_dicts_input,
     infer_freq_from_df,
     make_future_df,
     normalize_df,
@@ -283,3 +286,84 @@ def test_validate_and_normalize_df_handles_missing_future_df():
     )
     assert out_future_df is None
     assert len(out_df) == len(df)
+
+
+# Tests for the deprecated convert_df_input_to_list_of_dicts_input (kept for AutoGluon compatibility)
+
+
+def test_convert_df_input_to_list_of_dicts_input_produces_expected_output():
+    """Lock down the legacy output contract: structure, item ordering, value preservation, and
+    prediction timestamps (multi-target, with past-only + known-future covariates)."""
+    freq = "h"
+    prediction_length = 4
+    target_columns = ["sales", "revenue"]
+
+    df = create_df(
+        series_ids=["B", "A", "C"],  # deliberately unsorted to exercise first-appearance ordering
+        n_points=[12, 20, 15],
+        target_cols=target_columns,
+        covariates=["temp", "promo"],  # temp: past + future; promo: past-only
+        freq=freq,
+    )
+    future_df = create_future_df(
+        get_forecast_start_times(df, freq),
+        series_ids=["B", "A", "C"],
+        n_points=[prediction_length] * 3,
+        covariates=["temp"],
+        freq=freq,
+    )
+
+    with pytest.warns(FutureWarning, match="from_data_frame"):
+        inputs, original_order, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
+            df=df,
+            future_df=future_df,
+            target_columns=target_columns,
+            prediction_length=prediction_length,
+        )
+
+    # One dict per series, returned in first-appearance order.
+    assert len(inputs) == 3
+    assert list(original_order) == ["B", "A", "C"]
+    assert list(prediction_timestamps.keys()) == ["B", "A", "C"]
+
+    n_points = {"B": 12, "A": 20, "C": 15}
+    for i, series_id in enumerate(["B", "A", "C"]):
+        series = df[df["item_id"] == series_id].sort_values("timestamp")
+        task = inputs[i]
+
+        # Targets: shape (n_targets, history_length) with values preserved in column order.
+        assert task["target"].shape == (2, n_points[series_id])
+        for t_idx, col in enumerate(target_columns):
+            np.testing.assert_array_almost_equal(task["target"][t_idx], series[col].to_numpy())
+
+        # Past covariates: both temp and promo, full history length.
+        assert set(task["past_covariates"].keys()) == {"temp", "promo"}
+        np.testing.assert_array_almost_equal(task["past_covariates"]["temp"], series["temp"].to_numpy())
+
+        # Future covariates: only temp (the known-future one), of length prediction_length.
+        assert set(task["future_covariates"].keys()) == {"temp"}
+        assert task["future_covariates"]["temp"].shape == (prediction_length,)
+
+        # Prediction timestamps: prediction_length steps following the last observed timestamp.
+        ts = prediction_timestamps[series_id]
+        assert len(ts) == prediction_length
+        assert ts[0] == series["timestamp"].max() + pd.tseries.frequencies.to_offset(freq)
+
+
+def test_convert_df_input_to_list_of_dicts_input_no_warning_when_validation_disabled():
+    """The AutoGluon path uses validate_inputs=False and must not emit the deprecation warning."""
+    df = normalize_df(create_df(series_ids=["A", "B"], n_points=[10, 12], target_cols=["target"], freq="h"))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning would fail the test
+        inputs, original_order, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
+            df=df,
+            future_df=None,
+            target_columns=["target"],
+            prediction_length=5,
+            validate_inputs=False,
+        )
+
+    assert len(inputs) == 2
+    assert list(original_order) == ["A", "B"]
+    assert all(len(prediction_timestamps[sid]) == 5 for sid in ["A", "B"])
