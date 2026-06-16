@@ -99,11 +99,13 @@ class Chronos2Pipeline(BaseChronosPipeline):
         self,
         inputs: TensorOrArray
         | Sequence[TensorOrArray]
-        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]],
+        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
+        | Sequence[PreparedInput],
         prediction_length: int,
         validation_inputs: TensorOrArray
         | Sequence[TensorOrArray]
         | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray | None]]]
+        | Sequence[PreparedInput]
         | None = None,
         finetune_mode: Literal["full", "lora"] = "full",
         lora_config: "LoraConfig | dict | None" = None,
@@ -126,9 +128,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
         ----------
         inputs
             The time series on which the model will be fine-tuned. The allowed formats of inputs are the same as `Chronos2Pipeline.predict()`.
-            Note: when `inputs` is a list of dicts, the values inside `future_covariates` are not technically used for training the model;
-            however, this key is used to infer which covariates are known into the future. Therefore, if your task contains known future covariates,
-            make sure that this key exists in `inputs`. The values of individual future covariates may be set to `None` or an empty array.
+            When fine-tuning with covariates, we recommend building the inputs with the `chronos.chronos2.preprocess` helpers, which handle
+            covariates (including which are known into the future) and categorical encoding for you: `from_data_frame` (long-format DataFrame)
+            and `from_list_of_dicts` (list of per-series dicts).
         prediction_length
             The prediction horizon for which the model will be fine-tuned
         validation_inputs
