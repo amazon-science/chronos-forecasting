@@ -11,44 +11,12 @@ import pandas as pd
 import pandas.api.types as ptypes
 
 __all__ = [
-    "normalize_df",
     "infer_freq_from_df",
     "make_future_df",
+    "normalize_df",
     "validate_df",
     "validate_and_normalize_df",
 ]
-
-
-def normalize_df(
-    df: pd.DataFrame,
-    id_column: str = "item_id",
-    timestamp_column: str = "timestamp",
-    order: "np.ndarray | None" = None,
-) -> pd.DataFrame:
-    """
-    Return a df with the timestamp column coerced to datetime, rows grouped by id (in
-    first-appearance order, or `order` if given), and sorted by timestamp within each group.
-    Skips the sort if rows are already in that layout.
-    """
-    if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
-        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
-
-    if order is None:
-        codes, _ = pd.factorize(df[id_column])
-    else:
-        codes = pd.Index(order).get_indexer(df[id_column])
-        if (codes < 0).any():
-            missing = pd.unique(df[id_column][codes < 0])
-            raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
-
-    ts = df[timestamp_column].to_numpy()
-    code_diff = np.diff(codes)
-    grouped = bool(np.all(code_diff >= 0))
-    sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
-    if not sorted_within:
-        perm = np.lexsort([ts, codes])
-        df = df.iloc[perm].reset_index(drop=True)
-    return df
 
 
 def infer_freq_from_df(
@@ -132,6 +100,38 @@ def make_future_df(
             timestamp_column: pd.DatetimeIndex(future_ts),
         }
     )
+
+
+def normalize_df(
+    df: pd.DataFrame,
+    id_column: str = "item_id",
+    timestamp_column: str = "timestamp",
+    order: "np.ndarray | None" = None,
+) -> pd.DataFrame:
+    """
+    Return a df with the timestamp column coerced to datetime, rows grouped by id (in
+    first-appearance order, or `order` if given), and sorted by timestamp within each group.
+    Skips the sort if rows are already in that layout.
+    """
+    if not ptypes.is_datetime64_any_dtype(df[timestamp_column]):
+        df = df.assign(**{timestamp_column: pd.to_datetime(df[timestamp_column])})
+
+    if order is None:
+        codes, _ = pd.factorize(df[id_column])
+    else:
+        codes = pd.Index(order).get_indexer(df[id_column])
+        if (codes < 0).any():
+            missing = pd.unique(df[id_column][codes < 0])
+            raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
+
+    ts = df[timestamp_column].to_numpy()
+    code_diff = np.diff(codes)
+    grouped = bool(np.all(code_diff >= 0))
+    sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
+    if not sorted_within:
+        perm = np.lexsort([ts, codes])
+        df = df.iloc[perm].reset_index(drop=True)
+    return df
 
 
 def validate_df(
