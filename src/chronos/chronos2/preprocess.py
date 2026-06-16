@@ -347,7 +347,7 @@ def _encode_categorical(
 
     future_codes = None
     if future is not None:
-        codes = future.astype(past.dtype).cat.codes.to_numpy(dtype=np.intp)
+        codes = past.dtype.categories.get_indexer(future).astype(np.intp)
         # -1 means either NaN (→ nan_slot) or a string unseen in the past (→ sentinel).
         future_codes = np.where(codes < 0, np.where(future.isna().to_numpy(), nan_slot, n_categories), codes)
 
