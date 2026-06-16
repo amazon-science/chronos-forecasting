@@ -23,7 +23,7 @@ from transformers.utils.peft_utils import find_adapter_config_file
 import chronos.chronos2
 from chronos.base import BaseChronosPipeline, ForecastType
 from chronos.chronos2 import Chronos2Model
-from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, TensorOrArray
+from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode, PreparedInput, TensorOrArray
 from chronos.chronos2.model import _TRANSFORMERS_V5
 from chronos.chronos2.preprocess import from_data_frame
 from chronos.df_utils import make_future_df, validate_and_normalize_df
@@ -452,7 +452,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         self,
         inputs: TensorOrArray
         | Sequence[TensorOrArray]
-        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]],
+        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]]
+        | Sequence[PreparedInput],
         prediction_length: int | None = None,
         batch_size: int = 256,
         context_length: int | None = None,
@@ -746,7 +747,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
         self,
         inputs: TensorOrArray
         | Sequence[TensorOrArray]
-        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]],
+        | Sequence[Mapping[str, TensorOrArray | Mapping[str, TensorOrArray]]]
+        | Sequence[PreparedInput],
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         **predict_kwargs,
