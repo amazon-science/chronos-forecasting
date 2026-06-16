@@ -16,7 +16,6 @@ __all__ = [
     "make_future_df",
     "validate_df",
     "validate_and_normalize_df",
-    "convert_df_input_to_list_of_dicts_input",
 ]
 
 
@@ -228,6 +227,13 @@ def validate_and_normalize_df(
     return df, future_df
 
 
+def validate_df_inputs(*args, **kwargs):
+    raise RuntimeError(
+        "`validate_df_inputs` has been deprecated. "
+        "Please use `chronos.df_utils.validate_df` and `chronos.df_utils.normalize_df` instead."
+    )
+
+
 def convert_df_input_to_list_of_dicts_input(
     df: pd.DataFrame,
     future_df: pd.DataFrame | None,
@@ -237,87 +243,24 @@ def convert_df_input_to_list_of_dicts_input(
     timestamp_column: str = "timestamp",
     validate_inputs: bool = True,
     freq: str | None = None,
-) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], np.ndarray, dict[str, "pd.DatetimeIndex"]]:
-    """
-    Convert from dataframe input format to a list of dictionaries input format.
-
-    Parameters
-    ----------
-    df
-        Input dataframe containing time series data with columns:
-        - id_column: Identifier for each time series
-        - timestamp_column: Timestamps for each observation
-        - target_columns: One or more target variables to forecast
-        - Additional columns are treated as covariates
-    future_df
-        Optional dataframe containing future covariate values with columns:
-        - id_column: Identifier for each time series
-        - timestamp_column: Future timestamps
-        - Subset of covariate columns from df
-    target_columns
-        Names of target columns to forecast
-    prediction_length
-        Number of future time steps to predict
-    id_column
-        Name of column containing time series identifiers
-    timestamp_column
-        Name of column containing timestamps
-    validate_inputs
-        [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
-        validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
-        must ensure: (1) all dataframes are sorted by (id_column, timestamp_column); (2) future_df (if provided)
-        has the same item IDs as df with exactly prediction_length rows of future timestamps per item; (3) all
-        timestamps are regularly spaced (e.g., with hourly frequency).
-    freq
-        Frequency string for timestamp generation (e.g., "h", "D", "W"). Can only be used
-        when validate_inputs=False. When provided, skips frequency inference from the data.
-
-    Returns
-    -------
-    A tuple containing:
-    - Time series converted to list of dictionaries format
-    - Original order of time series IDs
-    - Dictionary mapping series IDs to future time index
-    """
-    if freq is not None and validate_inputs:
-        raise ValueError(
-            "freq can only be provided when validate_inputs=False. "
-            "When using freq with validate_inputs=False, you must ensure: "
-            "(1) all dataframes are sorted by (id_column, timestamp_column);  "
-            "(2) future_df (if provided) has the same item IDs as df with exactly "
-            "prediction_length rows of future timestamps per item; "
-            "(3) all timestamps are regularly spaced."
-        )
-
+) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], None, None]:
+    # We only keep the implementation around for compatibility with AutoGluon
+    # https://github.com/autogluon/autogluon/blob/v1.5.0/timeseries/src/autogluon/timeseries/models/chronos/chronos2.py#L314-L320
+    # For all other users, raise RuntimeError and redirect to the new method
     if validate_inputs:
-        df, future_df = validate_and_normalize_df(
-            df=df,
-            future_df=future_df,
-            target_columns=target_columns,
-            prediction_length=prediction_length,
-            id_column=id_column,
-            timestamp_column=timestamp_column,
+        raise RuntimeError(
+            "`convert_df_input_to_list_of_dicts_input` has been deprecated. "
+            "Please use `chronos.chronos2.preprocess.from_data_frame` instead."
         )
 
     # Original order of time series IDs and series lengths (df is grouped by id after normalize_df)
-    original_order = pd.unique(df[id_column])
     series_lengths = df[id_column].value_counts(sort=False).to_list()
-
-    # If freq is not provided, infer it (make_future_df does this too, but freq is reused below)
-    if freq is None:
-        freq = infer_freq_from_df(df, id_column=id_column, timestamp_column=timestamp_column)
 
     # Convert to list of dicts format
     inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
-    prediction_timestamps: dict[str, pd.DatetimeIndex] = {}
 
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     target_array = df[target_columns].to_numpy().T  # Shape: (n_targets, len(df))
-    # Generate all prediction timestamps at once, in df item order (prediction_length per item)
-    future_frame = make_future_df(
-        df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
-    )
-    prediction_timestamps_array = pd.DatetimeIndex(future_frame[timestamp_column])
 
     past_covariates_dict = {
         col: df[col].to_numpy() for col in df.columns if col not in [id_column, timestamp_column] + target_columns
@@ -326,19 +269,10 @@ def convert_df_input_to_list_of_dicts_input(
     if future_df is not None:
         for col in future_df.columns.drop([id_column, timestamp_column]):
             future_covariates_dict[col] = future_df[col].to_numpy()
-        if validate_inputs:
-            if (pd.DatetimeIndex(future_df[timestamp_column]) != pd.DatetimeIndex(prediction_timestamps_array)).any():
-                raise ValueError(
-                    "future_df timestamps do not match the expected prediction timestamps. "
-                    "You can disable this check by setting `validate_inputs=False`"
-                )
 
     for i in range(len(series_lengths)):
         start_idx, end_idx = indptr[i], indptr[i + 1]
         future_start_idx, future_end_idx = i * prediction_length, (i + 1) * prediction_length
-
-        series_id = df[id_column].iloc[start_idx]
-        prediction_timestamps[series_id] = prediction_timestamps_array[future_start_idx:future_end_idx]
         task: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_array[:, start_idx:end_idx]}
 
         if len(past_covariates_dict) > 0:
@@ -348,14 +282,4 @@ def convert_df_input_to_list_of_dicts_input(
                     col: values[future_start_idx:future_end_idx] for col, values in future_covariates_dict.items()
                 }
         inputs.append(task)
-
-    assert len(inputs) == len(series_lengths)
-
-    return inputs, original_order, prediction_timestamps
-
-
-def validate_df_inputs(*args, **kwargs):
-    raise RuntimeError(
-        "`validate_df_inputs` has been deprecated. "
-        "Please use `chronos.df_utils.validate_df` and `chronos.df_utils.normalize_df` instead."
-    )
+    return inputs, None, None
