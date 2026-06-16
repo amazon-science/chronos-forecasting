@@ -15,7 +15,8 @@ import torch
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
 from chronos.chronos2.layers import MHA
-from chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from chronos.chronos2.preprocess import from_data_frame
+from chronos.df_utils import make_future_df, normalize_df
 from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor, timeout_callback
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
@@ -593,9 +594,10 @@ def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline)
         pipeline.predict_df(df, future_df=future_df, prediction_length=3)
 
 
-def test_predict_df_matches_legacy_convert_df_path(pipeline):
-    """The new vectorized predict_df must produce the same output as the legacy
-    convert_df_input_to_list_of_dicts_input path (multi-target, numeric + categorical covariates)."""
+def test_predict_df_matches_manual_preprocess_path(pipeline):
+    """predict_df must produce the same output as manually preprocessing the df with
+    from_data_frame + make_future_df and assembling the result (multi-target, numeric +
+    categorical covariates)."""
     freq = "h"
     prediction_length = 4
     quantile_levels = [0.1, 0.5, 0.9]
@@ -621,7 +623,6 @@ def test_predict_df_matches_legacy_convert_df_path(pipeline):
         freq=freq,
     )
 
-    # New fast path
     result = pipeline.predict_df(
         df,
         future_df=future_df,
@@ -630,8 +631,8 @@ def test_predict_df_matches_legacy_convert_df_path(pipeline):
         quantile_levels=quantile_levels,
     )
 
-    # Legacy path, reconstructed manually
-    inputs, original_order, prediction_timestamps = convert_df_input_to_list_of_dicts_input(
+    # Reconstruct the expected output manually via the public preprocessing helpers.
+    inputs = from_data_frame(
         df=df,
         future_df=future_df,
         target_columns=target_columns,
@@ -645,22 +646,21 @@ def test_predict_df_matches_legacy_convert_df_path(pipeline):
     )
     quantiles_np = torch.stack(quantiles).numpy()
     mean_np = torch.stack(mean).numpy()
-    n_inputs = len(prediction_timestamps)
+
+    n_inputs = len(inputs)
     n_variates = len(target_columns)
-    series_ids = list(prediction_timestamps.keys())
-    future_ts = list(prediction_timestamps.values())
-    legacy_data = {
-        "item_id": np.repeat(series_ids, n_variates * prediction_length),
-        "timestamp": np.concatenate([np.tile(ts, n_variates) for ts in future_ts]),
-        "target_name": np.tile(np.repeat(target_columns, prediction_length), n_inputs),
-        "predictions": mean_np.ravel(),
-    }
+    # Both from_data_frame and make_future_df work on the normalized (first-appearance order) df.
+    future = make_future_df(normalize_df(df), prediction_length, freq=freq)
+    # `future` has prediction_length rows per item; repeat each item's block once per target column.
+    item_rows = np.arange(len(future)).reshape(n_inputs, prediction_length)
+    expected = future.iloc[np.repeat(item_rows, n_variates, axis=0).ravel()].reset_index(drop=True)
+    expected["target_name"] = np.tile(np.repeat(target_columns, prediction_length), n_inputs)
+    expected["predictions"] = mean_np.ravel()
     quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
     for q_idx, q_level in enumerate(quantile_levels):
-        legacy_data[str(q_level)] = quantiles_flat[:, q_idx]
-    legacy = pd.DataFrame(legacy_data).set_index("item_id").loc[original_order].reset_index()
+        expected[str(q_level)] = quantiles_flat[:, q_idx]
 
-    pd.testing.assert_frame_equal(result, legacy)
+    pd.testing.assert_frame_equal(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -1019,8 +1019,8 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
         df, future_df=future_df, target=target_columns, prediction_length=prediction_length
     )
 
-    # Convert df inputs to list of dicts inputs expected by finetune
-    inputs, _, _ = convert_df_input_to_list_of_dicts_input(
+    # Convert df inputs to the preprocessed inputs expected by finetune
+    inputs = from_data_frame(
         df,
         future_df=future_df,
         id_column="item_id",
