@@ -1063,29 +1063,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return predictions_per_window, inference_time_s
 
-    @staticmethod
-    def _fev_window_to_df(
-        window: "fev.EvaluationWindow", as_univariate: bool
-    ) -> tuple[pd.DataFrame, pd.DataFrame | None, list[str]]:
-        """Convert a fev evaluation window into the (df, future_df, target_columns) inputs for `predict_df`."""
-        import fev
-
-        past_df, future_df, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=as_univariate)
-
-        if as_univariate:
-            # `as_univariate=True` splits multivariate targets into separate univariate series. The adapter keeps
-            # the covariate columns, so we drop them here to predict each target independently and ignore covariates.
-            past_df = past_df[[window.id_column, window.timestamp_column, "target"]]
-            future_df = None
-            target_columns = ["target"]
-        else:
-            # The pandas adapter's future_df only contains the known-future covariates; pass None when there are none.
-            if not window.known_dynamic_columns:
-                future_df = None
-            target_columns = list(window.target_columns)
-
-        return past_df, future_df, target_columns
-
     @torch.no_grad()
     def embed(
         self, inputs: TensorOrArray | Sequence[TensorOrArray], batch_size: int = 256, context_length: int | None = None
