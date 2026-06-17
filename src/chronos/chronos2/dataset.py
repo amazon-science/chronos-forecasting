@@ -17,6 +17,7 @@ from chronos.chronos2.preprocess import PreparedInput
 __all__ = [
     "Chronos2Dataset",
     "DatasetMode",
+    "PreparedInput",
 ]
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
