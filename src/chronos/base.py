@@ -230,7 +230,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         result["target_name"] = target
         result["predictions"] = mean_np.ravel()
 
-        quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+        quantiles_flat = quantiles_np.reshape(len(result), len(quantile_levels))
         for q_idx, q_level in enumerate(quantile_levels):
             result[str(q_level)] = quantiles_flat[:, q_idx]
 
@@ -258,64 +258,36 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         inference_time_s
             Total time that it took to make predictions for all windows (in seconds).
         """
-        import datasets
-
         try:
             import fev
         except ImportError:
             raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
 
-        def batchify(lst: list, batch_size: int = 32):
-            """Convert list into batches of desired size."""
-            for i in range(0, len(lst), batch_size):
-                yield lst[i : i + batch_size]
-
-        quantile_levels = task.quantile_levels.copy()
-        if 0.5 not in quantile_levels:
-            quantile_levels.append(0.5)
-
         predictions_per_window = []
         inference_time_s = 0.0
         for window in task.iter_windows():
-            past_data, _ = fev.convert_input_data(window, adapter="datasets", as_univariate=True)
-            past_data = past_data.with_format("torch").cast_column(
-                "target", datasets.Sequence(datasets.Value("float32"))
-            )
-
-            quantiles_all = []
-            mean_all = []
+            # `as_univariate=True` splits multivariate targets into separate univariate series and drops covariates.
+            past_df, _, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=True)
+            past_df = past_df[[window.id_column, window.timestamp_column, "target"]]
 
             start_time = time.monotonic()
-            for batch in batchify(past_data["target"], batch_size=batch_size):
-                quantiles, mean = self.predict_quantiles(
-                    inputs=batch,
-                    prediction_length=task.horizon,
-                    limit_prediction_length=False,
-                    **kwargs,
-                    quantile_levels=quantile_levels,
-                )
-
-                quantiles_all.append(quantiles.numpy())
-                mean_all.append(mean.numpy())
-
+            forecast_df = self.predict_df(
+                past_df,
+                id_column=window.id_column,
+                timestamp_column=window.timestamp_column,
+                target="target",
+                prediction_length=task.horizon,
+                quantile_levels=task.quantile_levels,
+                **kwargs,
+            )
             inference_time_s += time.monotonic() - start_time
 
-            quantiles_np = np.concatenate(quantiles_all, axis=0)  # [num_items, horizon, num_quantiles]
-            mean_np = np.concatenate(mean_all, axis=0)  # [num_items, horizon]
-
-            if task.eval_metric in ["MSE", "RMSE", "RMSSE"]:
-                point_forecast = mean_np  # [num_items, horizon]
-            else:
-                # use median as the point forecast
-                point_forecast = quantiles_np[:, :, quantile_levels.index(0.5)]  # [num_items, horizon]
-            predictions_dict = {"predictions": point_forecast}
-
-            for idx, level in enumerate(task.quantile_levels):
-                predictions_dict[str(level)] = quantiles_np[:, :, idx]
-
             predictions_per_window.append(
-                fev.utils.combine_univariate_predictions_to_multivariate(
-                    datasets.Dataset.from_dict(predictions_dict), target_columns=task.target_columns
+                fev.utils.convert_forecast_df_to_predictions(
+                    forecast_df,
+                    horizon=task.horizon,
+                    quantile_levels=task.quantile_levels,
+                    target_columns=task.target_columns,
                 )
             )
         return predictions_per_window, inference_time_s
