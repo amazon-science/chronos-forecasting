@@ -51,39 +51,31 @@ def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
 def validate_prepared_schema(prepared_input: Any) -> None:
     """Validate that an input matches the PreparedInput schema."""
     if not isinstance(prepared_input, Mapping):
-        raise TypeError(
-            f"Expected input to be a dict-like, got {type(prepared_input).__name__}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
-        )
+        raise TypeError(f"Expected input to be a dict-like, got {type(prepared_input).__name__}.")
 
     required_keys = {"context", "future_covariates", "n_targets", "n_covariates", "n_future_covariates"}
     missing = required_keys - set(prepared_input.keys())
     if missing:
-        raise TypeError(
-            f"Input is missing required keys: {missing}. Set convert_inputs=True when calling fit() to preprocess raw inputs."
-        )
+        raise TypeError(f"Input is missing required keys: {missing}.")
 
     context = prepared_input["context"]
     if not isinstance(context, torch.Tensor) or context.ndim != 2:
         raise TypeError(
             f"Expected 'context' to be 2-d torch.Tensor, got {type(context).__name__} "
-            f"with shape {getattr(context, 'shape', 'N/A')}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
+            f"with shape {getattr(context, 'shape', 'N/A')}."
         )
 
     future_covariates = prepared_input["future_covariates"]
     if not isinstance(future_covariates, torch.Tensor) or future_covariates.ndim != 2:
         raise TypeError(
             f"Expected 'future_covariates' to be 2-d torch.Tensor, got {type(future_covariates).__name__} "
-            f"with shape {getattr(future_covariates, 'shape', 'N/A')}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
+            f"with shape {getattr(future_covariates, 'shape', 'N/A')}."
         )
 
     if context.shape[0] != future_covariates.shape[0]:
         raise ValueError(
             f"Expected 'context' and 'future_covariates' to have the same first dimension, "
-            f"got {context.shape[0]} and {future_covariates.shape[0]}. "
-            "Set convert_inputs=True when calling fit() to preprocess raw inputs."
+            f"got {context.shape[0]} and {future_covariates.shape[0]}."
         )
 
 
@@ -196,10 +188,12 @@ class Chronos2Dataset(IterableDataset):
     Arguments
     ----------
     inputs
-        Time series data. Can be either:
+        Time series data. The input kind is auto-detected from its structure:
 
-        1. Raw inputs (when `convert_inputs=True`, default): A sequence of dictionaries where each
-           dictionary may have the following keys:
+        1. A 3-d `torch.Tensor` / `np.ndarray` of shape (n_series, n_variates, history_length), or a
+           sequence of 1-d / 2-d tensors/arrays. All variates are treated as targets (no covariates).
+
+        2. Raw inputs: a sequence of dictionaries where each dictionary may have the following keys:
            - `target` (required): a 1-d or 2-d `torch.Tensor` or `np.ndarray` of shape (history_length,)
              or (n_variates, history_length). Forecasts will be generated for items in `target`.
            - `past_covariates` (optional): a dict of past-only covariates or past values of known future
@@ -209,9 +203,9 @@ class Chronos2Dataset(IterableDataset):
            All dictionaries must share the same schema: the same `target` shape (`n_variates`) and the same
            `past_covariates` / `future_covariates` keys (the `history_length` may differ across dictionaries).
 
-        2. Pre-processed inputs (when `convert_inputs=False`): A sequence of `PreparedInput` dicts with keys:
-           `context`, `future_covariates`, `n_targets`, `n_covariates`, `n_future_covariates`.
-           Use the `chronos.chronos2.preprocess.from_*` functions to create pre-processed inputs.
+        3. Pre-processed inputs: a sequence of `PreparedInput` dicts (detected by the presence of a
+           `context` key) with keys `context`, `future_covariates`, `n_targets`, `n_covariates`,
+           `n_future_covariates`. Use the `chronos.chronos2.preprocess.from_*` functions to create these.
     context_length
         The maximum context length used for training or inference
     prediction_length
@@ -227,8 +221,6 @@ class Chronos2Dataset(IterableDataset):
         `min_past + prediction_length` are filtered out, by default 1
     mode
         `DatasetMode` governing whether to generate training, validation or test samples, by default "train"
-    convert_inputs
-        If True (default), preprocess raw inputs. If False, inputs are expected to be already preprocessed.
     """
 
     def __init__(
@@ -240,28 +232,25 @@ class Chronos2Dataset(IterableDataset):
         output_patch_size: int,
         min_past: int = 1,
         mode: str | DatasetMode = DatasetMode.TRAIN,
-        convert_inputs: bool = True,
     ) -> None:
         super().__init__()
         assert mode in {DatasetMode.TRAIN, DatasetMode.VALIDATION, DatasetMode.TEST}, f"Invalid mode: {mode}"
 
+        if len(inputs) == 0:
+            raise ValueError("`inputs` is empty. Please provide at least one time series.")
+
         self.inputs: Sequence[PreparedInput]
-        if convert_inputs:
-            if isinstance(inputs, (torch.Tensor, np.ndarray)):
-                self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
-            elif (
-                isinstance(inputs, Sequence) and len(inputs) > 0 and isinstance(inputs[0], (torch.Tensor, np.ndarray))
-            ):
-                self.inputs = preprocess.from_list_of_tensors(
-                    cast("list[TensorOrArray]", inputs), prediction_length=prediction_length
-                )
-            else:
-                self.inputs = preprocess.from_list_of_dicts(
-                    cast(list[dict], inputs), prediction_length=prediction_length
-                )
-        else:
+        if isinstance(inputs, (torch.Tensor, np.ndarray)):
+            self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
+        elif isinstance(inputs[0], (torch.Tensor, np.ndarray)):
+            self.inputs = preprocess.from_list_of_tensors(
+                cast("list[TensorOrArray]", inputs), prediction_length=prediction_length
+            )
+        elif "context" in inputs[0]:
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
+        else:
+            self.inputs = preprocess.from_list_of_dicts(cast(list[dict], inputs), prediction_length=prediction_length)
 
         if mode != DatasetMode.TEST:
             self.inputs = [x for x in self.inputs if x["context"].shape[-1] >= min_past + prediction_length]

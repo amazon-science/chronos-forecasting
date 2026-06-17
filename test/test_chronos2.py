@@ -15,7 +15,8 @@ import torch
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
 from chronos.chronos2.layers import MHA
-from chronos.df_utils import convert_df_input_to_list_of_dicts_input
+from chronos.chronos2.preprocess import from_data_frame
+from chronos.df_utils import make_future_df, normalize_df
 from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor, timeout_callback
 
 DUMMY_MODEL_PATH = Path(__file__).parent / "dummy-chronos2-model"
@@ -467,8 +468,8 @@ def test_predict_df_works_for_valid_inputs(
     [
         # Missing timestamp column
         ({"item_id": ["A"], "target": [1.0]}, "df does not contain all"),
-        # Insufficient data points
-        ({"item_id": ["A"], "timestamp": ["2023-01-01"], "target": [1.0]}, "must have at least 3 data"),
+        # Too few points to infer a frequency, and no explicit freq provided
+        ({"item_id": ["A"], "timestamp": ["2023-01-01"], "target": [1.0]}, "Could not infer frequency"),
     ],
 )
 def test_predict_df_df_validation_errors(pipeline, context_data, error_match):
@@ -476,6 +477,22 @@ def test_predict_df_df_validation_errors(pipeline, context_data, error_match):
 
     with pytest.raises(ValueError, match=error_match):
         pipeline.predict_df(df)
+
+
+def test_predict_df_accepts_short_series_with_explicit_freq(pipeline):
+    """Series with fewer than 3 points are allowed as long as the frequency can be determined."""
+    df = pd.DataFrame(
+        {
+            "item_id": ["A", "A", "B"],
+            "timestamp": ["2023-01-01", "2023-01-02", "2023-01-01"],
+            "target": [1.0, 2.0, 3.0],
+        }
+    )
+
+    result = pipeline.predict_df(df, prediction_length=2, freq="D", validate_inputs=False)
+
+    assert set(result["item_id"]) == {"A", "B"}
+    assert len(result) == 2 * 2  # two items, prediction_length=2
 
 
 @pytest.mark.parametrize(
@@ -575,6 +592,75 @@ def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline)
 
     with pytest.raises(ValueError, match="future_df must contain prediction"):
         pipeline.predict_df(df, future_df=future_df, prediction_length=3)
+
+
+def test_predict_df_matches_manual_preprocess_path(pipeline):
+    """predict_df must produce the same output as manually preprocessing the df with
+    from_data_frame + make_future_df and assembling the result (multi-target, numeric +
+    categorical covariates)."""
+    freq = "h"
+    prediction_length = 4
+    quantile_levels = [0.1, 0.5, 0.9]
+    target_columns = ["sales", "revenue"]
+
+    df = create_df(
+        series_ids=["B", "A", "C"],
+        n_points=[12, 20, 15],
+        target_cols=target_columns,
+        covariates=["temp", "promo"],  # temp: past+future numeric; promo: past-only
+        freq=freq,
+    )
+    # Make `promo` categorical (numpy str), exercising the categorical encoding path.
+    rng = np.random.RandomState(0)
+    df["promo"] = rng.choice(["lo", "hi"], size=len(df))
+
+    forecast_start_times = get_forecast_start_times(df, freq)
+    future_df = create_future_df(
+        forecast_start_times,
+        series_ids=["B", "A", "C"],
+        n_points=[prediction_length] * 3,
+        covariates=["temp"],
+        freq=freq,
+    )
+
+    result = pipeline.predict_df(
+        df,
+        future_df=future_df,
+        target=target_columns,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+    )
+
+    # Reconstruct the expected output manually via the public preprocessing helpers.
+    inputs = from_data_frame(
+        df=df,
+        future_df=future_df,
+        target_columns=target_columns,
+        prediction_length=prediction_length,
+    )
+    quantiles, mean = pipeline.predict_quantiles(
+        inputs=inputs,
+        prediction_length=prediction_length,
+        quantile_levels=quantile_levels,
+        limit_prediction_length=False,
+    )
+    quantiles_np = torch.stack(quantiles).numpy()
+    mean_np = torch.stack(mean).numpy()
+
+    n_inputs = len(inputs)
+    n_variates = len(target_columns)
+    # Both from_data_frame and make_future_df work on the normalized (first-appearance order) df.
+    future = make_future_df(normalize_df(df), prediction_length, freq=freq)
+    # `future` has prediction_length rows per item; repeat each item's block once per target column.
+    item_rows = np.arange(len(future)).reshape(n_inputs, prediction_length)
+    expected = future.iloc[np.repeat(item_rows, n_variates, axis=0).ravel()].reset_index(drop=True)
+    expected["target_name"] = np.tile(np.repeat(target_columns, prediction_length), n_inputs)
+    expected["predictions"] = mean_np.ravel()
+    quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+    for q_idx, q_level in enumerate(quantile_levels):
+        expected[str(q_level)] = quantiles_flat[:, q_idx]
+
+    pd.testing.assert_frame_equal(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -933,8 +1019,8 @@ def test_two_step_finetuning_with_df_input_works(pipeline, context_setup, future
         df, future_df=future_df, target=target_columns, prediction_length=prediction_length
     )
 
-    # Convert df inputs to list of dicts inputs expected by finetune
-    inputs, _, _ = convert_df_input_to_list_of_dicts_input(
+    # Convert df inputs to the preprocessed inputs expected by finetune
+    inputs = from_data_frame(
         df,
         future_df=future_df,
         id_column="item_id",
@@ -1123,9 +1209,9 @@ def test_pipeline_can_be_finetuned_with_preprocessed_hf_dataset(pipeline):
     prepared_tasks = from_list_of_dicts(raw_inputs, prediction_length=prediction_length)
     hf_dataset = datasets.Dataset.from_list(prepared_tasks).with_format("torch")
 
-    # Fine-tune with preprocessed inputs
+    # Fine-tune with preprocessed inputs (auto-detected from the PreparedInput schema)
     ft_pipeline = pipeline.fit(
-        hf_dataset, prediction_length=prediction_length, num_steps=5, min_past=1, batch_size=32, convert_inputs=False
+        hf_dataset, prediction_length=prediction_length, num_steps=5, min_past=1, batch_size=32
     )
 
     # Verify fine-tuned model can predict
