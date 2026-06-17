@@ -124,7 +124,9 @@ def normalize_df(
             missing = pd.unique(df[id_column][codes < 0])
             raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
 
-    ts = df[timestamp_column].to_numpy()
+    # View as int64 (datetime64 is int64-backed) so np.diff yields integers; comparing
+    # the timedelta64 from np.diff against 0 raises UFuncTypeError on numpy<2.0.
+    ts = df[timestamp_column].to_numpy().view("int64")
     code_diff = np.diff(codes)
     grouped = bool(np.all(code_diff >= 0))
     sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))
