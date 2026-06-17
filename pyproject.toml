@@ -15,11 +15,11 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
   "torch>=2.2,<3",
-  "transformers>=4.41",
+  "transformers>=4.41,<6",
   "accelerate>=1.1.0,<2",
   "numpy>=1.21,<3",
   "einops>=0.7.0,<1",
-  "pandas>=2.0,<2.4",
+  "pandas>=2.0,<4",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -42,24 +42,24 @@ path = "src/chronos/__about__.py"
 extras = [
   "boto3>=1.10,<2",
   "peft>=0.18.1,<1",
-  "fev>=0.6.1",
-  "pandas[pyarrow]>=2.0,<2.4",
+  "fev>=0.8.0,<1",
+  "pandas[pyarrow]>=2.0,<4",
 ]
 test = [
   "pytest~=8.0",
   "boto3>=1.10,<2",
   "peft>=0.18.1,<1",
-  "fev>=0.6.1",
+  "fev>=0.8.0,<1",
 ]
 typecheck = ["mypy~=1.9"]
 dev = [
   "gluonts[pro]~=0.16",
-  "datasets>=3.0,<4",
+  "datasets>=3.0,<5",
   "typer",
   "tensorboard",
   "typer-config",
   "joblib",
-  "fev>=0.6.1",
+  "fev>=0.8.0,<1",
   "rich",
 ]
 
