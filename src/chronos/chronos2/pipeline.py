@@ -1035,6 +1035,16 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 timestamp_column=first_window.timestamp_column,
             )
 
+            num_variates: int = len(target_columns) + len(task.past_dynamic_columns) + len(task.known_dynamic_columns)
+            if batch_size < num_variates:
+                warnings.warn(
+                    f"batch_size ({batch_size}) is smaller than num_variates ({num_variates}) in the task. "
+                    f"Setting batch_size = num_variates = num_targets + num_covariates",
+                    category=UserWarning,
+                    stacklevel=2,
+                )
+                batch_size = num_variates
+
             finetune_kwargs = deepcopy(finetune_kwargs)
             finetune_kwargs["prediction_length"] = first_window.horizon
             finetune_kwargs["batch_size"] = finetune_kwargs.get("batch_size", batch_size)
