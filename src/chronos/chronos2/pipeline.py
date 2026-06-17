@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import torch
 from einops import rearrange, repeat
+from packaging import version
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
 from transformers.utils.import_utils import is_peft_available
@@ -324,8 +325,17 @@ class Chronos2Pipeline(BaseChronosPipeline):
         if training_kwargs["tf32"]:
             # setting tf32=True changes these global properties, we copy them here so that
             # we can restore them after fine-tuning
-            matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
-            cudnn_tf32 = torch.backends.cudnn.allow_tf32
+
+            # NOTE: The old way of allowing TF32 computations was deprecated in 2.9 and torch
+            # doesn't allow mixing the old and new ways.
+            is_torch_geq_2p9 = version.parse(torch.__version__) >= version.parse("2.9.0")
+
+            if is_torch_geq_2p9:
+                matmul_precision = torch.backends.cuda.matmul.fp32_precision
+                cudnn_precision = torch.backends.cudnn.fp32_precision
+            else:
+                matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
+                cudnn_tf32 = torch.backends.cudnn.allow_tf32
 
         training_args = TrainingArguments(**training_kwargs)
 
@@ -365,8 +375,13 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         if training_kwargs["tf32"]:
             # restore tf32 settings
-            torch.backends.cuda.matmul.allow_tf32 = matmul_tf32
-            torch.backends.cudnn.allow_tf32 = cudnn_tf32
+
+            if is_torch_geq_2p9:
+                torch.backends.cuda.matmul.fp32_precision = matmul_precision
+                torch.backends.cudnn.fp32_precision = cudnn_precision
+            else:
+                torch.backends.cuda.matmul.allow_tf32 = matmul_tf32
+                torch.backends.cudnn.allow_tf32 = cudnn_tf32
 
         return finetuned_pipeline
 
