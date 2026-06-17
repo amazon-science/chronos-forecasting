@@ -1021,6 +1021,21 @@ class Chronos2Pipeline(BaseChronosPipeline):
         except ImportError:
             raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
 
+        # The number of variates per task is the same across all windows, so we check it once here.
+        # Covariates are ignored when `as_univariate=True`, so each task then has a single variate.
+        if as_univariate:
+            num_variates = 1
+        else:
+            num_variates = len(task.target_columns) + len(task.past_dynamic_columns) + len(task.known_dynamic_columns)
+        if batch_size < num_variates:
+            warnings.warn(
+                f"batch_size ({batch_size}) is smaller than num_variates ({num_variates}) in the task. "
+                f"Setting batch_size = num_variates = num_targets + num_covariates",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            batch_size = num_variates
+
         pipeline = self
         if finetune_kwargs is not None:
             # only fine-tune the model on the first window
@@ -1034,16 +1049,6 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 id_column=first_window.id_column,
                 timestamp_column=first_window.timestamp_column,
             )
-
-            num_variates: int = len(target_columns) + len(task.past_dynamic_columns) + len(task.known_dynamic_columns)
-            if batch_size < num_variates:
-                warnings.warn(
-                    f"batch_size ({batch_size}) is smaller than num_variates ({num_variates}) in the task. "
-                    f"Setting batch_size = num_variates = num_targets + num_covariates",
-                    category=UserWarning,
-                    stacklevel=2,
-                )
-                batch_size = num_variates
 
             finetune_kwargs = deepcopy(finetune_kwargs)
             finetune_kwargs["prediction_length"] = first_window.horizon
