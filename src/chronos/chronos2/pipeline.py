@@ -968,18 +968,21 @@ class Chronos2Pipeline(BaseChronosPipeline):
         """Convert a fev evaluation window into the (df, future_df, target_columns) inputs for `predict_df`."""
         import fev
 
+        past_df, future_df, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=as_univariate)
+
         if as_univariate:
             # `as_univariate=True` splits multivariate targets into separate univariate series. The adapter keeps
             # the covariate columns, so we drop them here to predict each target independently and ignore covariates.
-            past_df, _, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=True)
             past_df = past_df[[window.id_column, window.timestamp_column, "target"]]
-            return past_df, None, ["target"]
-
-        past_df, future_df, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=False)
-        # The pandas adapter's future_df only contains the known-future covariates; pass None when there are none.
-        if not window.known_dynamic_columns:
             future_df = None
-        return past_df, future_df, list(window.target_columns)
+            target_columns = ["target"]
+        else:
+            # The pandas adapter's future_df only contains the known-future covariates; pass None when there are none.
+            if not window.known_dynamic_columns:
+                future_df = None
+            target_columns = list(window.target_columns)
+
+        return past_df, future_df, target_columns
 
     def predict_fev(
         self,
