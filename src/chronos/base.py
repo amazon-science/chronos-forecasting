@@ -142,6 +142,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         target: str = "target",
         prediction_length: int | None = None,
         quantile_levels: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        batch_size: int = 256,
         validate_inputs: bool = True,
         freq: str | None = None,
         **predict_kwargs,
@@ -165,6 +166,8 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             Number of steps to predict for each time series
         quantile_levels
             Quantile levels to compute
+        batch_size
+            The number of time series to predict in a single forward pass, by default 256
         validate_inputs
             [ADVANCED] When True (default), validates dataframes before prediction. Setting to False removes the
             validation overhead, but may silently lead to wrong predictions if data is misformatted. When False, you
@@ -212,17 +215,22 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
             df, prediction_length, freq=freq, id_column=id_column, timestamp_column=timestamp_column
         )
 
-        # Generate forecasts
-        quantiles, mean = self.predict_quantiles(
-            inputs=context,
-            prediction_length=prediction_length,
-            quantile_levels=quantile_levels,
-            limit_prediction_length=False,
-            **predict_kwargs,
-        )
+        # Generate forecasts in batches of at most `batch_size` series to bound memory usage.
+        quantiles_all = []
+        mean_all = []
+        for start in range(0, len(context), batch_size):
+            quantiles, mean = self.predict_quantiles(
+                inputs=context[start : start + batch_size],
+                prediction_length=prediction_length,
+                quantile_levels=quantile_levels,
+                limit_prediction_length=False,
+                **predict_kwargs,
+            )
+            quantiles_all.append(quantiles.numpy())
+            mean_all.append(mean.numpy())
 
-        quantiles_np = quantiles.numpy()  # [n_series, horizon, num_quantiles]
-        mean_np = mean.numpy()  # [n_series, horizon]
+        quantiles_np = np.concatenate(quantiles_all, axis=0)  # [n_series, horizon, num_quantiles]
+        mean_np = np.concatenate(mean_all, axis=0)  # [n_series, horizon]
 
         # `future` has prediction_length rows per item, in the same item order as the predictions,
         # so it lines up with `mean` / `quantiles` directly (single target, no per-variate repeat).
@@ -230,7 +238,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         result["target_name"] = target
         result["predictions"] = mean_np.ravel()
 
-        quantiles_flat = quantiles_np.reshape(-1, len(quantile_levels))
+        quantiles_flat = quantiles_np.reshape(len(result), len(quantile_levels))
         for q_idx, q_level in enumerate(quantile_levels):
             result[str(q_level)] = quantiles_flat[:, q_idx]
 
@@ -258,67 +266,72 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         inference_time_s
             Total time that it took to make predictions for all windows (in seconds).
         """
-        import datasets
-
         try:
             import fev
         except ImportError:
             raise ImportError("fev is required for predict_fev. Please install it with `pip install fev`.")
 
-        def batchify(lst: list, batch_size: int = 32):
-            """Convert list into batches of desired size."""
-            for i in range(0, len(lst), batch_size):
-                yield lst[i : i + batch_size]
-
+        # `predict_df` puts `predict_quantiles`'s `mean` in the "predictions" column. For point-forecast metrics
+        # the mean is the right target; for the others the median (0.5 quantile) is, so we request it and swap it in.
+        use_median_point_forecast = task.eval_metric not in ["MSE", "RMSE", "RMSSE"]
         quantile_levels = task.quantile_levels.copy()
-        if 0.5 not in quantile_levels:
+        if use_median_point_forecast and 0.5 not in quantile_levels:
             quantile_levels.append(0.5)
 
         predictions_per_window = []
         inference_time_s = 0.0
         for window in task.iter_windows():
-            past_data, _ = fev.convert_input_data(window, adapter="datasets", as_univariate=True)
-            past_data = past_data.with_format("torch").cast_column(
-                "target", datasets.Sequence(datasets.Value("float32"))
-            )
-
-            quantiles_all = []
-            mean_all = []
+            # Base pipelines are univariate, so we always split multivariate targets and drop covariates.
+            past_df, _, _ = self._fev_window_to_df(window, as_univariate=True)
 
             start_time = time.monotonic()
-            for batch in batchify(past_data["target"], batch_size=batch_size):
-                quantiles, mean = self.predict_quantiles(
-                    inputs=batch,
-                    prediction_length=task.horizon,
-                    limit_prediction_length=False,
-                    **kwargs,
-                    quantile_levels=quantile_levels,
-                )
-
-                quantiles_all.append(quantiles.numpy())
-                mean_all.append(mean.numpy())
-
+            forecast_df = self.predict_df(
+                past_df,
+                id_column=window.id_column,
+                timestamp_column=window.timestamp_column,
+                target="target",
+                prediction_length=task.horizon,
+                quantile_levels=quantile_levels,
+                batch_size=batch_size,
+                **kwargs,
+            )
             inference_time_s += time.monotonic() - start_time
 
-            quantiles_np = np.concatenate(quantiles_all, axis=0)  # [num_items, horizon, num_quantiles]
-            mean_np = np.concatenate(mean_all, axis=0)  # [num_items, horizon]
-
-            if task.eval_metric in ["MSE", "RMSE", "RMSSE"]:
-                point_forecast = mean_np  # [num_items, horizon]
-            else:
-                # use median as the point forecast
-                point_forecast = quantiles_np[:, :, quantile_levels.index(0.5)]  # [num_items, horizon]
-            predictions_dict = {"predictions": point_forecast}
-
-            for idx, level in enumerate(task.quantile_levels):
-                predictions_dict[str(level)] = quantiles_np[:, :, idx]
+            if use_median_point_forecast:
+                forecast_df["predictions"] = forecast_df["0.5"]
 
             predictions_per_window.append(
-                fev.utils.combine_univariate_predictions_to_multivariate(
-                    datasets.Dataset.from_dict(predictions_dict), target_columns=task.target_columns
+                fev.utils.convert_forecast_df_to_predictions(
+                    forecast_df,
+                    horizon=task.horizon,
+                    quantile_levels=task.quantile_levels,
+                    target_columns=task.target_columns,
                 )
             )
         return predictions_per_window, inference_time_s
+
+    @staticmethod
+    def _fev_window_to_df(
+        window: "fev.EvaluationWindow", as_univariate: bool
+    ) -> Tuple[pd.DataFrame, Optional[pd.DataFrame], List[str]]:
+        """Convert a fev evaluation window into the (past_df, future_df, target_columns) inputs for `predict_df`."""
+        import fev
+
+        past_df, future_df, _ = fev.convert_input_data(window, adapter="pandas", as_univariate=as_univariate)
+
+        if as_univariate:
+            # `as_univariate=True` splits multivariate targets into separate univariate series. The adapter keeps
+            # the covariate columns, so we drop them here to predict each target independently and ignore covariates.
+            past_df = past_df[[window.id_column, window.timestamp_column, "target"]]
+            future_df = None
+            target_columns = ["target"]
+        else:
+            # The pandas adapter's future_df only contains the known-future covariates; pass None when there are none.
+            if not window.known_dynamic_columns:
+                future_df = None
+            target_columns = list(window.target_columns)
+
+        return past_df, future_df, target_columns
 
     @classmethod
     def from_pretrained(

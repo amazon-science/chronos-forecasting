@@ -5,7 +5,7 @@
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence, TypeAlias, cast
+from typing import Any, Iterator, Mapping, Sequence, TypeAlias, cast
 
 import numpy as np
 import torch
@@ -18,15 +18,7 @@ __all__ = [
     "Chronos2Dataset",
     "DatasetMode",
     "PreparedInput",
-    "convert_fev_window_to_list_of_dicts_input",
-    "left_pad_and_cat_2D",
-    "validate_prepared_schema",
 ]
-
-if TYPE_CHECKING:
-    import datasets
-    import fev
-
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
 
@@ -77,102 +69,6 @@ def validate_prepared_schema(prepared_input: Any) -> None:
             f"Expected 'context' and 'future_covariates' to have the same first dimension, "
             f"got {context.shape[0]} and {future_covariates.shape[0]}."
         )
-
-
-def _cast_fev_features(
-    past_data: "datasets.Dataset",
-    future_data: "datasets.Dataset",
-    target_columns: list[str],
-    past_dynamic_columns: list[str],
-    known_dynamic_columns: list[str],
-) -> tuple["datasets.Dataset", "datasets.Dataset"]:
-    import datasets
-
-    dynamic_columns = [*past_dynamic_columns, *known_dynamic_columns]
-    cat_cols = []
-    for col in dynamic_columns:
-        item = past_data[0][col]
-        if not np.issubdtype(item.dtype, np.number):
-            cat_cols.append(col)
-
-    numeric_cols = target_columns + list(set(dynamic_columns) - set(cat_cols))
-    past_feature_updates = {col: datasets.Sequence(datasets.Value("float64")) for col in numeric_cols} | {
-        col: datasets.Sequence(datasets.Value("string")) for col in cat_cols
-    }
-    past_data_features = past_data.features
-    past_data_features.update(past_feature_updates)
-    past_data = past_data.cast(past_data_features)
-
-    future_cat_cols = [k for k in cat_cols if k in known_dynamic_columns]
-    future_numeric_cols = list(set(known_dynamic_columns) - set(future_cat_cols))
-    future_feature_updates = {col: datasets.Sequence(datasets.Value("float64")) for col in future_numeric_cols} | {
-        col: datasets.Sequence(datasets.Value("string")) for col in future_cat_cols
-    }
-    future_data_features = future_data.features
-    future_data_features.update(future_feature_updates)
-    future_data = future_data.cast(future_data_features)
-
-    return past_data, future_data
-
-
-def convert_fev_window_to_list_of_dicts_input(
-    window: "fev.EvaluationWindow", as_univariate: bool
-) -> tuple[list[dict[str, np.ndarray | dict[str, np.ndarray]]], list[str], list[str], list[str]]:
-    import fev
-
-    if as_univariate:
-        past_data, future_data = fev.convert_input_data(window, adapter="datasets", as_univariate=True)
-        target_columns = ["target"]
-        past_dynamic_columns = []
-        known_dynamic_columns = []
-    else:
-        past_data, future_data = window.get_input_data()
-        target_columns = window.target_columns
-        past_dynamic_columns = window.past_dynamic_columns
-        known_dynamic_columns = window.known_dynamic_columns
-
-    past_data, future_data = _cast_fev_features(
-        past_data=past_data,
-        future_data=future_data,
-        target_columns=target_columns,
-        past_dynamic_columns=past_dynamic_columns,
-        known_dynamic_columns=known_dynamic_columns,
-    )
-
-    num_series: int = len(past_data)
-    num_past_covariates: int = len(past_dynamic_columns)
-    num_future_covariates: int = len(known_dynamic_columns)
-
-    # We use numpy format because torch does not support str covariates
-    target_data = past_data.select_columns(target_columns).with_format("numpy")
-    # past of past-only and known-future covariates
-    dynamic_columns = [*past_dynamic_columns, *known_dynamic_columns]
-    past_covariate_data = past_data.select_columns(dynamic_columns).with_format("numpy")
-    future_known_data = future_data.select_columns(known_dynamic_columns).with_format("numpy")
-
-    if num_past_covariates + num_future_covariates > 0:
-        assert len(past_covariate_data) == num_series
-    if num_future_covariates > 0:
-        assert len(future_known_data) == num_series
-
-    inputs: list[dict[str, np.ndarray | dict[str, np.ndarray]]] = []
-    for idx, target_row in enumerate(target_data):
-        target_row = cast(dict, target_row)
-        # this assumes that the targets have the same length for multivariate tasks
-        target_tensor_i = np.stack([target_row[col] for col in target_columns])
-        entry: dict[str, np.ndarray | dict[str, np.ndarray]] = {"target": target_tensor_i}
-
-        if len(dynamic_columns) > 0:
-            past_covariate_row = past_covariate_data[idx]
-            entry["past_covariates"] = {col: past_covariate_row[col] for col in dynamic_columns}
-
-        if len(known_dynamic_columns) > 0:
-            future_known_row = future_known_data[idx]
-            entry["future_covariates"] = {col: future_known_row[col] for col in known_dynamic_columns}
-
-        inputs.append(entry)
-
-    return inputs, target_columns, past_dynamic_columns, known_dynamic_columns
 
 
 class DatasetMode(str, Enum):
@@ -440,4 +336,11 @@ def convert_tensor_input_to_list_of_dicts_input(*args, **kwargs):
     raise RuntimeError(
         "`convert_tensor_input_to_list_of_dicts_input` has been deprecated. "
         "Please use `chronos.chronos2.preprocess.from_tensor` instead."
+    )
+
+
+def convert_fev_window_to_list_of_dicts_input(*args, **kwargs):
+    raise RuntimeError(
+        "`convert_fev_window_to_list_of_dicts_input` has been deprecated. "
+        "`predict_fev` now builds inputs directly from `fev.convert_input_data`."
     )

@@ -181,10 +181,13 @@ def from_data_frame(
 
     target = df[target_columns].to_numpy(dtype=np.float32, na_value=np.nan).T
 
-    # Normalize each past covariate to float32 (numeric) or "category"; this dtype drives encoding.
+    # Normalize each past covariate to float32 (numeric except bool) or "category"; this dtype drives encoding.
     # Future columns are passed through raw — _encode_categorical re-maps them onto the past categories.
     past_covariates = {
-        c: df[c].astype(np.float32 if ptypes.is_numeric_dtype(df[c]) else "category") for c in covariate_columns
+        c: df[c].astype(
+            np.float32 if ptypes.is_numeric_dtype(df[c]) and not ptypes.is_bool_dtype(df[c]) else "category"
+        )
+        for c in covariate_columns
     }
 
     if future_df is not None:

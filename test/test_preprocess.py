@@ -346,6 +346,31 @@ def test_from_data_frame_with_categorical_covariate_target_encoding():
         assert torch.isfinite(prepared["context"][1]).all()
 
 
+def test_from_data_frame_treats_bool_covariate_as_categorical():
+    """Bool covariates must be target-encoded as categories, not passed through as raw 0/1 floats."""
+    rng = np.random.default_rng(0)
+    flags = np.array([True, False] * 10)
+    base = {
+        "item_id": ["A"] * 10 + ["B"] * 10,
+        "timestamp": list(pd.date_range(end="2020-01-10", periods=10, freq="D")) * 2,
+        "target": rng.standard_normal(20).astype(np.float32),
+    }
+    bool_df = pd.DataFrame({**base, "flag": flags})
+    str_df = pd.DataFrame({**base, "flag": flags.astype(str)})
+    float_df = pd.DataFrame({**base, "flag": flags.astype(np.float32)})
+
+    kwargs = dict(target_columns=["target"], prediction_length=3, known_covariates_names=["flag"])
+    bool_out = from_data_frame(df=bool_df, **kwargs)
+    str_out = from_data_frame(df=str_df, **kwargs)
+    float_out = from_data_frame(df=float_df, **kwargs)
+
+    for bool_prepared, str_prepared, float_prepared in zip(bool_out, str_out, float_out):
+        # bool is encoded identically to the equivalent string categorical ...
+        torch.testing.assert_close(bool_prepared["context"], str_prepared["context"])
+        # ... and differently from raw float 0/1 (which is passed through unencoded).
+        assert not torch.allclose(bool_prepared["context"], float_prepared["context"])
+
+
 # Tests for _target_encode (the core categorical encoder)
 
 
