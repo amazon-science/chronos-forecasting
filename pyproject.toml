@@ -51,6 +51,10 @@ test = [
   "peft>=0.18.1,<1",
   "fev>=0.8.0,<1",
 ]
+vllm = [
+  "vllm>=0.13.0",
+  "pydantic>=2.0",
+]
 typecheck = ["mypy~=1.9"]
 dev = [
   "gluonts[pro]~=0.16",
@@ -62,6 +66,12 @@ dev = [
   "fev>=0.8.0,<1",
   "rich",
 ]
+
+[project.entry-points."vllm.general_plugins"]
+chronos2 = "chronos.chronos2.vllm:register_chronos2_model"
+
+[project.entry-points."vllm.io_processor_plugins"]
+chronos2 = "chronos.chronos2.vllm:get_chronos2_io_processor"
 
 [project.urls]
 Homepage = "https://github.com/amazon-science/chronos-forecasting"
