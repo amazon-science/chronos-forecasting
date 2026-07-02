@@ -14,6 +14,7 @@ import torch
 
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
+from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode
 from chronos.chronos2.layers import MHA
 from chronos.chronos2.preprocess import from_data_frame
 from chronos.df_utils import make_future_df, normalize_df
@@ -1220,3 +1221,63 @@ def test_pipeline_can_be_finetuned_with_preprocessed_hf_dataset(pipeline):
     for ft_out in ft_outputs:
         assert ft_out.shape == (1, DEFAULT_MODEL_NUM_QUANTILES, prediction_length)
         assert not torch.isnan(ft_out).any()
+
+
+class _CountingSequence:
+    def __init__(self, n_items: int, context_length: int) -> None:
+        self._n_items = n_items
+        self._context_length = context_length
+        self.access_count = 0
+
+    def __len__(self) -> int:
+        return self._n_items
+
+    def __getitem__(self, idx: int) -> dict:
+        if not 0 <= idx < self._n_items:
+            raise IndexError(idx)
+        self.access_count += 1
+        return {
+            "context": torch.rand(1, self._context_length),
+            "future_covariates": torch.zeros(1, 0),
+            "n_targets": 1,
+            "n_covariates": 0,
+            "n_future_covariates": 0,
+        }
+
+
+def test_train_dataset_does_not_materialize_lazy_inputs():
+    n_items, batch_size, num_steps = 10_000, 4, 5
+    src = _CountingSequence(n_items, context_length=64)
+
+    dataset = Chronos2Dataset(
+        inputs=src,
+        context_length=512,
+        prediction_length=8,
+        batch_size=batch_size,
+        output_patch_size=16,
+        mode=DatasetMode.TRAIN,
+    )
+
+    it = iter(dataset)
+    for _ in range(num_steps):
+        next(it)
+
+    assert src.access_count <= 5 * num_steps * batch_size
+
+
+def test_train_dataset_raises_when_all_lazy_inputs_too_short():
+    prediction_length, min_past = 8, 4
+    src = _CountingSequence(16, context_length=min_past + prediction_length - 1)
+
+    dataset = Chronos2Dataset(
+        inputs=src,
+        context_length=512,
+        prediction_length=prediction_length,
+        batch_size=4,
+        output_patch_size=16,
+        min_past=min_past,
+        mode=DatasetMode.TRAIN,
+    )
+
+    with pytest.raises(ValueError, match="at least"):
+        next(iter(dataset))

@@ -22,6 +22,9 @@ __all__ = [
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
 
+# Consecutive too-short draws tolerated during training before giving up on a lazy source.
+MAX_REJECTED_SAMPLES = 10_000
+
 
 def left_pad_and_cat_2D(tensors: list[torch.Tensor]) -> torch.Tensor:
     """
@@ -136,6 +139,9 @@ class Chronos2Dataset(IterableDataset):
             raise ValueError("`inputs` is empty. Please provide at least one time series.")
 
         self.inputs: Sequence[PreparedInput]
+        # A pre-processed `Sequence[PreparedInput]` may be a lazy, larger-than-memory source
+        # (e.g. a memory-mapped `datasets.Dataset`), so we must not scan or copy it here.
+        inputs_are_lazy = False
         if isinstance(inputs, (torch.Tensor, np.ndarray)):
             self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
         elif isinstance(inputs[0], (torch.Tensor, np.ndarray)):
@@ -145,11 +151,14 @@ class Chronos2Dataset(IterableDataset):
         elif "context" in inputs[0]:
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
+            inputs_are_lazy = True
         else:
             self.inputs = preprocess.from_list_of_dicts(cast(list[dict], inputs), prediction_length=prediction_length)
 
-        if mode != DatasetMode.TEST:
-            self.inputs = [x for x in self.inputs if x["context"].shape[-1] >= min_past + prediction_length]
+        self.min_length = min_past + prediction_length
+        if mode != DatasetMode.TEST and not inputs_are_lazy:
+            # Lazy inputs are filtered on the fly during iteration to keep peak memory O(batch).
+            self.inputs = [x for x in self.inputs if x["context"].shape[-1] >= self.min_length]
             if len(self.inputs) == 0:
                 raise ValueError(
                     "The dataset is empty after filtering based on the length of the time series "
@@ -263,8 +272,19 @@ class Chronos2Dataset(IterableDataset):
             current_batch_size = 0
             input_indices = []
 
+            n_rejected = 0
             while current_batch_size < self.batch_size:
                 input_idx = np.random.randint(len(self.inputs))
+                # Reject too-short series lazily rather than pre-filtering the (possibly lazy) source.
+                if self.inputs[input_idx]["context"].shape[-1] < self.min_length:
+                    n_rejected += 1
+                    if n_rejected >= MAX_REJECTED_SAMPLES:
+                        raise ValueError(
+                            f"Could not sample a time series with at least min_past + prediction_length "
+                            f"({self.min_length}) observations after {MAX_REJECTED_SAMPLES} attempts. Please "
+                            "provide longer time series or reduce `min_past` or `prediction_length`."
+                        )
+                    continue
                 input_indices.append(input_idx)
                 current_batch_size += self.inputs[input_idx]["context"].shape[0]
 
