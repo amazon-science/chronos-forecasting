@@ -14,7 +14,7 @@ import torch
 
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
-from chronos.chronos2.dataset import Chronos2Dataset, DatasetMode
+from chronos.chronos2.dataset import MAX_REJECTED_SAMPLES, Chronos2Dataset, DatasetMode
 from chronos.chronos2.layers import MHA
 from chronos.chronos2.preprocess import from_data_frame
 from chronos.df_utils import make_future_df, normalize_df
@@ -1281,6 +1281,8 @@ def test_train_dataset_raises_when_all_lazy_inputs_too_short():
 
     with pytest.raises(ValueError, match="at least"):
         next(iter(dataset))
+
+    assert src.access_count == MAX_REJECTED_SAMPLES
 
 
 def test_validation_dataset_filters_too_short_preprocessed_inputs():
