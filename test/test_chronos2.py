@@ -1281,3 +1281,30 @@ def test_train_dataset_raises_when_all_lazy_inputs_too_short():
 
     with pytest.raises(ValueError, match="at least"):
         next(iter(dataset))
+
+
+def test_validation_dataset_filters_too_short_preprocessed_inputs():
+    prediction_length, min_past = 8, 4
+    inputs = [
+        {"context": torch.rand(1, 64), "future_covariates": torch.zeros(1, 0),
+         "n_targets": 1, "n_covariates": 0, "n_future_covariates": 0},
+        {"context": torch.rand(1, min_past + prediction_length - 1), "future_covariates": torch.zeros(1, 0),
+         "n_targets": 1, "n_covariates": 0, "n_future_covariates": 0},
+        {"context": torch.rand(1, 64), "future_covariates": torch.zeros(1, 0),
+         "n_targets": 1, "n_covariates": 0, "n_future_covariates": 0},
+    ]
+
+    dataset = Chronos2Dataset(
+        inputs=inputs,
+        context_length=512,
+        prediction_length=prediction_length,
+        batch_size=1,
+        output_patch_size=16,
+        min_past=min_past,
+        mode=DatasetMode.VALIDATION,
+    )
+
+    batches = list(dataset)
+    assert len(batches) == 2
+    for batch in batches:
+        assert batch["future_target"].shape[-1] == prediction_length

@@ -139,8 +139,6 @@ class Chronos2Dataset(IterableDataset):
             raise ValueError("`inputs` is empty. Please provide at least one time series.")
 
         self.inputs: Sequence[PreparedInput]
-        # A pre-processed `Sequence[PreparedInput]` may be a lazy, larger-than-memory source
-        # (e.g. a memory-mapped `datasets.Dataset`), so we must not scan or copy it here.
         inputs_are_lazy = False
         if isinstance(inputs, (torch.Tensor, np.ndarray)):
             self.inputs = preprocess.from_tensor(inputs, prediction_length=prediction_length)
@@ -151,7 +149,8 @@ class Chronos2Dataset(IterableDataset):
         elif "context" in inputs[0]:
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
-            inputs_are_lazy = True
+            # A pre-processed sequence may be lazy (e.g. memory-mapped); only TRAIN filters it lazily.
+            inputs_are_lazy = mode == DatasetMode.TRAIN
         else:
             self.inputs = preprocess.from_list_of_dicts(cast(list[dict], inputs), prediction_length=prediction_length)
 
@@ -285,6 +284,7 @@ class Chronos2Dataset(IterableDataset):
                             "provide longer time series or reduce `min_past` or `prediction_length`."
                         )
                     continue
+                n_rejected = 0
                 input_indices.append(input_idx)
                 current_batch_size += self.inputs[input_idx]["context"].shape[0]
 
