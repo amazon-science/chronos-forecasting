@@ -3,6 +3,7 @@
 
 # Authors: Abdul Fatir Ansari <ansarnd@amazon.com>
 
+import logging
 import math
 from enum import Enum
 from typing import Any, Iterator, Mapping, Sequence, TypeAlias, cast
@@ -19,6 +20,8 @@ __all__ = [
     "DatasetMode",
     "PreparedInput",
 ]
+
+logger = logging.getLogger(__name__)
 
 TensorOrArray: TypeAlias = torch.Tensor | np.ndarray
 
@@ -150,7 +153,11 @@ class Chronos2Dataset(IterableDataset):
             validate_prepared_schema(inputs[0])
             self.inputs = cast(Sequence[PreparedInput], inputs)
             # A pre-processed sequence may be lazy (e.g. memory-mapped); only TRAIN filters it lazily.
-            inputs_are_lazy = mode == DatasetMode.TRAIN
+            inputs_are_lazy = mode == DatasetMode.TRAIN and not isinstance(self.inputs, list)
+            if inputs_are_lazy:
+                logger.info(
+                    "Treating pre-processed inputs as a lazy source; filtering too-short series on the fly during training."
+                )
         else:
             self.inputs = preprocess.from_list_of_dicts(cast(list[dict], inputs), prediction_length=prediction_length)
 
