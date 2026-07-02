@@ -1279,6 +1279,7 @@ def test_train_dataset_raises_when_all_lazy_inputs_too_short():
         mode=DatasetMode.TRAIN,
     )
 
+    src.access_count = 0
     with pytest.raises(ValueError, match="at least"):
         next(iter(dataset))
 
