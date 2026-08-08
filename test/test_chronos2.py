@@ -16,6 +16,7 @@ from chronos import BaseChronosPipeline, Chronos2Pipeline
 from chronos.chronos2.config import Chronos2CoreConfig
 from chronos.chronos2.dataset import MAX_REJECTED_SAMPLES, Chronos2Dataset, DatasetMode
 from chronos.chronos2.layers import MHA
+from chronos.chronos2.model import Chronos2Encoder
 from chronos.chronos2.preprocess import from_data_frame
 from chronos.df_utils import make_future_df, normalize_df
 from test.util import create_df, create_future_df, get_forecast_start_times, validate_tensor, timeout_callback
@@ -30,6 +31,17 @@ with open(DUMMY_MODEL_PATH / "config.json") as fp:
 @pytest.fixture
 def pipeline() -> Chronos2Pipeline:
     return BaseChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu")
+
+
+def test_chronos2_encoder_accepts_config_without_is_decoder():
+    config = Chronos2CoreConfig(d_model=32, d_kv=8, d_ff=32, num_layers=2, num_heads=4)
+
+    if hasattr(config, "is_decoder"):
+        del config.is_decoder
+
+    encoder = Chronos2Encoder(config)
+
+    assert len(encoder.block) == config.num_layers
 
 
 def test_base_chronos2_pipeline_loads_from_s3():
