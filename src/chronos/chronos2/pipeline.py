@@ -1164,6 +1164,14 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 )
             from peft import AutoPeftModel
 
+            # Allow importing the adapter's parent library from our own package.
+            # See https://github.com/huggingface/peft/pull/3090.
+            # The version guard can be dropped once min `peft` is 0.20.
+            from peft import __version__ as peft_version
+
+            if version.parse(peft_version) >= version.parse("0.20.0"):
+                kwargs.setdefault("import_allowlist", ["chronos"])
+
             model = AutoPeftModel.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
             model = model.merge_and_unload()
             return cls(model=model)
