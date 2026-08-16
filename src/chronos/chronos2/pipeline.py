@@ -1103,6 +1103,20 @@ class Chronos2Pipeline(BaseChronosPipeline):
             )
             context_length = self.model_context_length
 
+        if isinstance(inputs, torch.Tensor):
+            input_is_cpu = inputs.device.type == "cpu"
+
+        elif isinstance(inputs, np.ndarray):
+            input_is_cpu = True
+
+        elif isinstance(inputs, Sequence):
+            first = inputs[0]
+
+            if isinstance(first, torch.Tensor):
+                input_is_cpu = first.device.type == "cpu"
+            else:
+                input_is_cpu = True
+
         test_dataset = Chronos2Dataset(
             inputs,
             context_length=context_length,
@@ -1115,8 +1129,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             test_dataset,
             batch_size=None,
             num_workers=0,
-            pin_memory= inputs.device.type=="cpu" and self.model.device.type == "cuda" |inputs[0].device.type=="cpu" and self.model.device.type == "cuda",
-            #self.model.device.type == "cuda",
+            pin_memory=input_is_cpu and self.model.device.type == "cuda", 
             shuffle=False,
             drop_last=False,
         )
