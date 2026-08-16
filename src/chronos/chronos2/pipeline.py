@@ -1115,7 +1115,8 @@ class Chronos2Pipeline(BaseChronosPipeline):
             test_dataset,
             batch_size=None,
             num_workers=0,
-            pin_memory=self.model.device.type == "cuda",
+            pin_memory= inputs.device.type=="cpu" and self.model.device.type == "cuda" |inputs[0].device.type=="cpu" and self.model.device.type == "cuda",
+            #self.model.device.type == "cuda",
             shuffle=False,
             drop_last=False,
         )
