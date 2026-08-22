@@ -556,6 +556,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
             - Cross-learning is most helpful when individual time series have limited historical context, as the model can leverage patterns from related series in the batch.
         limit_prediction_length
             If True, an error is raised when prediction_length is greater than model's default prediction length, by default False
+        after_batch
+            An optional callback invoked after each batch is processed. If the callback raises an exception, prediction stops and
+            the exception is propagated after the data loader is cleaned up.
 
         Returns
         -------
@@ -629,27 +632,34 @@ class Chronos2Pipeline(BaseChronosPipeline):
         )
 
         all_predictions: list[torch.Tensor] = []
-        for batch in test_loader:
-            assert batch["future_target"] is None
-            batch_context = batch["context"]
-            batch_group_ids = batch["group_ids"]
-            batch_future_covariates = batch["future_covariates"]
-            batch_target_idx_ranges = batch["target_idx_ranges"]
+        test_loader_iter = iter(test_loader)
+        try:
+            for batch in test_loader_iter:
+                assert batch["future_target"] is None
+                batch_context = batch["context"]
+                batch_group_ids = batch["group_ids"]
+                batch_future_covariates = batch["future_covariates"]
+                batch_target_idx_ranges = batch["target_idx_ranges"]
 
-            if cross_learning:
-                batch_group_ids = torch.zeros_like(batch_group_ids)
+                if cross_learning:
+                    batch_group_ids = torch.zeros_like(batch_group_ids)
 
-            batch_prediction = self._predict_batch(
-                context=batch_context,
-                group_ids=batch_group_ids,
-                future_covariates=batch_future_covariates,
-                unrolled_quantiles_tensor=unrolled_quantiles_tensor,
-                prediction_length=prediction_length,
-                max_output_patches=max_output_patches,
-                target_idx_ranges=batch_target_idx_ranges,
-            )
-            all_predictions.extend(batch_prediction)
-            after_batch_callback()
+                batch_prediction = self._predict_batch(
+                    context=batch_context,
+                    group_ids=batch_group_ids,
+                    future_covariates=batch_future_covariates,
+                    unrolled_quantiles_tensor=unrolled_quantiles_tensor,
+                    prediction_length=prediction_length,
+                    max_output_patches=max_output_patches,
+                    target_idx_ranges=batch_target_idx_ranges,
+                )
+                all_predictions.extend(batch_prediction)
+                after_batch_callback()
+        finally:
+            # Explicitly release the iterator before propagating callback errors so that
+            # any worker processes and pinned-memory resources are cleaned up promptly.
+            del test_loader_iter
+            del test_loader
 
         return all_predictions
 
