@@ -22,6 +22,14 @@ def pipeline() -> ChronosBoltPipeline:
     return BaseChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu")
 
 
+def test_when_chronos_bolt_model_uses_bfloat16_then_unscaled_predictions_use_float32():
+    pipeline = ChronosBoltPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=torch.bfloat16)
+
+    output = pipeline.model(context=torch.rand(1, 16))
+
+    assert output.quantile_preds.dtype == torch.float32
+
+
 def test_base_chronos_pipeline_loads_from_huggingface():
     BaseChronosPipeline.from_pretrained("amazon/chronos-bolt-tiny", device_map="cpu")
 
@@ -353,6 +361,21 @@ def test_when_instancenorm_applied_and_reversed_then_output_correct():
     output = inorm.inverse(normalized, loc_scale)
 
     assert torch.allclose(output, input_)
+
+
+def test_when_instancenorm_reversed_to_float32_then_precision_is_preserved():
+    inorm = InstanceNorm()
+    normalized = torch.tensor([[0.125]], dtype=torch.bfloat16)
+    loc = torch.tensor([[1_000_000.0]], dtype=torch.float32)
+    scale = torch.tensor([[100.0]], dtype=torch.float32)
+
+    output = inorm.inverse(normalized, (loc, scale))
+
+    assert output.dtype == torch.float32
+    torch.testing.assert_close(
+        output,
+        torch.tensor([[1_000_012.5]], dtype=torch.float32),
+    )
 
 
 @pytest.mark.parametrize("task_kwargs", [{}, {"eval_metric": "WQL", "quantile_levels": [0.1, 0.2]}])
