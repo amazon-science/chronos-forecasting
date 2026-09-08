@@ -763,7 +763,6 @@ class Chronos2Model(PreTrainedModel):
         quantile_preds = self.instance_norm.inverse(
             quantile_preds,
             loc_scale,
-            output_dtype=torch.float32,
         )
         quantile_preds = rearrange(
             quantile_preds,

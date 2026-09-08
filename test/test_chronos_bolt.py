@@ -369,11 +369,7 @@ def test_when_instancenorm_reversed_to_float32_then_precision_is_preserved():
     loc = torch.tensor([[1_000_000.0]], dtype=torch.float32)
     scale = torch.tensor([[100.0]], dtype=torch.float32)
 
-    output = inorm.inverse(
-        normalized,
-        (loc, scale),
-        output_dtype=torch.float32,
-    )
+    output = inorm.inverse(normalized, (loc, scale))
 
     assert output.dtype == torch.float32
     torch.testing.assert_close(

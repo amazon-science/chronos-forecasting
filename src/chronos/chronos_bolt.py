@@ -127,7 +127,6 @@ class InstanceNorm(nn.Module):
         loc_scale: tuple[torch.Tensor, torch.Tensor],
         output_dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
-        orig_dtype = x.dtype
         x = x.to(torch.float32)
         loc, scale = loc_scale
 
@@ -136,7 +135,7 @@ class InstanceNorm(nn.Module):
 
         x = x * scale + loc
 
-        return x.to(orig_dtype if output_dtype is None else output_dtype)
+        return x if output_dtype is None else x.to(output_dtype)
 
 
 class ResidualBlock(nn.Module):
@@ -390,7 +389,6 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         quantile_preds = self.instance_norm.inverse(
             quantile_preds.view(batch_size, -1),
             loc_scale,
-            output_dtype=torch.float32,
         ).view(*quantile_preds_shape)
 
         return ChronosBoltOutput(
