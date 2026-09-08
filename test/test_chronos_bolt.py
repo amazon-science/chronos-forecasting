@@ -22,6 +22,14 @@ def pipeline() -> ChronosBoltPipeline:
     return BaseChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu")
 
 
+def test_when_chronos_bolt_model_uses_bfloat16_then_unscaled_predictions_use_float32():
+    pipeline = ChronosBoltPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=torch.bfloat16)
+
+    output = pipeline.model(context=torch.rand(1, 16))
+
+    assert output.quantile_preds.dtype == torch.float32
+
+
 def test_base_chronos_pipeline_loads_from_huggingface():
     BaseChronosPipeline.from_pretrained("amazon/chronos-bolt-tiny", device_map="cpu")
 

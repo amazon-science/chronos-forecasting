@@ -390,6 +390,7 @@ class ChronosBoltModelForForecasting(T5PreTrainedModel):
         quantile_preds = self.instance_norm.inverse(
             quantile_preds.view(batch_size, -1),
             loc_scale,
+            output_dtype=torch.float32,
         ).view(*quantile_preds_shape)
 
         return ChronosBoltOutput(
