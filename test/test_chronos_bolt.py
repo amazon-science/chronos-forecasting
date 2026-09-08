@@ -355,6 +355,25 @@ def test_when_instancenorm_applied_and_reversed_then_output_correct():
     assert torch.allclose(output, input_)
 
 
+def test_when_instancenorm_reversed_to_float32_then_precision_is_preserved():
+    inorm = InstanceNorm()
+    normalized = torch.tensor([[0.125]], dtype=torch.bfloat16)
+    loc = torch.tensor([[1_000_000.0]], dtype=torch.float32)
+    scale = torch.tensor([[100.0]], dtype=torch.float32)
+
+    output = inorm.inverse(
+        normalized,
+        (loc, scale),
+        output_dtype=torch.float32,
+    )
+
+    assert output.dtype == torch.float32
+    torch.testing.assert_close(
+        output,
+        torch.tensor([[1_000_012.5]], dtype=torch.float32),
+    )
+
+
 @pytest.mark.parametrize("task_kwargs", [{}, {"eval_metric": "WQL", "quantile_levels": [0.1, 0.2]}])
 def test_pipeline_can_evaluate_on_dummy_fev_task(task_kwargs):
     pipeline = BaseChronosPipeline.from_pretrained(

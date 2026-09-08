@@ -44,6 +44,14 @@ def test_chronos2_encoder_accepts_config_without_is_decoder():
     assert len(encoder.block) == config.num_layers
 
 
+def test_when_chronos2_model_uses_bfloat16_then_unscaled_predictions_use_float32(pipeline):
+    pipeline.model.to(torch.bfloat16)
+
+    output = pipeline.model(context=torch.rand(1, 16), num_output_patches=1)
+
+    assert output.quantile_preds.dtype == torch.float32
+
+
 def test_base_chronos2_pipeline_loads_from_s3():
     BaseChronosPipeline.from_pretrained("s3://autogluon/chronos-2", device_map="cpu")
 

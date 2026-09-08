@@ -759,7 +759,12 @@ class Chronos2Model(PreTrainedModel):
             q=self.num_quantiles,
             h=num_output_patches * self.chronos_config.output_patch_size,
         )
-        quantile_preds = self.instance_norm.inverse(quantile_preds, loc_scale)
+        # Preserve precision when unscaling large-magnitude forecasts.
+        quantile_preds = self.instance_norm.inverse(
+            quantile_preds,
+            loc_scale,
+            output_dtype=torch.float32,
+        )
         quantile_preds = rearrange(
             quantile_preds,
             "b (q h) -> b q h",
