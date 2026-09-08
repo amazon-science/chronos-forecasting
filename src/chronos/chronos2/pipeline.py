@@ -625,7 +625,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             mode=DatasetMode.TEST,
         )
         test_loader = DataLoader(
-            test_dataset, batch_size=None, pin_memory=self.model.device.type == "cuda", shuffle=False, drop_last=False
+            test_dataset, batch_size=None, pin_memory=self.model.device.type == "cpu", shuffle=False, drop_last=False
         )
 
         all_predictions: list[torch.Tensor] = []
@@ -1131,11 +1131,11 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 context=batch_context.to(device=self.model.device, dtype=torch.float32),
                 group_ids=batch_group_ids.to(self.model.device),
             )
-            batch_embeds = [encoder_outputs[0][start:end].cpu() for (start, end) in batch_target_idx_ranges]
+            batch_embeds = [encoder_outputs[0][start:end] for (start, end) in batch_target_idx_ranges]
             batch_loc_scales = list(
                 zip(
-                    [locs[start:end].cpu() for (start, end) in batch_target_idx_ranges],
-                    [scales[start:end].cpu() for (start, end) in batch_target_idx_ranges],
+                    [locs[start:end] for (start, end) in batch_target_idx_ranges],
+                    [scales[start:end] for (start, end) in batch_target_idx_ranges],
                 )
             )
             all_embeds.extend(batch_embeds)

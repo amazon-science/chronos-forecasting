@@ -199,9 +199,9 @@ class MeanScaleUniformBins(ChronosTokenizer):
         self, token_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = token_ids.shape[0]
-        eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id)
+        eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id).to(device=token_ids.device)
         token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-        eos_mask = torch.full((batch_size, 1), fill_value=True)
+        eos_mask = torch.full((batch_size, 1), fill_value=True).to(device=attention_mask.device)
         attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
 
         return token_ids, attention_mask
@@ -375,6 +375,8 @@ class ChronosPipeline(BaseChronosPipeline):
     def __init__(self, tokenizer, model):
         super().__init__(inner_model=model.model)
         self.tokenizer = tokenizer
+        if isinstance(tokenizer, MeanScaleUniformBins):
+            tokenizer.boundaries = tokenizer.boundaries.to(device=model.device)
         self.model = model
 
     @property
@@ -424,7 +426,7 @@ class ChronosPipeline(BaseChronosPipeline):
         embeddings = self.model.encode(
             input_ids=token_ids.to(self.model.device),
             attention_mask=attention_mask.to(self.model.device),
-        ).cpu()
+        )
         return embeddings, tokenizer_state
 
     def predict(
