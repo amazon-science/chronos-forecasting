@@ -263,6 +263,16 @@ class ShuffleMixin:
         return PseudoShuffledIterableDataset(self, shuffle_buffer_length)
 
 
+class LazyFileDataset:
+    """Open a GluonTS file only when its worker starts iterating."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def __iter__(self):
+        return iter(FileDataset(path=self.path, freq="h"))
+
+
 class ChronosDataset(IterableDataset, ShuffleMixin):
     """
     Dataset wrapper, using a ``ChronosTokenizer`` to turn data from a time series
@@ -608,7 +618,7 @@ def main(
                 min_length=min_past + prediction_length,
                 max_missing_prop=max_missing_prop,
             ),
-            FileDataset(path=Path(data_path), freq="h"),
+            LazyFileDataset(path=Path(data_path)),
         )
         for data_path in training_data_paths
     ]
