@@ -121,8 +121,12 @@ class InstanceNorm(nn.Module):
 
         return scaled_x.to(orig_dtype), (loc, scale)
 
-    def inverse(self, x: torch.Tensor, loc_scale: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        orig_dtype = x.dtype
+    def inverse(
+        self,
+        x: torch.Tensor,
+        loc_scale: tuple[torch.Tensor, torch.Tensor],
+        output_dtype: torch.dtype | None = None,
+    ) -> torch.Tensor:
         x = x.to(torch.float32)
         loc, scale = loc_scale
 
@@ -131,7 +135,7 @@ class InstanceNorm(nn.Module):
 
         x = x * scale + loc
 
-        return x.to(orig_dtype)
+        return x if output_dtype is None else x.to(output_dtype)
 
 
 class ResidualBlock(nn.Module):
