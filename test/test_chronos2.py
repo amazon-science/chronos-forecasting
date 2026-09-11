@@ -615,6 +615,22 @@ def test_predict_df_with_future_df_with_different_lengths_raises_error(pipeline)
         pipeline.predict_df(df, future_df=future_df, prediction_length=3)
 
 
+@pytest.mark.parametrize("with_future_covariates", [False, True])
+def test_predict_df_preserves_timezone_across_dst(pipeline, with_future_covariates):
+    timestamps = pd.date_range("2025-11-01 22:00", periods=8, freq="h", tz="America/New_York")
+    df = pd.DataFrame(
+        {"item_id": "A", "timestamp": timestamps[:4], "target": np.arange(4, dtype=float), "cov": 1.0}
+    )
+    future_df = None
+    if with_future_covariates:
+        future_df = pd.DataFrame({"item_id": "A", "timestamp": timestamps[4:], "cov": 1.0}).iloc[::-1]
+
+    result = pipeline.predict_df(df.iloc[::-1], future_df=future_df, prediction_length=4)
+
+    pd.testing.assert_index_equal(pd.DatetimeIndex(result["timestamp"]), timestamps[4:].rename("timestamp"))
+    assert np.isfinite(result["predictions"]).all()
+
+
 def test_predict_df_matches_manual_preprocess_path(pipeline):
     """predict_df must produce the same output as manually preprocessing the df with
     from_data_frame + make_future_df and assembling the result (multi-target, numeric +

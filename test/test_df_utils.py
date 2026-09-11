@@ -128,6 +128,30 @@ def test_normalize_df_coerces_string_timestamps_to_datetime():
     assert pd.api.types.is_datetime64_any_dtype(out["timestamp"])
 
 
+@pytest.mark.parametrize("tz", ["UTC", "Asia/Shanghai", "America/New_York"])
+@pytest.mark.parametrize("already_sorted", [False, True])
+def test_normalize_df_preserves_timezone_and_sorts_by_absolute_time(tz, already_sorted):
+    timestamps = pd.date_range("2025-11-02", periods=4, freq="h", tz=tz)
+    df = pd.DataFrame(
+        {
+            "item_id": ["B", "A", "B", "A"],
+            "timestamp": timestamps[[2, 1, 0, 3]],
+            "target": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    expected = df.iloc[[2, 0, 1, 3]].reset_index(drop=True)
+    if already_sorted:
+        df = expected.copy()
+    original = df.copy()
+
+    out = normalize_df(df)
+
+    pd.testing.assert_frame_equal(out, expected)
+    pd.testing.assert_frame_equal(df, original)
+    if already_sorted:
+        assert out is df
+
+
 def test_normalize_df_respects_explicit_order():
     df = pd.DataFrame(
         {
