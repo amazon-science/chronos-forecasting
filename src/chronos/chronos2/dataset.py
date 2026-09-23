@@ -181,8 +181,7 @@ class Chronos2Dataset(IterableDataset):
 
     def _construct_slice(self, input_idx: int) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, int]:
         prepared = self.inputs[input_idx]
-        past_tensor = prepared["context"].clone()  # shape: (n_targets + n_covariates, history_length)
-        future_tensor = prepared["future_covariates"].clone()
+        past_tensor = prepared["context"]  # shape: (n_targets + n_covariates, history_length)
         n_targets = int(prepared["n_targets"])
         n_covariates = int(prepared["n_covariates"])
         n_future_covariates = int(prepared["n_future_covariates"])
@@ -205,6 +204,10 @@ class Chronos2Dataset(IterableDataset):
             context = past_tensor[:, slice_idx - self.context_length : slice_idx]
         else:
             context = past_tensor[:, :slice_idx]
+
+        # Own only the selected window; cloning before slicing copies and retains
+        # the complete history on every training/inference sample.
+        context = context.clone()
 
         # In the TEST mode, we have no target available and the future_covariates can be directly used
         # In the TRAIN and VALIDATION modes, the target and future_covariates need to be constructed from
@@ -231,7 +234,7 @@ class Chronos2Dataset(IterableDataset):
             future_covariates = torch.cat([future_covariates_padding, future_covariates], dim=0)
         else:
             future_target = None
-            future_covariates = future_tensor
+            future_covariates = prepared["future_covariates"].clone()
 
         # context: (n_targets + n_covariates, min(context_length, history_length))
         # future_target: (n_targets + n_covariates, prediction_length), the future values of known future covariates
