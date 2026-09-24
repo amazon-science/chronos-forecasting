@@ -11,12 +11,26 @@ import pandas as pd
 import pandas.api.types as ptypes
 
 __all__ = [
+    "get_series_lengths",
     "infer_freq_from_df",
     "make_future_df",
     "normalize_df",
     "validate_df",
     "validate_and_normalize_df",
 ]
+
+
+def get_series_lengths(df: pd.DataFrame, id_column: str = "item_id") -> list[int]:
+    """
+    Return the number of rows of each series, in first-appearance order of the ids.
+
+    For a df grouped by id (e.g. via ``normalize_df``) this is the length of each contiguous block
+    of rows, so the lengths always sum to ``len(df)``. ``value_counts(sort=False)`` does not give
+    this for every id dtype: for a categorical id column it follows the category order and
+    includes categories without rows.
+    """
+    codes, _ = pd.factorize(df[id_column], use_na_sentinel=False)
+    return np.bincount(codes).tolist()
 
 
 def infer_freq_from_df(
@@ -35,7 +49,7 @@ def infer_freq_from_df(
 
     Assumes ``df`` is already grouped by id (e.g. via ``normalize_df``).
     """
-    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    series_lengths = get_series_lengths(df, id_column=id_column)
     item_ids = df[id_column].to_numpy()
     timestamp_index = pd.DatetimeIndex(df[timestamp_column])
 
@@ -81,7 +95,7 @@ def make_future_df(
     if freq is None:
         freq = infer_freq_from_df(df, id_column=id_column, timestamp_column=timestamp_column)
 
-    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    series_lengths = get_series_lengths(df, id_column=id_column)
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     last_idx = indptr[1:] - 1
     last_ts = pd.DatetimeIndex(df[timestamp_column].to_numpy()[last_idx])  # (n_series,)
@@ -186,7 +200,7 @@ def validate_df(
         if not np.array_equal(np.sort(df[id_column].unique()), np.sort(future_df[id_column].unique())):
             raise ValueError("future_df must have the same time series IDs as df")
 
-        future_sizes = future_df[id_column].value_counts(sort=False)
+        future_sizes = np.array(get_series_lengths(future_df, id_column=id_column))
         wrong_length = future_sizes[future_sizes != prediction_length]
         if len(wrong_length) > 0:
             raise ValueError(
@@ -280,7 +294,7 @@ def convert_df_input_to_list_of_dicts_input(
         freq = None
         timestamp_index = pd.DatetimeIndex(df[timestamp_column])
         start = 0
-        for length in df[id_column].value_counts(sort=False).to_list():
+        for length in get_series_lengths(df, id_column=id_column):
             if length < 3:
                 start += length
                 continue
@@ -290,7 +304,7 @@ def convert_df_input_to_list_of_dicts_input(
 
     # df is now grouped by id (in first-appearance order); series_lengths follow that order.
     original_order = pd.unique(df[id_column])
-    series_lengths = df[id_column].value_counts(sort=False).to_list()
+    series_lengths = get_series_lengths(df, id_column=id_column)
     indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
     target_array = df[target_columns].to_numpy().T  # Shape: (n_targets, len(df))
 

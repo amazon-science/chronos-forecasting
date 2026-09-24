@@ -9,6 +9,7 @@ import pytest
 
 from chronos.df_utils import (
     convert_df_input_to_list_of_dicts_input,
+    get_series_lengths,
     infer_freq_from_df,
     make_future_df,
     normalize_df,
@@ -99,6 +100,53 @@ def test_make_future_df_infers_freq_when_not_provided():
     for series_id in ["A", "B"]:
         series_future = future[future["item_id"] == series_id]["timestamp"]
         assert pd.tseries.frequencies.to_offset(pd.infer_freq(series_future)) == pd.tseries.frequencies.to_offset("D")
+
+
+# Tests for get_series_lengths and categorical item ids
+
+
+def _create_df_with_different_end_times():
+    """B is shorter and ends later than A, and comes first in the rows."""
+    return pd.concat(
+        [
+            pd.DataFrame(
+                {"item_id": "B", "timestamp": pd.date_range(end="2001-10-01", periods=10, freq="h"), "target": 1.0}
+            ),
+            pd.DataFrame(
+                {"item_id": "A", "timestamp": pd.date_range(end="2001-09-01", periods=15, freq="h"), "target": 2.0}
+            ),
+        ],
+        ignore_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "to_ids",
+    [
+        lambda ids: pd.Categorical(ids),
+        lambda ids: pd.Categorical(ids, categories=["Z", "B", "A"]),
+        lambda ids: ids.astype("string[python]"),
+    ],
+    ids=["categorical", "categorical-with-unused-category", "string-python"],
+)
+def test_get_series_lengths_follows_row_order(to_ids):
+    # value_counts(sort=False) does not follow the row order for every id dtype: for a categorical
+    # column it follows the category order and counts unused categories, and pandas 2.2 sorts
+    # string[python] ids (#440).
+    df = normalize_df(_create_df_with_different_end_times())
+    df["item_id"] = to_ids(df["item_id"])
+    assert get_series_lengths(df) == [10, 15]
+
+
+def test_infer_freq_and_make_future_df_handle_categorical_ids():
+    df = normalize_df(_create_df_with_different_end_times())
+    expected = make_future_df(df, prediction_length=3)
+
+    df["item_id"] = pd.Categorical(df["item_id"], categories=["Z", "A", "B"])
+    assert pd.tseries.frequencies.to_offset(infer_freq_from_df(df)) == pd.tseries.frequencies.to_offset("h")
+    result = make_future_df(df, prediction_length=3)
+    assert result["item_id"].astype(str).tolist() == expected["item_id"].tolist()
+    assert result["timestamp"].tolist() == expected["timestamp"].tolist()
 
 
 # Tests for normalize_df
