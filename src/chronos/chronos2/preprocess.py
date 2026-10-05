@@ -200,7 +200,6 @@ def from_data_frame(
         known_future_columns = []
         future_covariates = {}
 
-    # df is already grouped by id, so the lengths follow the row order.
     series_lengths = get_series_lengths(df, id_column=id_column)
 
     return _build_prepared_inputs(

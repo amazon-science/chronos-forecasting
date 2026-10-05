@@ -22,10 +22,10 @@ __all__ = [
 
 def get_series_lengths(df: pd.DataFrame, id_column: str = "item_id") -> list[int]:
     """
-    Return the number of rows of each series, in first-appearance order of the ids.
+    Return the number of rows per id, in first-appearance order of the ids.
 
-    For a df grouped by id (e.g. via ``normalize_df``) this is the length of each contiguous block
-    of rows, so the lengths always sum to ``len(df)``. ``value_counts(sort=False)`` does not give
+    The counts always sum to ``len(df)``. For a df grouped by id (e.g. via ``normalize_df``) they
+    are the lengths of the contiguous blocks of rows. ``value_counts(sort=False)`` does not give
     this for every id dtype: for a categorical id column it follows the category order and
     includes categories without rows.
     """
