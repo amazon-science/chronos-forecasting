@@ -203,6 +203,20 @@ def test_predict_df_works_for_valid_inputs(pipeline, context_setup, expected_row
     assert all(str(q) in result.columns for q in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
 
 
+@pytest.mark.parametrize("categories", [None, ["Z", "A", "B"]])
+@pytest.mark.parametrize("freq", [None, "h"])
+def test_predict_df_with_categorical_item_ids_matches_object_ids(pipeline, categories, freq):
+    # B comes first in the rows and is shorter. With a categorical id column the series boundaries
+    # used to follow the category order: frequency inference failed, and with an explicit freq the
+    # series were silently mixed up.
+    df = create_df(series_ids=["B", "A"], n_points=[10, 15], freq="h")
+    expected = pipeline.predict_df(df, prediction_length=3, freq=freq)
+
+    df["item_id"] = pd.Categorical(df["item_id"], categories=categories)
+    result = pipeline.predict_df(df, prediction_length=3, freq=freq)
+    pd.testing.assert_frame_equal(result.astype({"item_id": str}), expected.astype({"item_id": str}))
+
+
 def test_predict_df_with_non_uniform_timestamps_raises_error(pipeline):
     df = create_df()
     # Make timestamps non-uniform for series A

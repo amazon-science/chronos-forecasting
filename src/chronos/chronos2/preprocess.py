@@ -12,7 +12,7 @@ import pandas as pd
 import pandas.api.types as ptypes
 import torch
 
-from chronos.df_utils import validate_and_normalize_df
+from chronos.df_utils import get_series_lengths, validate_and_normalize_df
 
 
 class PreparedInput(TypedDict):
@@ -200,8 +200,7 @@ def from_data_frame(
         known_future_columns = []
         future_covariates = {}
 
-    # df is already grouped by id; value_counts(sort=False) returns lengths in that order.
-    series_lengths = df[id_column].value_counts(sort=False).tolist()
+    series_lengths = get_series_lengths(df, id_column=id_column)
 
     return _build_prepared_inputs(
         target=target,

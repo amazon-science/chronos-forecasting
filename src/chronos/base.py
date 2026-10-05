@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from transformers import PreTrainedModel
 
 
-from .df_utils import make_future_df, normalize_df
+from .df_utils import get_series_lengths, make_future_df, normalize_df
 from .utils import left_pad_and_stack_1D
 
 
@@ -206,7 +206,7 @@ class BaseChronosPipeline(metaclass=PipelineRegistry):
         if validate_inputs:
             df = normalize_df(df, id_column=id_column, timestamp_column=timestamp_column)
 
-        series_lengths = df[id_column].value_counts(sort=False).to_list()
+        series_lengths = get_series_lengths(df, id_column=id_column)
         target_values = df[target].to_numpy()
         indptr = np.concatenate([[0], np.cumsum(series_lengths)]).astype("int64")
         context = [torch.tensor(target_values[indptr[i] : indptr[i + 1]]) for i in range(len(series_lengths))]
