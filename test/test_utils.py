@@ -60,6 +60,27 @@ def test_pad_and_stack(tensors: list):
                 ]
             ),
         ),
+        (
+            torch.tensor([0.0, 0.1, 0.5, 0.9, 1.0]),
+            torch.tensor(
+                [
+                    [0.0, 0.5, 1.0],
+                    [0.2, 0.5, 0.8],
+                ]
+            ),
+            torch.tensor(
+                [
+                    [0.0, 5.0, 10.0],
+                    [20.0, 50.0, 80.0],
+                ]
+            ),
+            torch.tensor(
+                [
+                    [0.0, 1.0, 5.0, 9.0, 10.0],
+                    [20.0, 20.0, 50.0, 80.0, 80.0],
+                ]
+            ),
+        ),
     ],
 )
 def test_interpolate_quantiles(query_quantiles, orig_quantiles, orig_values, expected_values):

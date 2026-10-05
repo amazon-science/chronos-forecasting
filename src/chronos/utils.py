@@ -94,20 +94,10 @@ def interpolate_quantiles(
     zeros_padding = torch.zeros((batch_size, 1), dtype=torch.float32, device=device)
     ones_padding = torch.ones((batch_size, 1), dtype=torch.float32, device=device)
 
-    # Only pad when extreme quantiles are not available in original_quantile_levels
-    sorted_levels_with_padding = []
-    sorted_values_with_padding = []
-    if original_quantile_levels.min() > 0.0:
-        sorted_levels_with_padding.append(zeros_padding)
-        sorted_values_with_padding.append(sorted_values[:, :1])
-    sorted_levels_with_padding.append(sorted_levels)
-    sorted_values_with_padding.append(sorted_values)
-    if original_quantile_levels.max() < 1.0:
-        sorted_levels_with_padding.append(ones_padding)
-        sorted_values_with_padding.append(sorted_values[:, -1:])
-
-    sorted_levels = torch.cat(sorted_levels_with_padding, dim=-1).contiguous()
-    sorted_values = torch.cat(sorted_values_with_padding, dim=-1)
+    # Always pad each row because batched quantile grids may not share the same
+    # endpoints. Duplicate 0/1 levels are harmless when a row already has them.
+    sorted_levels = torch.cat([zeros_padding, sorted_levels, ones_padding], dim=-1).contiguous()
+    sorted_values = torch.cat([sorted_values[:, :1], sorted_values, sorted_values[:, -1:]], dim=-1)
 
     # Shape goes from (num_queries,) to (batch_size, num_queries).
     query_levels_expanded = repeat(query_quantile_levels, "q -> b q", b=batch_size).contiguous()
