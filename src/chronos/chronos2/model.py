@@ -390,8 +390,10 @@ class Chronos2Model(PreTrainedModel):
                 )
 
     def _prepare_patched_context(
-        self, context: torch.Tensor, context_mask: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        self, context: torch.Tensor, context_mask: torch.Tensor | None = None, return_minmax: bool = False
+    ) -> tuple[
+        torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor] | None
+    ]:
         context_mask = (
             context_mask.to(context.dtype)
             if context_mask is not None
@@ -405,6 +407,14 @@ class Chronos2Model(PreTrainedModel):
             context_mask = context_mask[..., -self.chronos_config.context_length :]
 
         # scaling
+        context_minmax = None
+        if return_minmax:
+            context_min = torch.amin(torch.nan_to_num(context, nan=float("inf")), dim=-1, keepdim=True)
+            context_min = torch.nan_to_num(context_min, posinf=0.0)
+            context_max = torch.amax(torch.nan_to_num(context, nan=float("-inf")), dim=-1, keepdim=True)
+            context_max = torch.nan_to_num(context_max, neginf=0.0)
+            context_minmax = context_min, context_max
+
         context, loc_scale = self.instance_norm(context)
 
         # scaling is done in 32-bit precision, then the context is moved to model's dtype
@@ -439,7 +449,7 @@ class Chronos2Model(PreTrainedModel):
         # concat time encoding, context and mask along the last (feature) dim
         patched_context = torch.cat([context_time_enc, patched_context, patched_mask], dim=-1)
 
-        return patched_context, attention_mask, loc_scale
+        return patched_context, attention_mask, loc_scale, context_minmax
 
     def _prepare_patched_future(
         self,
@@ -577,6 +587,7 @@ class Chronos2Model(PreTrainedModel):
         future_target: torch.Tensor | None = None,
         future_target_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
+        return_minmax: bool = False,
     ):
         self._validate_input(
             context=context,
@@ -590,8 +601,8 @@ class Chronos2Model(PreTrainedModel):
         )
 
         batch_size = context.shape[0]
-        patched_context, attention_mask, loc_scale = self._prepare_patched_context(
-            context=context, context_mask=context_mask
+        patched_context, attention_mask, loc_scale, context_minmax = self._prepare_patched_context(
+            context=context, context_mask=context_mask, return_minmax=return_minmax
         )
         num_context_patches = attention_mask.shape[-1]
 
@@ -632,7 +643,7 @@ class Chronos2Model(PreTrainedModel):
             group_ids=group_ids,
             output_attentions=output_attentions,
         )
-        return encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches
+        return encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches, context_minmax
 
     def forward(
         self,
@@ -645,6 +656,7 @@ class Chronos2Model(PreTrainedModel):
         future_target: torch.Tensor | None = None,
         future_target_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
+        clip_factor: float | None = None,
     ) -> Chronos2Output:
         """Forward pass of the Chronos2 model.
 
@@ -713,7 +725,7 @@ class Chronos2Model(PreTrainedModel):
         - enc_group_self_attn_weights: Group self attention weights, if output_attentions=True
         """
         batch_size = context.shape[0]
-        encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches = self.encode(
+        encoder_outputs, loc_scale, patched_future_covariates_mask, num_context_patches, context_minmax = self.encode(
             context=context,
             context_mask=context_mask,
             group_ids=group_ids,
@@ -723,6 +735,7 @@ class Chronos2Model(PreTrainedModel):
             future_target=future_target,
             future_target_mask=future_target_mask,
             output_attentions=output_attentions,
+            return_minmax=clip_factor is not None,
         )
         hidden_states: torch.Tensor = encoder_outputs[0]
         assert hidden_states.shape == (batch_size, num_context_patches + 1 + num_output_patches, self.model_dim)
@@ -760,6 +773,13 @@ class Chronos2Model(PreTrainedModel):
             h=num_output_patches * self.chronos_config.output_patch_size,
         )
         quantile_preds = self.instance_norm.inverse(quantile_preds, loc_scale)
+
+        if clip_factor is not None:
+            assert context_minmax is not None
+            clamp_min = context_minmax[0] - clip_factor * loc_scale[1]
+            clamp_max = context_minmax[1] + clip_factor * loc_scale[1]
+            quantile_preds = quantile_preds.clamp(min=clamp_min, max=clamp_max)
+
         quantile_preds = rearrange(
             quantile_preds,
             "b (q h) -> b q h",
