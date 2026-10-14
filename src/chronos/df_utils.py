@@ -138,9 +138,10 @@ def normalize_df(
             missing = pd.unique(df[id_column][codes < 0])
             raise ValueError(f"future_df has ids not present in df: {list(missing)[:5]}")
 
-    # View as int64 (datetime64 is int64-backed) so np.diff yields integers; comparing
-    # the timedelta64 from np.diff against 0 raises UFuncTypeError on numpy<2.0.
-    ts = df[timestamp_column].to_numpy().view("int64")
+    # Use int64 epoch values so np.diff yields integers; comparing the timedelta64 from
+    # np.diff against 0 raises UFuncTypeError on numpy<2.0. `asi8` also works for
+    # tz-aware columns, whose `to_numpy()` is an object array that cannot be viewed.
+    ts = pd.DatetimeIndex(df[timestamp_column]).asi8
     code_diff = np.diff(codes)
     grouped = bool(np.all(code_diff >= 0))
     sorted_within = grouped and bool(np.all((np.diff(ts) >= 0) | (code_diff > 0)))

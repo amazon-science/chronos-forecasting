@@ -176,6 +176,22 @@ def test_normalize_df_coerces_string_timestamps_to_datetime():
     assert pd.api.types.is_datetime64_any_dtype(out["timestamp"])
 
 
+def test_normalize_df_handles_tz_aware_timestamps():
+    df = pd.DataFrame(
+        {
+            "item_id": ["B", "A", "B", "A"],
+            "timestamp": pd.to_datetime(["2023-01-02", "2023-01-01", "2023-01-01", "2023-01-02"]).tz_localize("UTC"),
+            "target": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+
+    out = normalize_df(df)
+
+    assert out["item_id"].tolist() == ["B", "B", "A", "A"]
+    assert out["target"].tolist() == [3.0, 1.0, 2.0, 4.0]
+    assert str(out["timestamp"].dt.tz) == "UTC"
+
+
 def test_normalize_df_respects_explicit_order():
     df = pd.DataFrame(
         {
