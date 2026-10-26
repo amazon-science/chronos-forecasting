@@ -276,6 +276,16 @@ def test_when_input_is_valid_then_pipeline_can_predict_quantiles(
         validate_tensor(out_m, expected_shape[:-1], dtype=torch.float32)
 
 
+def test_predict_quantiles_second_output_is_median(pipeline):
+    inputs = [torch.rand(100), torch.rand(2, 80)]
+
+    quantiles, mean = pipeline.predict_quantiles(inputs, prediction_length=7, quantile_levels=[0.1, 0.5, 0.9])
+
+    # despite its name, the second output is the median (0.5 quantile), not the mean
+    for out_q, out_m in zip(quantiles, mean):
+        torch.testing.assert_close(out_m, out_q[..., 1], rtol=0, atol=0)
+
+
 @pytest.mark.parametrize(
     "inputs, error_match_string",
     [

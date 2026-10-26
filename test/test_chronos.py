@@ -282,6 +282,19 @@ def test_pipeline_predict_quantiles(
     validate_tensor(mean, (1, prediction_length), dtype=torch.float32)
 
 
+def test_predict_quantiles_second_output_is_sample_mean():
+    pipeline = ChronosPipeline.from_pretrained(DUMMY_MODEL_PATH, device_map="cpu", torch_dtype=torch.float32)
+    context = 10 * torch.rand(size=(4, 16)) + 10
+
+    torch.manual_seed(0)
+    samples = pipeline.predict(context, prediction_length=3, num_samples=12)
+    torch.manual_seed(0)
+    _, mean = pipeline.predict_quantiles(context, prediction_length=3, num_samples=12)
+
+    # for the original Chronos, the second output is the mean over the sampled paths
+    torch.testing.assert_close(mean, samples.mean(dim=1))
+
+
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):

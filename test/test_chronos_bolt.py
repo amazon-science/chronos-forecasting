@@ -133,6 +133,15 @@ def test_pipeline_predict_quantiles(
     validate_tensor(mean, (1, prediction_length), dtype=torch.float32)
 
 
+def test_predict_quantiles_second_output_is_median(pipeline):
+    context = 10 * torch.rand(size=(4, 16)) + 10
+
+    quantiles, mean = pipeline.predict_quantiles(context, prediction_length=5, quantile_levels=[0.1, 0.5, 0.9])
+
+    # despite its name, the second output is the median (0.5 quantile), not the mean
+    torch.testing.assert_close(mean, quantiles[..., 1], rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("model_dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("input_dtype", [torch.float32, torch.bfloat16, torch.int64])
 def test_pipeline_embed(model_dtype: torch.dtype, input_dtype: torch.dtype):
