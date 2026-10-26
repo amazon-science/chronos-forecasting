@@ -519,6 +519,8 @@ class ChronosPipeline(BaseChronosPipeline):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Refer to the base method (``BaseChronosPipeline.predict_quantiles``).
+
+        The second return value (``mean``) is the mean of the sampled paths.
         """
         prediction_samples = (
             self.predict(inputs, prediction_length=prediction_length, **predict_kwargs).detach().swapaxes(1, 2)

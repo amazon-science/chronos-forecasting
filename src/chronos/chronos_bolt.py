@@ -606,6 +606,9 @@ class ChronosBoltPipeline(BaseChronosPipeline):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Refer to the base method (``BaseChronosPipeline.predict_quantiles``).
+
+        Note that the second return value (``mean``) is the median (0.5 quantile) of the
+        predictive distribution, not its mean.
         """
         # shape (batch_size, prediction_length, len(training_quantile_levels))
         predictions = (
