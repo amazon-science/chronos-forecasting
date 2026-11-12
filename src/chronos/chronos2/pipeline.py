@@ -667,6 +667,19 @@ class Chronos2Pipeline(BaseChronosPipeline):
         group_ids = group_ids.to(device=self.model.device)
         future_covariates = future_covariates.to(device=self.model.device, dtype=torch.float32)
 
+        # A series without any observed value in its context carries no information about its level or scale:
+        # the instance normalization falls back to loc=0 and scale=1, and the inverse arcsinh scaling turns the
+        # model's output into arbitrarily large quantiles. The predictions of such series are kept as NaN while
+        # unrolling long horizons, so that they stay masked in the context, and set to 0 (the normalization's
+        # fallback level) at the end.
+        no_observed_values = torch.isnan(context).all(dim=-1)
+        num_empty_targets = sum(int(no_observed_values[start:end].sum()) for (start, end) in target_idx_ranges)
+        if num_empty_targets > 0:
+            warnings.warn(
+                f"{num_empty_targets} target time series have no observed values in their context "
+                f"(the last {context.shape[-1]} time steps); their forecasts are set to 0."
+            )
+
         def get_num_output_patches(remaining_horizon: int):
             num_output_patches = math.ceil(remaining_horizon / self.model_output_patch_size)
             num_output_patches = min(num_output_patches, max_output_patches)
@@ -683,6 +696,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             future_covariates=future_covariates,
             num_output_patches=get_num_output_patches(remaining),
         )
+        prediction[no_observed_values] = torch.nan
         predictions.append(prediction)
         remaining -= prediction.shape[-1]
 
@@ -708,12 +722,14 @@ class Chronos2Pipeline(BaseChronosPipeline):
                 unrolled_sample_weights=unrolled_sample_weights,
                 num_output_patches=get_num_output_patches(remaining),
             )
+            prediction[no_observed_values] = torch.nan
             predictions.append(prediction)
             remaining -= prediction.shape[-1]
 
         batch_prediction = torch.cat(predictions, dim=-1)[..., :prediction_length].to(
             dtype=torch.float32, device="cpu"
         )
+        batch_prediction[no_observed_values.cpu()] = 0.0
 
         return [batch_prediction[start:end] for (start, end) in target_idx_ranges]
 
