@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import warnings
 from copy import deepcopy
 from pathlib import Path
 
@@ -274,6 +275,46 @@ def test_when_input_is_valid_then_pipeline_can_predict_quantiles(
     for out_q, out_m, expected_shape in zip(quantiles, mean, expected_output_shapes):
         validate_tensor(out_q, expected_shape, dtype=torch.float32)
         validate_tensor(out_m, expected_shape[:-1], dtype=torch.float32)
+
+
+@pytest.mark.parametrize(
+    "prediction_length",
+    [
+        # forecast in a single step
+        10,
+        # long horizon, forecast by unrolling beyond the model's max_output_patches
+        1100,
+    ],
+)
+def test_when_context_has_no_observed_values_then_forecast_is_zero(pipeline, prediction_length):
+    inputs = [
+        torch.full((50,), torch.nan),
+        torch.rand(50),
+        # multivariate series where only the first variate has no observed values
+        torch.cat([torch.full((1, 50), torch.nan), torch.rand(2, 50)]),
+        # series observed only before the context window
+        torch.cat([torch.rand(100), torch.full((40,), torch.nan)]),
+    ]
+
+    with pytest.warns(UserWarning, match="3 target time series have no observed values"):
+        predictions = pipeline.predict(inputs, prediction_length=prediction_length, context_length=40)
+
+    assert (predictions[0] == 0).all()
+    assert torch.isfinite(predictions[1]).all() and (predictions[1] != 0).any()
+    assert (predictions[2][0] == 0).all()
+    assert torch.isfinite(predictions[2][1:]).all() and (predictions[2][1:] != 0).any()
+    assert (predictions[3] == 0).all()
+
+
+def test_when_all_contexts_have_observed_values_then_no_warning_is_raised(pipeline):
+    inputs = [torch.cat([torch.full((10,), torch.nan), torch.rand(40)]), torch.rand(3, 50)]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        predictions = pipeline.predict(inputs, prediction_length=10)
+
+    assert not any("no observed values" in str(w.message) for w in caught)
+    assert all(torch.isfinite(pred).all() for pred in predictions)
 
 
 @pytest.mark.parametrize(
