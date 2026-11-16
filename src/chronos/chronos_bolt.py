@@ -611,6 +611,10 @@ class ChronosBoltPipeline(BaseChronosPipeline):
         predictions = (
             self.predict(inputs, prediction_length=prediction_length, **predict_kwargs).detach().swapaxes(1, 2)
         )
+        # The quantile head can output crossing quantiles (e.g., a 0.2 quantile below the 0.1 quantile).
+        # Sort along the quantile axis so that the returned quantiles are non-decreasing in the quantile level
+        # and do not depend on which other quantile levels are requested.
+        predictions = predictions.sort(dim=-1).values
 
         training_quantile_levels = self.quantiles
 

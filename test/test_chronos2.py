@@ -274,6 +274,8 @@ def test_when_input_is_valid_then_pipeline_can_predict_quantiles(
     for out_q, out_m, expected_shape in zip(quantiles, mean, expected_output_shapes):
         validate_tensor(out_q, expected_shape, dtype=torch.float32)
         validate_tensor(out_m, expected_shape[:-1], dtype=torch.float32)
+        # quantiles must not cross
+        assert (out_q[..., 1:] >= out_q[..., :-1]).all()
 
 
 @pytest.mark.parametrize(
