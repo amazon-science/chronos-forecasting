@@ -111,6 +111,8 @@ def test_pipeline_predict_quantiles(
     )
     validate_tensor(quantiles, (4, prediction_length, num_expected_quantiles), dtype=torch.float32)
     validate_tensor(mean, (4, prediction_length), dtype=torch.float32)
+    # quantiles must not cross
+    assert (quantiles[..., 1:] >= quantiles[..., :-1]).all()
 
     # input: batch_size-long list of tensors of shape (context_length,)
 

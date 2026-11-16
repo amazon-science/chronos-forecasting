@@ -791,8 +791,9 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         predictions: list[torch.Tensor] = self.predict(inputs, prediction_length=prediction_length, **predict_kwargs)
 
-        # Swap quantile and time axes for each prediction
-        predictions = [rearrange(pred, "... q h -> ... h q") for pred in predictions]
+        # Swap quantile and time axes for each prediction and sort along the quantile axis, since the quantile head
+        # can output crossing quantiles (e.g., a 0.2 quantile below the 0.1 quantile)
+        predictions = [rearrange(pred, "... q h -> ... h q").sort(dim=-1).values for pred in predictions]
 
         if set(quantile_levels).issubset(training_quantile_levels):
             # no need to perform intra/extrapolation
